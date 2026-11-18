@@ -114,6 +114,12 @@ Currently has data from the following cities:
 - [Bern, Switzerland](https://greenmtnboy.github.io/tree_reporting/#/?city=CHBRN)
 - [Rennes, France](https://greenmtnboy.github.io/tree_reporting/#/?city=FRRNS)
 - [Antwerp, Belgium](https://greenmtnboy.github.io/tree_reporting/#/?city=BEANR)
+- [San Diego, California](https://greenmtnboy.github.io/tree_reporting/#/?city=USSAN)
+- [Kitchener, Ontario, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CAKIT)
+- [Sydney, Australia](https://greenmtnboy.github.io/tree_reporting/#/?city=AUSYD)
+- [Louisville, Kentucky](https://greenmtnboy.github.io/tree_reporting/#/?city=USLOU)
+- [Montpellier, France](https://greenmtnboy.github.io/tree_reporting/#/?city=FRMPL)
+- [Grenoble, France](https://greenmtnboy.github.io/tree_reporting/#/?city=FRGNB)
 - [Lisbon, Portugal](https://greenmtnboy.github.io/tree_reporting/#/?city=PTLIS)
 - [Fingal (County Dublin), Ireland](https://greenmtnboy.github.io/tree_reporting/#/?city=IEFIN)
 - [Canberra, Australia](https://greenmtnboy.github.io/tree_reporting/#/?city=AUCBR)
@@ -248,6 +254,12 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 | Bern | Stadt Bern - Baumkataster (Stadtgrün Bern; opendata.swiss open use) | https://opendata.swiss/en/dataset/baumkataster1 |
 | Rennes | Rennes Métropole - Arbres (ODbL 1.0) | https://data.rennesmetropole.fr/explore/dataset/arbre/ |
 | Antwerp | Stad Antwerpen - boom (Gratis Open Data Licentie; bron stad Antwerpen) | https://portaal-stadantwerpen.opendata.arcgis.com/datasets/stadAntwerpen::boom |
+| San Diego | City of San Diego Transportation Department, Urban Forestry - Trees (Street Trees) (no licence stated; displayed with attribution only, not licensed for reuse) | https://webmaps.sandiego.gov/arcgis/rest/services/DSD/Environment/MapServer/20 |
+| Kitchener | City of Kitchener - Tree Inventory (Open Government Licence - The Corporation of the City of Kitchener v1.0) | https://open-kitchenergis.opendata.arcgis.com/datasets/KitchenerGIS::tree-inventory |
+| Sydney | City of Sydney - Trees (CC BY 4.0) | https://data.cityofsydney.nsw.gov.au/datasets/cityofsydney::trees |
+| Louisville | Louisville Metro Urban Forestry - Urban Forestry Trees, public data view (no licence stated; displayed with attribution only, not licensed for reuse) | https://www.arcgis.com/home/item.html?id=a04b388a30d84f8baeba9c9fa67b639e |
+| Montpellier | Montpellier Méditerranée Métropole - Arbres de Montpellier (ODbL) | https://data.montpellier3m.fr/dataset/arbres-de-montpellier |
+| Grenoble | Ville de Grenoble and Grenoble-Alpes Métropole - Arbres and Patrimoine arboré du territoire métropolitain (ODbL 1.0) | https://data.metropolegrenoble.fr/visualisation/information/?id=arbres-grenoble |
 | Melbourne | Melbourne Open Data - Urban Forest Trees | https://data.melbourne.vic.gov.au/explore/dataset/trees-with-species-and-dimensions-urban-forest/ |
 | Melbourne (Port Phillip) | City of Port Phillip - Trees (CC BY 2.5 AU) | https://data.gov.au/data/dataset/city-of-port-phillip-trees |
 | Melbourne (Yarra) | City of Yarra - Street and Park Trees (CC BY 4.0) | https://data.gov.au/data/dataset/yarra-street-park-trees |
@@ -354,6 +366,13 @@ Every tree row carries a `data_source` column identifying which of the above it 
 | Bern | Stadt Bern - Sehenswürdigkeiten and Bauinventar Baugruppen (opendata.swiss open use) | https://opendata.swiss/en/dataset/bauinventar1 |
 | Rennes | Ministère de la Culture - Immeubles protégés au titre des Monuments Historiques (Licence Ouverte) | https://www.data.gouv.fr/datasets/immeubles-proteges-au-titre-des-monuments-historiques-2 |
 | Antwerp | Agentschap Onroerend Erfgoed - protected monuments, landscapes and town views (Gratis open data licentie Vlaanderen) | https://inventaris.onroerenderfgoed.be/erfgoedobjecten?gemeente=11002 |
+| San Diego | City of San Diego Historical Resources Board - designated resources (no licence stated; displayed with attribution only, not licensed for reuse); National Park Service - National Register of Historic Places | https://webmaps.sandiego.gov/arcgis/rest/services/Planning/Historic_Preservation_Resources/MapServer/0 |
+| Kitchener | City of Kitchener - Heritage Properties (Open Government Licence - The Corporation of the City of Kitchener v1.0) | https://open-kitchenergis.opendata.arcgis.com/datasets/KitchenerGIS::heritage-properties |
+| Sydney | NSW State Heritage Register curtilages (DCCEEW, CC BY) | https://data.nsw.gov.au/data/dataset/state-heritage-register-curtilages1c5ee |
+| Louisville | Louisville Metro Landmarks Commission individual landmarks (LOJIC, Louisville Metro Open Data, PDDL); National Park Service - National Register of Historic Places | https://www.arcgis.com/home/item.html?id=db2b664ddfee430fad4fa1da4123be30 |
+| Montpellier | Ministère de la Culture - Immeubles protégés au titre des Monuments Historiques (Licence Ouverte) | https://www.data.gouv.fr/datasets/immeubles-proteges-au-titre-des-monuments-historiques-2 |
+| Grenoble | Ministère de la Culture - Immeubles protégés au titre des Monuments Historiques (Licence Ouverte) | https://www.data.gouv.fr/datasets/immeubles-proteges-au-titre-des-monuments-historiques-2 |
+| Sydney | Sydney LEP 2012 heritage items (NSW DPHI, CC BY) | https://data.nsw.gov.au/data/dataset/environmental-planning-instrument-heritage-her |
 | Eindhoven | Rijksdienst voor het Cultureel Erfgoed - Rijksmonumenten via PDOK (CC BY 4.0) | https://service.pdok.nl/rce/ps-ch/wfs/v1_0?request=GetCapabilities&service=WFS |
 | Melbourne | Melbourne Open Data - Landmarks and Places of Interest | https://data.melbourne.vic.gov.au/explore/dataset/landmarks-and-places-of-interest-including-schools-theatres-health-services-spor/ |
 | Paris | Ministere de la Culture - Immeubles proteges au titre des Monuments Historiques (Licence Ouverte) | https://www.data.gouv.fr/datasets/immeubles-proteges-au-titre-des-monuments-historiques-2 |

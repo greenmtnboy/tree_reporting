@@ -11,6 +11,12 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
+  { city: 'Sydney', label: 'City of Sydney - Trees (CC BY 4.0)', url: 'https://data.cityofsydney.nsw.gov.au/datasets/cityofsydney::trees' },
+  { city: 'Grenoble', label: 'Ville de Grenoble and Grenoble-Alpes Métropole - Arbres and Patrimoine arboré du territoire métropolitain (ODbL 1.0)', url: 'https://data.metropolegrenoble.fr/visualisation/information/?id=arbres-grenoble' },
+  { city: 'Montpellier', label: 'Montpellier Méditerranée Métropole - Arbres de Montpellier (ODbL)', url: 'https://data.montpellier3m.fr/dataset/arbres-de-montpellier' },
+  { city: 'Louisville', label: 'Louisville Metro Urban Forestry - Urban Forestry Trees, public data view (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://www.arcgis.com/home/item.html?id=a04b388a30d84f8baeba9c9fa67b639e' },
+  { city: 'Kitchener', label: 'City of Kitchener - Tree Inventory (Open Government Licence - The Corporation of the City of Kitchener v1.0)', url: 'https://open-kitchenergis.opendata.arcgis.com/datasets/KitchenerGIS::tree-inventory' },
+  { city: 'San Diego', label: 'City of San Diego Transportation Department, Urban Forestry - Trees (Street Trees) (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://webmaps.sandiego.gov/arcgis/rest/services/DSD/Environment/MapServer/20' },
   { city: 'Antwerp', label: 'Stad Antwerpen - boom (Gratis Open Data Licentie; bron stad Antwerpen)', url: 'https://portaal-stadantwerpen.opendata.arcgis.com/datasets/stadAntwerpen::boom' },
   { city: 'Rennes', label: 'Rennes Métropole - Arbres (ODbL 1.0)', url: 'https://data.rennesmetropole.fr/explore/dataset/arbre/' },
   { city: 'Bern', label: 'Stadt Bern - Baumkataster (Stadtgrün Bern; opendata.swiss open use)', url: 'https://opendata.swiss/en/dataset/baumkataster1' },
@@ -135,6 +141,13 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
+  { city: 'Sydney', label: 'NSW State Heritage Register curtilages (DCCEEW, CC BY)', url: 'https://data.nsw.gov.au/data/dataset/state-heritage-register-curtilages1c5ee' },
+  { city: 'Sydney', label: 'Sydney LEP 2012 heritage items (NSW DPHI, CC BY)', url: 'https://data.nsw.gov.au/data/dataset/environmental-planning-instrument-heritage-her' },
+  { city: 'Grenoble', label: 'Ministère de la Culture - Immeubles protégés au titre des Monuments Historiques (Licence Ouverte)', url: 'https://www.data.gouv.fr/datasets/immeubles-proteges-au-titre-des-monuments-historiques-2' },
+  { city: 'Montpellier', label: 'Ministère de la Culture - Immeubles protégés au titre des Monuments Historiques (Licence Ouverte)', url: 'https://www.data.gouv.fr/datasets/immeubles-proteges-au-titre-des-monuments-historiques-2' },
+  { city: 'Louisville', label: 'Louisville Metro Landmarks Commission individual landmarks (LOJIC, Louisville Metro Open Data, PDDL); National Park Service - National Register of Historic Places', url: 'https://www.arcgis.com/home/item.html?id=db2b664ddfee430fad4fa1da4123be30' },
+  { city: 'Kitchener', label: 'City of Kitchener - Heritage Properties (Open Government Licence - The Corporation of the City of Kitchener v1.0)', url: 'https://open-kitchenergis.opendata.arcgis.com/datasets/KitchenerGIS::heritage-properties' },
+  { city: 'San Diego', label: 'City of San Diego Historical Resources Board - designated resources (no licence stated; displayed with attribution only, not licensed for reuse); National Park Service - National Register of Historic Places', url: 'https://webmaps.sandiego.gov/arcgis/rest/services/Planning/Historic_Preservation_Resources/MapServer/0' },
   { city: 'Antwerp', label: 'Agentschap Onroerend Erfgoed - protected monuments, landscapes and town views (Gratis open data licentie Vlaanderen)', url: 'https://inventaris.onroerenderfgoed.be/erfgoedobjecten?gemeente=11002' },
   { city: 'Rennes', label: 'Ministère de la Culture - Immeubles protégés au titre des Monuments Historiques (Licence Ouverte)', url: 'https://www.data.gouv.fr/datasets/immeubles-proteges-au-titre-des-monuments-historiques-2' },
   { city: 'Bern', label: 'Stadt Bern - Sehenswürdigkeiten and Bauinventar Baugruppen (opendata.swiss open use)', url: 'https://opendata.swiss/en/dataset/bauinventar1' },

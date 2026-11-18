@@ -117,6 +117,12 @@ select * from (values
     ('NLEIN', 664),
     ('CHBRN', 686),
     ('FRRNS', 664),
-    ('BEANR', 664)
+    ('BEANR', 664),
+    ('USSAN', 422),
+    ('CAKIT', 334),
+    ('USLOU', 336),
+    ('FRMPL', 799),
+    ('FRGNB', 686),
+    ('AUSYD', 168)
 ) as t(city, ecoregion_id)
 ''';

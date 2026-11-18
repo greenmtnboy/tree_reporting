@@ -102,6 +102,12 @@ import nlein.eindhoven_landmarks;
 import chbrn.bern_landmarks;
 import frrns.rennes_landmarks;
 import beanr.antwerp_landmarks;
+import ussan.sandiego_landmarks;
+import cakit.kitchener_landmarks;
+import uslou.louisville_landmarks;
+import frmpl.montpellier_landmarks;
+import frgnb.grenoble_landmarks;
+import ausyd.sydney_landmarks;
 
 # The cross-city union is NOT declared here. It lives in
 # `full_landmark_publish.preql`, which reads the parquets these imports publish

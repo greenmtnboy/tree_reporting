@@ -584,6 +584,42 @@ const CITY_DASHBOARD_CONTEXT: Record<
     biome: 'Temperate Broadleaf & Mixed Forests',
     realm: 'palearctic',
   },
+  USSAN: {
+    ecoregionId: 422, // California coastal sage and chaparral
+    usdaZone: 10,
+    biome: 'Mediterranean Forests, Woodlands & Scrub',
+    realm: 'nearctic',
+  },
+  CAKIT: {
+    ecoregionId: 334, // Eastern Great Lakes lowland forests
+    usdaZone: 5,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'nearctic',
+  },
+  USLOU: {
+    ecoregionId: 336, // Interior Plateau US Hardwood Forests
+    usdaZone: 7,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'nearctic',
+  },
+  FRMPL: {
+    ecoregionId: 799, // Northeast Spain and Southern France Mediterranean forests
+    usdaZone: 9,
+    biome: 'Mediterranean Forests, Woodlands & Scrub',
+    realm: 'palearctic',
+  },
+  FRGNB: {
+    ecoregionId: 686, // Western European broadleaf forests
+    usdaZone: 8,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'palearctic',
+  },
+  AUSYD: {
+    ecoregionId: 168, // Eastern Australian temperate forests
+    usdaZone: 10,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'australasia',
+  },
 }
 
 function escapeStringLiteral(value: string) {

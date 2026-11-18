@@ -1,0 +1,27 @@
+import ..landmark_common;
+
+root datasource kitchener_landmarks_update_time (
+    data_updated_through: cakit_landmark_data_updated_through
+)
+file `./kitchener_landmarks_probe.py`;
+
+# Kitchener's Municipal Heritage Register (Part IV and Part V designations and
+# listed non-designated properties), read live off the City's open-data
+# layer -- an official register, so no geocoding and nothing to stage.
+root partial datasource raw_kitchener_landmark_info extends landmark_partition (
+    address: ?address,
+    year_built: ?year_built,
+    property_type: ?property_type,
+)
+complete where city = 'CAKIT'
+file `./kitchener_landmarks.py`;
+
+partial datasource kitchener_landmark_info extends published_landmark_info (
+    ?address,
+    ?year_built,
+    ?property_type,
+    cakit_landmark_data_updated_through,
+)
+complete where city = 'CAKIT'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/cakit_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/cakit_landmark_info_v{data_version}.parquet`
+freshness by cakit_landmark_data_updated_through;

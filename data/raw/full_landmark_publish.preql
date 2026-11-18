@@ -192,7 +192,13 @@ file [
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/nlein_landmark_info_v{data_version}.parquet`,
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/chbrn_landmark_info_v{data_version}.parquet`,
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/frrns_landmark_info_v{data_version}.parquet`,
-    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/beanr_landmark_info_v{data_version}.parquet`
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/beanr_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/ussan_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/cakit_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/uslou_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/frmpl_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/frgnb_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/ausyd_landmark_info_v{data_version}.parquet`
 ];
 
 

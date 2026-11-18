@@ -662,6 +662,8 @@ SENTINEL_ENRICHMENT: dict[str, dict[str, object]] = {
 # and is deliberately not here.
 SPECIES_SYNONYMS: dict[str, str] = {
     # Nomenclatural and taxonomic synonyms (POWO lists the key under the value).
+    # Batch 8 (San Diego, Kitchener, Sydney, Louisville, Montpellier, Grenoble): WCVP synonyms and hybrid marks.
+    "Hesperotropsis leylandii": "Cupressus x leylandii",  # Montpellier
     # Batch 7 (Bordeaux, Strasbourg, Eindhoven, Bern, Rennes, Antwerp): WCVP synonyms and hybrid marks.
     "Arbutus andrachnoides": "Arbutus x andrachnoides",  # Rennes
     "Aesculus neglecta": "Aesculus x neglecta",  # Bordeaux
@@ -884,6 +886,37 @@ SPECIES_SYNONYMS: dict[str, str] = {
 # `Celtis`/`Cercis occidentalis`, `Pinus`/`Prunus nigra` and
 # `Malus`/`Taxus baccata`.  Add an entry only with that check behind it.
 SPECIES_MISSPELLINGS: dict[str, str] = {
+    # Batch 8 (San Diego, Kitchener, Sydney, Louisville, Montpellier, Grenoble): each key absent from WCVP, each value accepted there.
+    "Rosa lucieae": "Rosa luciae",  # Montpellier
+    "Platanus x acerfolia": "Platanus x hispanica",  # Kitchener
+    "Koelreuteria paniculate": "Koelreuteria paniculata",  # Louisville
+    "Oxydendrum arboretum": "Oxydendrum arboreum",  # Louisville
+    "Acacia podalyrifolia": "Acacia podalyriifolia",  # Sydney
+    "Alectryon excelsum": "Alectryon excelsus",  # Sydney
+    "Bizmarckia nobilis": "Bismarckia nobilis",  # Sydney
+    "Ceiba speciose": "Ceiba speciosa",  # Sydney
+    "Elaeocarpus eumundii": "Elaeocarpus eumundi",  # Sydney
+    "Euphorbia pulcherima": "Euphorbia pulcherrima",  # Sydney
+    "Koelreutaria bipinnata": "Koelreuteria bipinnata",  # Sydney
+    "Tilia tomensa": "Tilia tomentosa",  # Grenoble
+    "Taxodium distychum": "Taxodium distichum",  # Grenoble
+    "Aulnus cordata": "Alnus cordata",  # Grenoble
+    "Gleditsia triacanthose": "Gleditsia triacanthos",  # Grenoble
+    "Prunus x yeodensis": "Prunus x yedoensis",  # Grenoble
+    "Celtis siliquastrum": "Cercis siliquastrum",  # Grenoble
+    "Pterocarya stenoptea": "Pterocarya stenoptera",  # Grenoble
+    "Celtis autralias": "Celtis australis",  # Grenoble
+    "Celtis autralid": "Celtis australis",  # Grenoble
+    "Celtis occidentaliq": "Celtis occidentalis",  # Grenoble
+    "Dyospiros kaki": "Diospyros kaki",  # Grenoble
+    "Punus avium": "Prunus avium",  # Grenoble
+    "Pinus serrulata": "Prunus serrulata",  # Grenoble
+    "Pinus calleryana": "Pyrus calleryana",  # Grenoble
+    "Cinnamomum burmannii": "Cinnamomum burmanni",  # San Diego
+    "Dimocarpus longon": "Dimocarpus longan",  # San Diego
+    "Grevillea banskii": "Grevillea banksii",  # San Diego
+    "Lirodendron tulipifera": "Liriodendron tulipifera",  # San Diego
+    "Paulowinia kawakamii": "Paulownia kawakamii",  # San Diego
     # Batch 7 (Bordeaux, Strasbourg, Eindhoven, Bern, Rennes, Antwerp): each key absent from WCVP, each value accepted there.
     "Carya illinoinessis": "Carya illinoinensis",  # Strasbourg
     "Chionanthus retesus": "Chionanthus retusus",  # Strasbourg
@@ -1843,6 +1876,12 @@ def _sanitize_taxon(value: str | None) -> str | None:
 # Keyed by city code so `community_source_for` can derive the community label
 # and so tests can assert the two lists agree.
 MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
+    "AUSYD": ("SYDNEY_OPENDATA",),
+    "FRGNB": ("GRENOBLE_OPENDATA",),
+    "FRMPL": ("MONTPELLIER_OPENDATA",),
+    "USLOU": ("LOUISVILLE_OPENDATA",),
+    "CAKIT": ("KITCHENER_OPENDATA",),
+    "USSAN": ("SANDIEGO_OPENDATA",),
     "BEANR": ("ANTWERPEN_OPENDATA",),
     "FRRNS": ("RENNES_OPENDATA",),
     "CHBRN": ("BERN_OPENDATA",),
@@ -1969,6 +2008,12 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # overlapping rows under one cluster id and publishes only the survivor — see
 # tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
+    "AUSYD": "OSM_AUSYD",
+    "FRGNB": "OSM_FRGNB",
+    "FRMPL": "OSM_FRMPL",
+    "USLOU": "OSM_USLOU",
+    "CAKIT": "OSM_CAKIT",
+    "USSAN": "OSM_USSAN",
     "BEANR": "OSM_BEANR",
     "FRRNS": "OSM_FRRNS",
     "CHBRN": "OSM_CHBRN",
@@ -2674,6 +2719,12 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
+    "AUSYD": (-33.93, -33.85, 151.17, 151.24),
+    "FRGNB": (44.95, 45.3, 5.6, 5.9),
+    "FRMPL": (43.56, 43.66, 3.8, 3.95),
+    "USLOU": (37.99, 38.38, -85.95, -85.4),
+    "CAKIT": (43.36, 43.52, -80.57, -80.38),
+    "USSAN": (32.53, 33.12, -117.31, -116.9),
     "BEANR": (51.13, 51.38, 4.21, 4.52),
     "FRRNS": (47.95, 48.31, -1.96, -1.44),
     "CHBRN": (46.9, 47.0, 7.28, 7.5),
@@ -2825,6 +2876,24 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
+    # Calibrated 2026-11-18: 8 m keeps 2.1 true per false at the margin (88.8% recall);
+    # 10 m drops below 1.
+    "AUSYD": 8,
+    # Calibrated 2026-11-18: OSM mirrors the inventory closely (92% within 2 m);
+    # 4 m keeps 4.2 true per false, 6 m falls to 0.70.
+    "FRGNB": 4,
+    # Calibrated 2026-11-18: 6 m keeps 1.3 true per false at the margin (94.2% recall);
+    # 8 m falls to 0.44.
+    "FRMPL": 6,
+    # Calibrated 2026-11-18: 6 m keeps 2.0 true per false at the margin;
+    # 8 m falls to 0.36 (dense planting projects).
+    "USLOU": 6,
+    # Calibrated 2026-11-18: few OSM trees (370 near the inventory); 8 m keeps 2.5
+    # true per false at the margin, 10 m reaches 1.0.
+    "CAKIT": 8,
+    # Calibrated 2026-11-18 (osm_dedup_validation): 6 m keeps 3.3 true per false
+    # at the margin; 8 m drops below 1 (0.81).
+    "USSAN": 6,
     # Calibrated 2026-11-18: 8m cell: recall 93.7%, 3.2% false; 10m adds +27 true / +58 false.
     "BEANR": 8,
     # Calibrated 2026-11-18: 6m cell: recall 91.4%, 5.0% false; 8m adds +273 true / +687 false.
@@ -3363,6 +3432,12 @@ DEDUP_CELL_METRES: dict[str, int] = {
 Box = tuple[float, float, float, float]
 
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
+    'AUSYD': ((-33.93, -33.85, 151.17, 151.24),),
+    'FRGNB': ((44.95, 45.3, 5.6, 5.9),),
+    'FRMPL': ((43.56, 43.66, 3.8, 3.95),),
+    'USLOU': ((37.99, 38.38, -85.95, -85.4),),
+    'CAKIT': ((43.36, 43.52, -80.57, -80.38),),
+    'USSAN': ((32.53, 33.12, -117.31, -116.9),),
     'BEANR': ((51.13, 51.38, 4.21, 4.52),),
     'FRRNS': ((47.95, 48.31, -1.96, -1.44),),
     'CHBRN': ((46.9, 47.0, 7.28, 7.5),),
