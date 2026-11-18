@@ -34,8 +34,11 @@ window.estimateCrown = function(tree){
  if(tree.tree_form==='palm'||species==='Palm'||species==='Cactus'||row?.family==='Arecaceae')return null;
  const fallback=['Unknown','Dead','Shrub',''].includes(species)?'global:all':tree.tree_form==='conifer'?'division:Gymnosperm':'division:Angiosperm';
  const fit=row||rows[fallback]; if(!fit)return null;
- const cm=Math.min(Math.max(dbh*2.54,1),Number(fit.dbh_max_cm));
- return {width_m:2*Number(fit.scale)*cm**Number(fit.b),level:fit.fit_level,taxon:fit.fit_taxon};
+ // The fit's own curve up to its largest stem, then its tail fit's exponent
+ // up to the tail's largest stem (crown_allometry_fit.crown_width_m).
+ const m=Number(fit.dbh_max_cm),tailB=Number(fit.tail_b||fit.b),top=Math.max(Number(fit.tail_dbh_max_cm||m),m);
+ const cm=Math.min(Math.max(dbh*2.54,1),top);
+ return {width_m:2*Number(fit.scale)*Math.min(cm,m)**Number(fit.b)*(Math.max(cm,m)/m)**tailB,level:fit.fit_level,taxon:fit.fit_taxon};
 };
 window.crownDescription=function(tree){const c=window.estimateCrown(tree);return c?(c.level==='image-head'?`Image-predicted crown diameter ${c.width_m.toFixed(1)} m`:`Estimated crown width ${c.width_m.toFixed(1)} m · Tallo ${c.level} fit (${c.taxon}); DBH-derived, not image-measured`):'Crown estimate unavailable'};
 const calculateCrown=window.estimateCrown,crownCache=new Map();

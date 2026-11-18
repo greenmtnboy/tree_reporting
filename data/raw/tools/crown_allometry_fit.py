@@ -67,9 +67,26 @@ at least 20 cm. Without it Malus (n = 33, b = -0.11, r2 = 0.00) and Ostrya
 with diameter, and a genus measured only as saplings would clamp every street
 tree of that genus to a sapling's crown.
 
-Stem diameter is clamped to the fitted range before prediction (`dbh_max_cm`),
-so a data-entry DBH of 400 inches predicts the crown of the largest tree the
-genus was fitted on rather than a power-law extrapolation.
+Past the largest stem a fit saw (`dbh_max_cm`), the crown keeps growing at
+the rate of the row's *tail* fit -- its division's (angiosperm / gymnosperm),
+else the global one -- from the value the row's own fit reaches there, and
+stops at the largest stem the tail saw (`tail_dbh_max_cm`):
+
+    d = min(max(dbh_cm, 1), tail_dbh_max_cm)
+    m = dbh_max_cm
+    crown_width_m = 2 * scale * min(d, m) ** b * (max(d, m) / m) ** tail_b
+
+Below `m` that is the row's own power law; above it the curve stays
+continuous and bends to the tail's exponent. Most genus fits are short of the
+trees the map carries: Tallo is forest plots, and a genus with a few dozen
+measured crowns has rarely seen a veteran. Salix is fitted on 59 trees, none
+over 33 cm, and the map holds 70,000 willows, 40% of them larger; Platanus on
+76 trees up to 71 cm, beside 680,000 planes. Clamping each tree to its genus's
+largest fitted stem drew a 290 cm, five-stem white willow with a 6 m crown;
+2.8% of the rollup's measured trees were past their genus fit's range. The
+tail's range (385 cm for angiosperms, 770 for the global fit) is what still
+stops a data-entry DBH of 400 inches extrapolating without bound. A division
+or global row's tail is itself, so for it the formula is the plain clamp.
 
 What this model is not
 ----------------------
@@ -110,6 +127,11 @@ import duckdb
 HERE = Path(__file__).resolve().parent
 RAW = HERE.parent
 COEFFICIENTS_CSV = RAW / "crown_width_coefficients.csv"
+# The imagery model's packaged copy: its training labels (crown_size.py) run
+# where data/raw is not shipped. The columns it reads, rewritten with the CSV.
+TRAINING_COPY = RAW.parent.parent / "imagery_model" / "src" / "urban_tree_ml" / "crown_width_coefficients.csv"
+TRAINING_COLUMNS = ["level", "taxon", "family", "scale", "b", "dbh_max_cm", "fit_level", "fit_taxon",
+                    "tail_b", "tail_dbh_max_cm"]
 
 TALLO_ZIP_URL = "https://raw.githubusercontent.com/selva-lab-repo/TALLO/main/DB/Tallo.csv.zip"
 TALLO_VERSION = "Tallo 1.0.0 (Jucker et al. 2022)"
@@ -141,7 +163,17 @@ CSV_COLUMNS = [
     "dbh_min_cm",
     "dbh_max_cm",
     "scale",        # exp(ln_a + sigma^2/2): crown_radius_m = scale * dbh_cm ** b
+    "tail_taxon",   # the fit that carries the crown past dbh_max_cm: the row's division, else 'all'
+    "tail_b",       # its exponent
+    "tail_dbh_max_cm",  # its largest stem: where the crown finally stops growing
 ]
+
+
+def crown_width_m(row: dict, dbh_cm: float) -> float:
+    """The prediction every consumer of the CSV applies; see the docstring."""
+    m, top = float(row["dbh_max_cm"]), float(row["tail_dbh_max_cm"])
+    d = min(max(dbh_cm, 1.0), top)
+    return 2 * float(row["scale"]) * min(d, m) ** float(row["b"]) * (max(d, m) / m) ** float(row["tail_b"])
 
 FIT_SQL = """
 SELECT
@@ -238,6 +270,16 @@ def build_rows(conn: duckdb.DuckDBPyConnection) -> list[dict]:
         """
     ).fetchall()
 
+    def tail(division: str | None, own_max: float) -> dict:
+        """The division's fit, else the global one, to grow a crown past own_max."""
+        fit = division_fits.get(division) if division else None
+        name = division
+        if fit is None or not passes_gate(fit):
+            fit, name = global_fit, "all"
+        return {"tail_taxon": name, "tail_b": fit["b"], "tail_dbh_max_cm": max(fit["dbh_max_cm"], own_max)}
+
+    family_division = {f: d for _, f, d in taxonomy if f and d}
+
     rows: list[dict] = []
     for genus, family, division in taxonomy:
         candidates = [
@@ -260,6 +302,8 @@ def build_rows(conn: duckdb.DuckDBPyConnection) -> list[dict]:
                 "fit_level": fit_level,
                 "fit_taxon": fit_taxon,
                 **{k: v for k, v in with_scale(fit).items() if k != "taxon"},
+                **(tail(division, fit["dbh_max_cm"]) if fit_level in ("genus", "family")
+                   else {"tail_taxon": fit_taxon, "tail_b": fit["b"], "tail_dbh_max_cm": fit["dbh_max_cm"]}),
             }
         )
     for family, fit in sorted(family_fits.items()):
@@ -267,19 +311,22 @@ def build_rows(conn: duckdb.DuckDBPyConnection) -> list[dict]:
             rows.append(
                 {"level": "family", "taxon": family, "family": family, "division": "",
                  "fit_level": "family", "fit_taxon": family,
-                 **{k: v for k, v in with_scale(fit).items() if k != "taxon"}}
+                 **{k: v for k, v in with_scale(fit).items() if k != "taxon"},
+                 **tail(family_division.get(family), fit["dbh_max_cm"])}
             )
     for division, fit in sorted(division_fits.items()):
         assert passes_gate(fit), f"the {division} fit failed the gate"
         rows.append(
             {"level": "division", "taxon": division, "family": "", "division": division,
              "fit_level": "division", "fit_taxon": division,
-             **{k: v for k, v in with_scale(fit).items() if k != "taxon"}}
+             **{k: v for k, v in with_scale(fit).items() if k != "taxon"},
+             "tail_taxon": division, "tail_b": fit["b"], "tail_dbh_max_cm": fit["dbh_max_cm"]}
         )
     rows.append(
         {"level": "global", "taxon": "all", "family": "", "division": "",
          "fit_level": "global", "fit_taxon": "all",
-         **{k: v for k, v in with_scale(global_fit).items() if k != "taxon"}}
+         **{k: v for k, v in with_scale(global_fit).items() if k != "taxon"},
+         "tail_taxon": "all", "tail_b": global_fit["b"], "tail_dbh_max_cm": global_fit["dbh_max_cm"]}
     )
     return rows
 
@@ -301,6 +348,11 @@ def write_csv(rows: list[dict]) -> None:
         writer.writeheader()
         for row in rows:
             writer.writerow(format_row(row))
+    with TRAINING_COPY.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=TRAINING_COLUMNS, lineterminator="\n", extrasaction="ignore")
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(format_row(row))
 
 
 def report(conn: duckdb.DuckDBPyConnection, rows: list[dict], coverage: bool) -> None:
@@ -312,15 +364,15 @@ def report(conn: duckdb.DuckDBPyConnection, rows: list[dict], coverage: bool) ->
 
     # Against Coombes et al. (2019): open-grown urban broadleaves settle at a
     # crown diameter of about 25 x DBH from 0.3 m up.
-    print("crown diameter at 30 / 60 cm DBH, metres (Coombes urban ref: 8.2 / 13.7):", file=sys.stderr)
+    print("crown diameter at 30 / 60 / 150 cm DBH, metres (Coombes urban ref: 8.2 / 13.7 / -):", file=sys.stderr)
     lookup = {r["taxon"]: r for r in genus_rows}
     for genus in ("Acer", "Quercus", "Fraxinus", "Tilia", "Ulmus", "Platanus", "Prunus",
-                  "Gleditsia", "Pinus", "Picea", "Malus", "Betula"):
+                  "Gleditsia", "Pinus", "Picea", "Malus", "Betula", "Salix", "Zelkova"):
         r = lookup.get(genus)
         if r is None:
             continue
-        cd = [2 * r["scale"] * d ** r["b"] for d in (30, 60)]
-        print(f"  {genus:<10} {cd[0]:5.1f} {cd[1]:5.1f}   ({r['fit_level']} fit, n={r['n']}, b={r['b']:.2f}, r2={r['r2']:.2f})", file=sys.stderr)
+        cd = [crown_width_m(r, d) for d in (30, 60, 150)]
+        print(f"  {genus:<10} {cd[0]:5.1f} {cd[1]:5.1f} {cd[2]:5.1f}   (max {r['dbh_max_cm']:.0f} cm, {r['fit_level']} fit, n={r['n']}, b={r['b']:.2f}, r2={r['r2']:.2f})", file=sys.stderr)
 
     if not coverage:
         return
@@ -367,6 +419,7 @@ PARQUET_TYPES = {
     "fit_level": "VARCHAR", "fit_taxon": "VARCHAR", "n": "BIGINT",
     "ln_a": "DOUBLE", "b": "DOUBLE", "sigma": "DOUBLE", "r2": "DOUBLE",
     "dbh_min_cm": "DOUBLE", "dbh_max_cm": "DOUBLE", "scale": "DOUBLE",
+    "tail_taxon": "VARCHAR", "tail_b": "DOUBLE", "tail_dbh_max_cm": "DOUBLE",
 }
 
 

@@ -146,6 +146,8 @@ class CrownFit:
     scale: float
     dbh_max_cm: float
     family: str | None = None
+    tail_b: float | None = None  # past dbh_max_cm the crown grows at this exponent ...
+    tail_dbh_max_cm: float | None = None  # ... up to this stem; None: the row is its own tail
 
 
 class CrownCoefficients:
@@ -163,6 +165,8 @@ class CrownCoefficients:
                 scale=float(r["scale"]),
                 dbh_max_cm=float(r["dbh_max_cm"]),
                 family=(r.get("family") or None),
+                tail_b=float(r["tail_b"]) if r.get("tail_b") else None,
+                tail_dbh_max_cm=float(r["tail_dbh_max_cm"]) if r.get("tail_dbh_max_cm") else None,
             )
             if r["level"] == "genus":
                 self.by_genus[r["taxon"]] = fit
@@ -175,7 +179,9 @@ class CrownCoefficients:
             return cls(csv.DictReader(handle))
 
     def crown_width_m(self, genus: str | None, dbh_in: float | None) -> tuple[float, CrownFit] | None:
-        """``2 * scale * dbh_cm ** b`` with dbh clamped to [1, dbh_max_cm].
+        """``2 * scale * dbh_cm ** b`` up to the fit's largest stem, then at
+        the tail fit's exponent up to its largest stem: the formula
+        ``crown_allometry_fit.crown_width_m`` and allometry_model.preql apply.
 
         A palm's crown does not scale with its stem and Tallo has no palm
         crowns, so an Arecaceae genus gets no estimate; an unknown genus
@@ -191,8 +197,11 @@ class CrownCoefficients:
             fit = self.fallbacks.get("division:Angiosperm") or self.fallbacks.get("global:all")
         if fit is None:
             return None
-        dbh_cm = min(max(dbh_in * DBH_CM_PER_INCH, 1.0), fit.dbh_max_cm)
-        return 2 * fit.scale * dbh_cm**fit.b, fit
+        m = fit.dbh_max_cm
+        tail_b = fit.b if fit.tail_b is None else fit.tail_b
+        top = m if fit.tail_dbh_max_cm is None else max(fit.tail_dbh_max_cm, m)
+        dbh_cm = min(max(dbh_in * DBH_CM_PER_INCH, 1.0), top)
+        return 2 * fit.scale * min(dbh_cm, m) ** fit.b * (max(dbh_cm, m) / m) ** tail_b, fit
 
 
 def candidate_tree_ids(
