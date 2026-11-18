@@ -203,6 +203,15 @@ export class TreeCrownLayer implements CustomLayerInterface {
     }
   }
 
+  /**
+   * The sine of the elevation the view looks down at: 1 straight down, 0 along the ground. Every
+   * tree in a frame is drawn from this one angle, not from its own sight line, which at the edge
+   * of a wide screen is 30 degrees off the view's and tipped those trees onto their sides.
+   */
+  private viewSin(): number {
+    return this.viewAngle && this.map ? Math.cos(this.map.getPitch() * Math.PI / 180) : 0
+  }
+
   private camera(): CrownCamera {
     const { lngLat, altitude } = this.map!.transform.getCameraPosition()
     return { lng: lngLat.wrap().lng, lat: lngLat.lat, altitude }
@@ -427,10 +436,6 @@ export class TreeCrownLayer implements CustomLayerInterface {
     const width = map.getCanvas().clientWidth, height = map.getCanvas().clientHeight
     // Reach is measured from the query camera, as the shader does.
     const meters = metersPerMercatorUnit(this.queryCamera?.lat ?? 0)
-    // The camera now, for the angle each tree is seen at (as the shader's u_camera).
-    const now = this.camera()
-    const [nowX, nowY] = mercatorPoint(now.lng, now.lat)
-    const nowMeters = metersPerMercatorUnit(now.lat)
     const bearing = map.getBearing() * Math.PI / 180
     const rightClip = matrix[0] * Math.cos(bearing) + matrix[4] * Math.sin(bearing)
     const { id, lng, lat, width: widths, category } = this.drawn
@@ -444,8 +449,7 @@ export class TreeCrownLayer implements CustomLayerInterface {
       const sy = (1 - (matrix[1] * x + matrix[5] * y + matrix[13]) / w) * height / 2
       const distance = Math.hypot(this.data[offset], this.data[offset + 1], this.budgetCamera[2]) * meters
       if (distance >= this.reach) continue
-      const seen = Math.hypot(x - nowX, y - nowY, now.altitude / nowMeters) * nowMeters
-      const sinE = this.viewAngle ? Math.min(1, now.altitude / Math.max(seen, 0.001)) : 0
+      const sinE = this.viewSin()
       const { squash, top } = spriteViewShape(sinE)
       if (top >= 0.5) {
         // Overhead: the crown disc around the trunk, sin(elevation) as tall as it is wide.
@@ -565,8 +569,10 @@ export class TreeCrownLayer implements CustomLayerInterface {
         vec4 anchor = u_matrix * vec4(a_center, 0.0, 1.0);
         vec4 crownRight = u_matrix * vec4(u_right * a_radius / a_shape.x, 0.0, 0.0);
         float minHalf = ${MIN_SPRITE_PX.toFixed(1)} / u_viewport.x * anchor.w;
-        // How steeply the camera looks down at this tree (lib/treeCrowns spriteViewShape).
-        float sinE = clamp(u_camera.z * u_meters / max(distance, 0.001), 0.0, 1.0) * u_view_angle;
+        // How steeply the camera looks down (lib/treeCrowns spriteViewShape): the view's own
+        // elevation, one value for every tree, so a camera looking straight down sees every crown
+        // from above out to the corners of the screen.
+        float sinE = u_view_angle;
         float t = clamp((sinE - ${Math.sin(SPRITE_TOPDOWN_START_DEG * Math.PI / 180).toFixed(6)})
           / ${(Math.sin(SPRITE_TOPDOWN_FULL_DEG * Math.PI / 180) - Math.sin(SPRITE_TOPDOWN_START_DEG * Math.PI / 180)).toFixed(6)}, 0.0, 1.0);
         v_top = t * t * (3.0 - 2.0 * t);
@@ -686,7 +692,8 @@ export class TreeCrownLayer implements CustomLayerInterface {
           vec3 coverage = smoothstep(vec3(0.5) - aa, vec3(0.5) + aa, distance);
           vec4 trunk = vec4(vec3(93.0, 64.0, 55.0) / 255.0 * coverage.r, coverage.r);
           vec4 foliage = vec4(v_color.rgb * material.a * coverage.g, coverage.g);
-          vec4 blooms = vec4(vec3(248.0, 187.0, 208.0) / 255.0 * coverage.b, coverage.b);
+          // A blossom on the crown's shaded underside takes most of that shade.
+          vec4 blooms = vec4(vec3(248.0, 187.0, 208.0) / 255.0 * mix(1.0, material.a, 0.7) * coverage.b, coverage.b);
           vec4 tree = foliage + trunk * (1.0 - foliage.a);
           side = blooms + tree * (1.0 - blooms.a);
           if (v_color.a > 1.5) {
@@ -705,13 +712,12 @@ export class TreeCrownLayer implements CustomLayerInterface {
           vec4 crown = crownPixels(crownAA, shade);
           float fill = 1.0 - smoothstep(-0.5, 0.5, crown.x);
           float visible = smoothstep(14.0, 28.0, crown.z);
-          float fold = 1.0 - smoothstep(0.0, max(1.6, 0.11 * crown.z), crown.y);
           float stroke = 1.0 - smoothstep(0.35, 1.1, crown.y);
           float rim = smoothstep(-0.12, 0.0, crown.w);
           // Overlapping foliage masses break up large areas of one colour (baked in the atlas's
           // alpha, treeCrownShapeAtlas foliageShade); faded out at marker sizes, where the
           // contour alone carries the form.
-          float value = 1.0 - 0.07 * rim - visible * (0.09 * fold + 0.15 * stroke + shade);
+          float value = 1.0 - 0.07 * rim - visible * (0.15 * stroke + shade);
           vec3 lit = v_color.rgb * value;
           float petals = v_flowering * visible * (1.0 - smoothstep(-0.5, 0.5, crown.y));
           lit = mix(lit, vec3(248.0, 187.0, 208.0) / 255.0, petals * 0.86);
@@ -882,7 +888,7 @@ export class TreeCrownLayer implements CustomLayerInterface {
       gl.uniform2f(this.uniforms.u_viewport, this.map.getCanvas().clientWidth, this.map.getCanvas().clientHeight)
       const bearing = this.map.getBearing() * Math.PI / 180
       gl.uniform2f(this.uniforms.u_right, Math.cos(bearing), Math.sin(bearing))
-      gl.uniform1f(this.uniforms.u_view_angle, this.viewAngle ? 1 : 0)
+      gl.uniform1f(this.uniforms.u_view_angle, this.viewSin())
       // The notable trees' halos first, so each sprite draws over its own.
       const notable = this.drawn.notable
       if (notable.length) {

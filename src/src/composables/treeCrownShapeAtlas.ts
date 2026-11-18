@@ -124,7 +124,7 @@ export function loadCrownShapeAtlas(appearance: TreeAppearance = 'leafy'): Promi
 }
 
 /** The deepest the foliage-mass shading darkens the canopy; alpha 255 is this much. */
-export const FOLIAGE_SHADE = 0.08
+export const FOLIAGE_SHADE = 0.3
 
 const smoothstep = (a: number, b: number, x: number) => {
   const t = Math.max(0, Math.min(1, (x - a) / (b - a)))
@@ -156,7 +156,7 @@ function baker(appearance: TreeAppearance) {
   // One shape evaluation a texel, on a grid a texel wider each way than the cell and its gutters,
   // so the outline's gradient comes from its neighbours.
   const span = imageSize + GUTTER * 2 + 2, step = 2 / imageSize
-  const edge = new Float64Array(span * span), detail = new Float64Array(span * span)
+  const edge = new Float64Array(span * span), detail = new Float64Array(span * span), tone = new Float64Array(span * span)
   // Every form's cell, a row of shape evaluations a step.
   function* rows() {
     for (let index = 0; index < CROWN_FORMS.length; index++) yield* cell(index)
@@ -170,6 +170,8 @@ function baker(appearance: TreeAppearance) {
         const shape = crownShape(form, (i - GUTTER - 1 + 0.5) * step - 1, 1 - (j - GUTTER - 1 + 0.5) * step, appearance)
         edge[j * span + i] = shape.edge
         detail[j * span + i] = shape.detail
+        // A form drawn in flat layers says its own tone; the others keep the procedural masses.
+        tone[j * span + i] = shape.tone ?? -1
       }
     }
     const left = (index % CROWN_ATLAS_COLUMNS) * cellSize, top = Math.floor(index / CROWN_ATLAS_COLUMNS) * cellSize
@@ -182,7 +184,7 @@ function baker(appearance: TreeAppearance) {
         pixels.data[offset] = encode(distance, CROWN_FINE_RANGE)
         pixels.data[offset + 1] = encode(detail[k], CROWN_FINE_RANGE)
         pixels.data[offset + 2] = encode(distance, CROWN_COARSE_RANGE)
-        pixels.data[offset + 3] = Math.round(255 * foliageShade((left + x + 0.5) / atlasSize, (top + y + 0.5) / atlasSize) / FOLIAGE_SHADE)
+        pixels.data[offset + 3] = Math.round(255 * (tone[k] >= 0 ? tone[k] : foliageShade((left + x + 0.5) / atlasSize, (top + y + 0.5) / atlasSize) / FOLIAGE_SHADE))
       }
     }
   }

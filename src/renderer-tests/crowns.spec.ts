@@ -94,12 +94,12 @@ test('crowns render at metre scale, respect zoom/distance, and release their res
     const expected = 12 / (40075016.68557849 * Math.cos(crowns[0].lat * Math.PI / 180) / (512 * 2 ** map.getZoom())) * ratio
     const cell = layer.sprites.cells.get('broadleaf')
     const height = expected / cell.crownFraction
-    const x = Math.round(point.x * ratio), y = canvas.height - Math.round(point.y * ratio) + Math.round(height * (0.95 - 0.38))
+    const x = Math.round(point.x * ratio), y = canvas.height - Math.round(point.y * ratio) + Math.round(height * (0.95 - 0.42))
     const pixels = new Uint8Array(160 * 4)
     gl.readPixels(x - 80, y, 160, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels)
     const green = Array.from({ length: 160 }, (_, i) => i).filter(i => pixels[i * 4 + 1] - pixels[i * 4] > 20)
     return { width: Math.max(...green) - Math.min(...green), expected, error: gl.getError(), iconLayers: map.getLayersOrder().filter((id: string) => id === 'trees-icon').length,
-      picked: layer.pick({ x: point.x, y: point.y - height / ratio * (0.95 - 0.38) })?.id }
+      picked: layer.pick({ x: point.x, y: point.y - height / ratio * (0.95 - 0.42) })?.id }
   })
   expect(sprite.error).toBe(0)
   expect(sprite.iconLayers).toBe(1)
@@ -208,7 +208,7 @@ test('enlarged sprite edges stay sharp and all materials share one draw and four
     const expected = 12 / (40075016.68557849 * Math.cos(crowns[0].lat * Math.PI / 180) / (512 * 2 ** 21))
     const size = expected / layer.sprites.cells.get('broadleaf').crownFraction
     const row = new Uint8Array(600 * 4)
-    gl.readPixels(Math.round(point.x) - 300, canvas.height - Math.round(point.y - size * 0.57), 600, 1, gl.RGBA, gl.UNSIGNED_BYTE, row)
+    gl.readPixels(Math.round(point.x) - 300, canvas.height - Math.round(point.y - size * 0.53), 600, 1, gl.RGBA, gl.UNSIGNED_BYTE, row)
     const covered = Array.from({ length: 600 }, (_, i) => i).filter(i => row[i * 4] < 165)
     // Only the edge should contain intermediate coverage, not a several-pixel
     // enlarged raster fringe. The tree spans roughly 400 screen pixels here.

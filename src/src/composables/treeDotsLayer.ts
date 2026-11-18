@@ -14,9 +14,8 @@ import { NOTABLE_GLOW_ALPHA, NOTABLE_GLOW_PX, NOTABLE_GLOW_RGB } from '../lib/no
 import { foliagePhase } from '../lib/foliageSeason'
 import { mapDate } from '../lib/mapDate'
 
-/** A bare dot: the alpha of its wash, and its limbs before they fork. */
+/** A bare dot: the alpha of its wash. */
 const BARE_DOT_WASH = 0.4
-const BARE_DOT_LIMBS = 6
 
 /**
  * The desktop map's trees below the sprites: trunk-sized circles from z6
@@ -218,24 +217,29 @@ in float v_glow;
 in float v_bare;
 in float v_turn;
 out vec4 o;
+// Distance from q to the segment a-b.
+float bareLimb(vec2 q, vec2 a, vec2 b) {
+  vec2 qa = q - a, ba = b - a;
+  return length(qa - ba * clamp(dot(qa, ba) / dot(ba, ba), 0.0, 1.0));
+}
 void main() {
   vec2 p = gl_PointCoord - 0.5;
   float d = length(p) * (2.0 * (v_radius + v_glow) + 2.0);
   float a = clamp(v_radius - d + 0.5, 0.0, 1.0) * v_opacity;
   vec3 color = v_color;
   if (v_bare > 0.5) {
-    // A bare crown, no texture: a thin wash with limbs radiating from the trunk, which fork into
-    // twice as many past half way. A dot a few pixels wide is the wash alone, lighter than a leafy
-    // one, as the sprites' bare trees are from a distance.
+    // A bare tree, no texture: a thin wash with a small upright skeleton on it, a trunk and
+    // leader with two limbs and a twig a side (mirrored about the trunk), as the sprites' bare
+    // trees stand. A dot a few pixels wide is the wash alone, lighter than a leafy one.
     float wash = ${BARE_DOT_WASH.toFixed(2)};
     if (v_radius > 3.0) {
-      float r = d / v_radius;
-      float turns = atan(p.y, p.x) * ${(BARE_DOT_LIMBS / (2 * Math.PI)).toFixed(6)} + v_turn * ${BARE_DOT_LIMBS.toFixed(1)};
-      // Pixels from the nearest limb, and from the nearest of the forks between and beside them.
-      float limb = (0.5 - abs(fract(turns) - 0.5)) * ${(2 * Math.PI / BARE_DOT_LIMBS).toFixed(6)} * d;
-      float fork = (0.5 - abs(fract(turns * 2.0 + 0.5) - 0.5)) * ${(Math.PI / BARE_DOT_LIMBS).toFixed(6)} * d;
-      float width = mix(1.4, 0.6, r) * max(1.0, v_radius / 24.0);
-      float twigs = max(1.0 - smoothstep(0.0, width, limb), step(0.45, r) * (1.0 - smoothstep(0.0, width * 0.7, fork)) * 0.8);
+      // In crown radii, y up; each tree's limbs spread a little more or less.
+      vec2 q = vec2(abs(p.x) / mix(0.85, 1.15, v_turn), -p.y) * (2.0 * (v_radius + v_glow) + 2.0) / v_radius;
+      float limbs = min(min(bareLimb(q, vec2(0.0, -0.9), vec2(0.0, 0.95)), bareLimb(q, vec2(0.0, -0.25), vec2(0.62, 0.4))),
+        min(bareLimb(q, vec2(0.0, 0.2), vec2(0.34, 0.84)), bareLimb(q, vec2(0.36, 0.11), vec2(0.4, 0.6)))) * v_radius;
+      // Stout at the foot, fine at the tips.
+      float width = mix(1.5, 0.6, clamp((q.y + 0.9) / 1.8, 0.0, 1.0)) * max(1.0, v_radius / 24.0);
+      float twigs = 1.0 - smoothstep(0.0, width, limbs);
       wash = mix(wash, max(wash * 0.6, twigs * 0.9), smoothstep(3.0, 9.0, v_radius));
     }
     a *= wash;

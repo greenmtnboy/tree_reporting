@@ -14,6 +14,8 @@ export type TreeShape =
 export interface TreeArtwork { trunk: TreeShape[]; foliage: TreeShape[]; blooms: TreeShape[]; crownFraction: number; crownTop: number }
 export const TREE_TRUNK_COLOR = '#5D4037'
 export const TREE_BLOOM_COLOR = '#F8BBD0'
+/** How much a layer's flat shadow darkens the foliage under it. */
+const UPRIGHT_SHADOW = 0.24
 
 const ellipse = (x: number, y: number, rx: number, ry = rx, angle = 0): TreeShape => ({ kind: 'ellipse', x, y, rx, ry, angle })
 const polygon = (points: [number, number][]): TreeShape => ({ kind: 'polygon', points })
@@ -42,6 +44,136 @@ function contour(x: number, y: number, ...arcs: number[]): TreeShape {
   return polygon(points)
 }
 
+type Points = [number, number][]
+
+/**
+ * The row (a y in the cell) where a broadleaf's crown is widest, clear of its shaded underside: the
+ * renderer's tests measure the sprite's width and edge sharpness along it.
+ */
+export const LEAF_WAIST = 0.42
+
+/**
+ * A fir's tiers, top first: each a straight-edged skirt hanging from the leader, its lower edge
+ * cut into drooping bough tips. Left and right differ, so the tree is not a stamped symbol.
+ */
+const firTiers: Points[] = ([
+  // top, bottom, half-width left, half-width right, where the mid bough tip falls on each side
+  [4, 18, 5, 5.5, .5, .5], [11, 30, 11, 12.5, .52, .40], [21, 43, 18, 16, .38, .55],
+  [32, 57, 24, 26, .56, .42], [45, 73, 32, 32, .44, .58],
+] as const).map(([top, bottom, left, right, l, r], i) => {
+  const lift = i % 2 ? 1.4 : -0.8
+  const side = (w: number, dir: number, skew: number, mid: number): Points => [
+    [50 + dir * w, bottom - 2 + skew],
+    [50 + dir * w * (mid + .2), bottom - 3.4 + skew], [50 + dir * w * mid, bottom + 2.2],
+    [50 + dir * w * .1, bottom - 1 - skew],
+  ]
+  return [[49.6, top], ...side(right, 1, lift, r), ...side(left, -1, -lift, l).reverse()].map(([x, y]) => [x / 100, y / 100] as [number, number])
+})
+
+/** A scalloped foliage mass: rounded lobes of unequal breadth round an ellipse. */
+function leafPad(cx: number, cy: number, rx: number, ry: number, lobes: number, phase: number): Points {
+  const n = lobes * 6, points: Points = []
+  for (let i = 0; i < n; i++) {
+    const angle = Math.PI * 2 * i / n, swung = angle + .22 * Math.sin(2 * angle + phase * 1.7)
+    const k = .91 + .09 * Math.abs(Math.sin(lobes * swung / 2 + phase)) ** .6
+    points.push([cx + rx * k * Math.cos(angle), cy + ry * k * Math.sin(angle)])
+  }
+  return points
+}
+
+/**
+ * Fit a drawing's foliage to the crown width and top its form is registered at, and set the two
+ * masses that reach furthest out so the crown is widest at `waist`: the renderer sizes a sprite
+ * from that width, and its tests measure it there.
+ */
+function register(shapes: Points[], left: number, right: number, top: number, waist?: number): Points[] {
+  const xs = shapes.flat().map(p => p[0]), ys = shapes.flat().map(p => p[1])
+  const x0 = Math.min(...xs), y0 = Math.min(...ys), scale = (right - left) / (Math.max(...xs) - x0)
+  const fitted = shapes.map(points => points.map(([x, y]) => [left + (x - x0) * scale, top + (y - y0) * scale] as [number, number]))
+  if (waist === undefined) return fitted
+  for (const pick of [Math.min, Math.max]) {
+    const reach = (points: Points) => pick(...points.map(p => p[0]))
+    const mass = fitted.find(points => reach(points) === pick(...fitted.map(reach)))!
+    const lift = waist - mass.find(p => p[0] === reach(mass))![1]
+    for (const point of mass) point[1] += lift
+  }
+  return fitted
+}
+
+// A broadleaf: a full, round head about as wide as the tree is tall, on a short stout bole. Each
+// flank is one tall mass (two stacked ones read as a double bulge), and the flanks hang lower than the middle, so the limbs show where they fork into the crown. The widest
+// row (LEAF_WAIST) is above the middle, clear of the shaded underside.
+const leafPads = register([
+  leafPad(25, 51, 18, 26, 12, .4), leafPad(75, 50, 18, 26, 12, 2.1), leafPad(50, 46, 20, 16, 9, 1.2),
+  leafPad(37, 36, 23, 20, 11, 1.7), leafPad(63, 35, 23, 20, 11, .2), leafPad(50, 22, 24, 17, 11, 2.9),
+], .11, .89, .06, LEAF_WAIST)
+
+// A spreading tree is wider than it is tall: a low crown, starting well down the cell.
+const spreadPads = register([
+  leafPad(20, 62, 18, 13, 9, .4), leafPad(80, 61, 18, 13, 9, 2.1), leafPad(50, 66, 28, 10, 10, 1.2),
+  leafPad(32, 50, 22, 15, 10, 1.7), leafPad(68, 49, 22, 15, 10, .2), leafPad(50, 43, 22, 10, 10, 2.9),
+], .04, .9613, .28)
+const columnPads = register([
+  leafPad(50, 63, 11, 8.5, 6, .4), leafPad(51, 53, 14, 12, 7, 2.1), leafPad(49, 40, 13.5, 13, 7, 1.2),
+  leafPad(51, 27, 11, 12, 6, 1.7), leafPad(50, 14, 7, 9, 5, .2),
+], .3375, .6625, .05)
+const cherryPads = register([
+  leafPad(32, 46, 18, 13, 8, .4), leafPad(68, 45, 18, 13, 8, 2.1), leafPad(50, 50, 20, 11, 8, 1.2),
+  leafPad(36, 31, 19, 15, 9, 1.7), leafPad(64, 30, 19, 15, 9, .2), leafPad(50, 20, 17, 12, 8, 2.9),
+], .1325, .84, .1338)
+const copsePads = register([
+  leafPad(27, 42, 17, 13, 8, .4), leafPad(74, 44, 16, 12, 8, 2.1), leafPad(50, 47, 20, 11, 8, 1.2),
+  leafPad(35, 28, 17, 14, 9, 1.7), leafPad(66, 30, 16, 13, 9, .2), leafPad(51, 18, 15, 12, 8, 2.9), leafPad(50, 34, 14, 12, 7, .7),
+], .1037, .9006, .08)
+// The plain ovoid tree.
+const plainPads = register([
+  leafPad(43, 48, 15, 13, 8, .4), leafPad(59, 47, 14, 13, 8, 2.1), leafPad(50, 52, 13, 10, 7, 1.2),
+  leafPad(50, 34, 18, 18, 9, 1.7), leafPad(50, 19, 13, 11, 7, .2),
+], .235, .765, .09)
+
+const inside = (points: Points, x: number, y: number) => {
+  let hit = false
+  for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+    const [ax, ay] = points[i], [bx, by] = points[j]
+    if ((ay > y) !== (by > y) && x < ax + (bx - ax) * (y - ay) / (by - ay)) hit = !hit
+  }
+  return hit
+}
+const halton = (i: number, base: number) => {
+  let f = 1, value = 0
+  for (; i > 0; i = Math.floor(i / base)) { f /= base; value += f * (i % base) }
+  return value
+}
+/**
+ * A tree in flower: blossoms scattered over the whole head, evenly but in no row (a low-discrepancy
+ * sequence, so the scatter is the same every bake). One sits at (0.40, 0.32), where the renderer's
+ * tests sample a bloom.
+ */
+const cherryBlooms: [number, number, number][] = [[0.40, 0.32, 0.019]]
+for (let i = 1; cherryBlooms.length < 30 && i < 200; i++) {
+  const x = 0.14 + 0.70 * halton(i, 2), y = 0.14 + 0.52 * halton(i, 3), radius = [0.019, 0.013, 0.016, 0.012, 0.017][i % 5]
+  // Clear of the head's edge and of the blossoms already placed.
+  const room = [[0, 0], [radius * 1.6, 0], [-radius * 1.6, 0], [0, radius * 1.6], [0, -radius * 1.6]]
+    .every(([dx, dy]) => cherryPads.some(pad => inside(pad, x + dx, y + dy)))
+  if (room && cherryBlooms.every(([bx, by, br]) => Math.hypot(x - bx, y - by) > (radius + br) * 1.5)) cherryBlooms.push([x, y, radius])
+}
+
+/**
+ * The forms drawn as stacked flat layers, lowest first; a layer is one or more shapes taken as one
+ * mass. `cast` drops each layer's outline onto the layers below it (a fir's skirts); otherwise
+ * each mass keeps its own underside in shade, `drop` deep.
+ */
+const layered: Partial<Record<TreeForm, { layers: Points[][]; drop: number; cast?: boolean }>> = {
+  conifer: { layers: [...firTiers].reverse().map(tier => [tier]), drop: 0.03, cast: true },
+  // One crown, one shadow: its underside. A band part-way up reads as a second tree behind.
+  broadleaf: { layers: [leafPads], drop: 0.07 },
+  spreading: { layers: [spreadPads], drop: 0.06 },
+  columnar: { layers: [columnPads], drop: 0.06 },
+  ornamental: { layers: [cherryPads], drop: 0.06 },
+  multi_trunk: { layers: [copsePads], drop: 0.07 },
+  default: { layers: [plainPads], drop: 0.07 },
+}
+
 /** Broad, overlapping masses read at marker scale without tiny leaf details. */
 export function treeArtwork(form: TreeForm, appearance: TreeAppearance = 'leafy'): TreeArtwork {
   if (appearance === 'leafless') {
@@ -49,7 +181,7 @@ export function treeArtwork(form: TreeForm, appearance: TreeAppearance = 'leafy'
     const summer = treeArtwork(form)
     return { ...summer, trunk: leaflessUpright(form), foliage: [], blooms: [] }
   }
-  let trunk = stem(0.49, 0.43)
+  let trunk: TreeShape[]
   let foliage: TreeShape[]
   const blooms: TreeShape[] = []
   switch (form) {
@@ -58,7 +190,7 @@ export function treeArtwork(form: TreeForm, appearance: TreeAppearance = 'leafy'
       const left: [number, number][] = [], right: [number, number][] = []
       const width = 0.058, ry = width * 0.22
       for (let i = 0; i <= 12; i++) {
-        const t = i / 12, x = 0.5 + 0.048 * Math.sin(t * Math.PI), y = 0.31 + (0.95 - ry - 0.31) * t
+        const t = i / 12, x = 0.5 + 0.048 * Math.sin(t * Math.PI), y = PALM_BUD + (0.95 - ry - PALM_BUD) * t
         const half = (0.027 + (width - 0.027) * t) / 2
         left.push([x - half, y]); right.push([x + half, y])
       }
@@ -66,47 +198,35 @@ export function treeArtwork(form: TreeForm, appearance: TreeAppearance = 'leafy'
       // The upper and lower edges bow by different amounts: broad blades
       // taper to pendulous tips, with open sky between successive fronds.
       const frond = (cx: number, cy: number, x: number, y: number, belly: number) =>
-        contour(50, 31, cx, cy, x, y, cx, cy + belly, 50, 31)
-      foliage = palmFolds.map(([cx, cy, x, y, belly]) => frond(cx, cy, x, y, belly))
+        contour(50, PALM_BUD * 100, cx, cy, x, y, cx, cy + belly, 50, PALM_BUD * 100)
+      // The fronds leave a solid heart, so none hangs off the trunk by a thread.
+      foliage = [...palmFolds.map(([cx, cy, x, y, belly]) => frond(cx, cy, x, y, belly)), ellipse(0.5, PALM_BUD - 0.02, 0.058, 0.03)]
       break
     }
     case 'broadleaf':
-      trunk.push(...stem(0.34, 0.47, 0.5, 0.75, 0.043), ...stem(0.66, 0.45, 0.5, 0.72, 0.039))
-      foliage = [contour(12,38, 12,30,23,26, 21,17,34,17, 37,6,48,10, 54,4,61,14,
-        72,11,75,23, 86,24,87,38, 87,47,78,50, 80,59,65,59,
-        59,66,53,58, 48,51,43,58, 37,65,30,58, 16,60,18,50, 12,47,12,38)]
+      // The bole and both limbs run well up into the head, so none stops short of it.
+      trunk = [...stem(0.5, 0.45, 0.5, 0.95, 0.125, 0.06), ...stem(0.37, 0.47, 0.5, 0.8, 0.045, 0.02), ...stem(0.63, 0.46, 0.5, 0.79, 0.043, 0.02)]
+      foliage = leafPads.map(polygon)
       break
     case 'spreading':
-      trunk = [...stem(0.49, 0.43, 0.5, 0.95, 0.092), ...stem(0.26, 0.42, 0.5, 0.73, 0.043), ...stem(0.74, 0.4, 0.5, 0.7, 0.04)]
-      foliage = [contour(4,43, 6,32,19,31, 22,21,35,24, 40,13,52,18,
-        65,11,70,23, 82,19,85,30, 95,30,96,40, 98,47,86,48,
-        80,54,70,49, 63,44,57,52, 51,56,46,51, 35,43,30,53, 22,57,17,51, 6,53,4,43)]
+      // A short bole; the limbs leave it low and run out almost level to the crown's ends.
+      trunk = [...stem(0.5, 0.52, 0.5, 0.95, 0.11, 0.05),
+        ...stem(0.19, 0.64, 0.5, 0.89, 0.05, 0.016), ...stem(0.81, 0.63, 0.5, 0.88, 0.048, 0.016),
+        ...stem(0.35, 0.62, 0.5, 0.84, 0.036, 0.012), ...stem(0.65, 0.62, 0.5, 0.83, 0.034, 0.012)]
+      foliage = spreadPads.map(polygon)
       break
     case 'conifer':
       trunk = stem(0.5, 0.58, 0.5, 0.95, 0.066)
-      // Swept tiers create a fir silhouette, with a clear leader and broad skirt.
-      foliage = [polygon([[.49,.04],[.53,.20],[.59,.27],[.55,.26],[.60,.36],[.67,.40],[.60,.39],
-        [.67,.49],[.72,.52],[.65,.52],[.70,.60],[.79,.66],[.72,.66],[.82,.74],[.69,.72],[.63,.76],
-        [.57,.73],[.48,.77],[.39,.74],[.28,.76],[.30,.72],[.18,.73],[.31,.62],[.24,.63],
-        [.36,.51],[.30,.52],[.42,.38],[.35,.40],[.45,.27],[.40,.29],[.47,.18]])]
+      foliage = firTiers.map(polygon)
       break
     case 'columnar':
       trunk = stem(0.5, 0.54, 0.5, 0.95, 0.066)
-      foliage = [contour(50,5, 57,14,58,23, 65,26,62,38, 68,49,63,58,
-        65,71,54,75, 45,82,38,70, 31,65,35,56, 30,48,36,38, 34,28,41,24, 43,12,50,5)]
+      foliage = columnPads.map(polygon)
       break
     case 'ornamental':
-      trunk = [...stem(0.5, 0.47, 0.5, 0.95, 0.069), ...stem(0.36, 0.48, 0.5, 0.73, 0.035), ...stem(0.65, 0.45, 0.5, 0.7, 0.032)]
-      foliage = [contour(14,39, 15,30,24,31, 24,23,35,25, 36,16,48,19,
-        53,10,64,15, 74,13,77,24, 89,27,81,36, 86,44,73,45,
-        67,52,61,46, 56,43,50,49, 44,53,39,47, 32,44,29,53, 18,55,20,47, 11,47,14,39)]
-      for (const [x, y, radius] of [[.24,.41,.027],[.31,.35,.016],[.40,.32,.026],[.49,.26,.014],[.66,.23,.027],[.73,.29,.017],[.61,.40,.023]]) {
-        for (let petal = 0; petal < 5; petal++) {
-          const angle = petal * Math.PI * 2 / 5 - Math.PI / 2
-          blooms.push(ellipse(x + Math.cos(angle) * radius * 0.72, y + Math.sin(angle) * radius * 0.72, radius * 0.7))
-        }
-        blooms.push(ellipse(x, y, radius * 0.7))
-      }
+      trunk = [...stem(0.5, 0.5, 0.5, 0.95, 0.062, 0.026), ...stem(0.37, 0.58, 0.5, 0.80, 0.03, 0.012), ...stem(0.63, 0.57, 0.5, 0.78, 0.028, 0.012)]
+      foliage = cherryPads.map(polygon)
+      for (const [x, y, radius] of cherryBlooms) blooms.push(ellipse(x, y, radius))
       break
     case 'weeping':
       trunk = [...stem(0.49, 0.34, 0.5, 0.95, 0.085), ...stem(0.32, 0.35, 0.5, 0.62, 0.035), ...stem(0.68, 0.35, 0.5, 0.6, 0.035)]
@@ -119,27 +239,13 @@ export function treeArtwork(form: TreeForm, appearance: TreeAppearance = 'leafy'
         24,73,30,52, 22,60,19,76, 15,67,19,52, 13,58,11,64, 10,57,15,46)]
       break
     case 'multi_trunk':
-      trunk = [...stem(0.3, 0.43, 0.405, 0.9, 0.052), ...stem(0.5, 0.35, 0.51, 0.9, 0.059), ...stem(0.715, 0.45, 0.605, 0.9, 0.051)]
-      foliage = [contour(11,41, 8,30,19,25, 20,16,31,21, 37,13,42,22,
-        41,12,49,12, 56,4,63,12, 74,13,68,27, 77,22,82,31, 93,32,89,45,
-        91,54,80,55, 74,62,65,52, 59,44,53,51, 49,57,43,50,
-        37,45,34,53, 27,64,19,54, 9,55,11,41)]
+      // The stems rise from one stool and lean apart.
+      trunk = [...stem(0.3, 0.43, 0.458, 0.9, 0.05), ...stem(0.5, 0.35, 0.505, 0.9, 0.056), ...stem(0.715, 0.45, 0.552, 0.9, 0.049)]
+      foliage = copsePads.map(polygon)
       break
     default:
       trunk = [...stem(0.5, 0.46, 0.5, 0.95, 0.075), ...stem(0.63, 0.46, 0.5, 0.7, 0.032)]
-      foliage = [ellipse(0.485, 0.345, 0.195, 0.255), ellipse(0.42, 0.475, 0.185, 0.17), ellipse(0.605, 0.46, 0.16, 0.18)]
-  }
-  // Broad crowns carry their weight on bent scaffold limbs and a flared
-  // root collar. The gaps between limbs stay open even in a small marker.
-  if (form === 'spreading' || form === 'broadleaf' || form === 'ornamental') {
-    const wide = form === 'spreading'
-    trunk = [
-      contour(43,95, 47,90,47,78, 48,66,43,61, 35,57,wide ? 28 : 33,44,
-        39,51,46,55, 49,58,50,61, 54,57,57,50, 60,41,65,39,
-        61,47,60,54, 58,62,53,67, 50,85,56,95, 51,94,43,95),
-      contour(47,67, 38,61,31,57, 23,53,20,44, 27,51,34,53, 42,57,48,60, 49,64,47,67),
-      contour(54,62, 61,54,69,51, 75,48,79,41, 77,50,71,54, 63,57,55,67, 53,65,54,62),
-    ]
+      foliage = plainPads.map(polygon)
   }
   const bounds = foliage.map(shape => {
     if (shape.kind === 'polygon') return [Math.min(...shape.points.map(p => p[0])), Math.max(...shape.points.map(p => p[0]))]
@@ -163,44 +269,67 @@ export function fillTreeShape(ctx: CanvasRenderingContext2D, shape: TreeShape, s
   ctx.fill()
 }
 
-// Shadow boundaries follow the boughs in the elevation drawing (100-unit board).
-// Closed paths may extend beyond the foliage: its silhouette clips the washes.
-const boughShadows: Record<Exclude<TreeForm, 'palm'>, string> = {
-  broadleaf: 'M5 42 Q20 49 27 35 Q34 39 39 31 Q48 36 54 24 Q59 25 63 18 Q68 22 75 15 L100 0 V85 H0 Z',
-  spreading: 'M0 42 Q12 46 21 37 Q28 39 33 34 Q42 37 47 29 Q57 33 64 25 Q72 29 78 23 Q89 25 95 20 L100 20 V70 H0 Z',
-  ornamental: 'M8 41 Q22 47 29 37 Q37 39 43 31 Q50 35 56 26 Q64 29 70 21 Q76 24 85 15 L100 18 V70 H0 Z',
-  columnar: 'M25 64 Q40 61 44 45 Q48 48 51 37 Q55 34 55 24 Q59 22 57 10 L78 0 V90 H25 Z',
-  default: 'M20 47 Q32 55 41 42 Q51 45 56 32 Q63 31 63 20 L85 10 V80 H18 Z',
-  multi_trunk: 'M5 43 Q19 52 28 39 Q35 39 39 26 Q39 37 46 38 Q57 37 61 24 Q65 23 68 15 L72 26 Q68 35 72 40 Q82 43 91 32 L96 70 H0 Z',
-  weeping: 'M7 70 Q19 26 33 25 Q22 37 22 68 Q30 36 45 28 Q36 46 36 69 Q45 37 55 34 Q48 50 48 74 Q57 49 60 33 Q67 37 68 63 Q73 40 66 22 Q79 28 82 55 Q83 35 78 24 L98 37 V90 H6 Z',
-  conifer: 'M32 25 L46 24 L50 18 L53 24 L60 25 L59 29 L48 27 L42 30 Z M26 40 L40 38 L46 32 L50 36 L54 32 L61 37 L71 38 L70 44 L56 40 L49 42 L44 39 L34 44 Z M22 53 L37 49 L43 44 L46 49 L52 45 L60 49 L71 50 L76 56 L65 54 L58 52 L51 55 L45 52 L32 57 Z M13 73 L31 65 L39 59 L41 64 L50 58 L55 63 L60 59 L69 65 L83 68 L88 81 H12 Z',
-}
+// The shade between a willow's switches (100-unit board); the silhouette clips it.
+const weepingShadow = 'M7 70 Q19 26 33 25 Q22 37 22 68 Q30 36 45 28 Q36 46 36 69 Q45 37 55 34 Q48 50 48 74 Q57 49 60 33 Q67 37 68 63 Q73 40 66 22 Q79 28 82 55 Q83 35 78 24 L98 37 V90 H6 Z'
 
+/** Where a palm's fronds leave its trunk, as a y in the cell. */
+const PALM_BUD = 0.24
+// Each frond: control and tip of its upper edge, and how far its lower edge bellies below.
 const palmFolds = [
-  [47,14,54,4,17], [38,1,23,12,12], [58,-1,72,7,10], [22,10,7,33,13],
-  [76,7,93,26,13], [22,24,16,53,14], [79,20,86,49,14], [37,34,34,58,11], [63,29,66,55,12],
+  [47,9,56,4,16], [38,3,23,8,13], [58,2,72,5,12], [22,5,7,27,14],
+  [76,2,93,20,14], [22,17,16,46,15], [79,13,86,42,15], [37,27,35,50,12], [63,22,65,47,13],
 ]
 
 /** Black washes over the current fill. Callers supply the foliage mask. */
 export function paintUprightShade(ctx: CanvasRenderingContext2D, form: TreeForm, size: number) {
+  const flat = layered[form]
+  if (flat) {
+    // One flat tone, no gradient: each layer's outline dropped onto whatever lies below it.
+    const scratch = document.createElement('canvas')
+    scratch.width = scratch.height = size
+    const ink = scratch.getContext('2d')!
+    const mass = (shapes: Points[], dy: number) => {
+      const path = new Path2D()
+      for (const points of shapes) {
+        points.forEach(([x, y], i) => i ? path.lineTo(x * size, (y + dy) * size) : path.moveTo(x * size, (y + dy) * size))
+        path.closePath()
+      }
+      return path
+    }
+    for (const layer of flat.layers) {
+      ink.save()
+      if (!flat.cast) {
+        // The mass hides what is behind it, then shades its own lower edge.
+        ink.globalCompositeOperation = 'destination-out'
+        ink.fill(mass(layer, 0))
+        ink.clip(mass(layer, 0))
+      }
+      ink.globalCompositeOperation = 'source-over'
+      ink.fill(mass(layer, flat.cast ? flat.drop : 0))
+      ink.globalCompositeOperation = 'destination-out'
+      ink.fill(mass(layer, flat.cast ? 0 : -flat.drop))
+      ink.restore()
+    }
+    ctx.save()
+    ctx.globalAlpha = UPRIGHT_SHADOW
+    ctx.drawImage(scratch, 0, 0)
+    ctx.restore()
+    return
+  }
   ctx.save()
   ctx.scale(size / 100, size / 100)
-  const wash = ctx.createLinearGradient(33, 16, 67, 60)
-  wash.addColorStop(0, 'rgba(0,0,0,0)')
-  wash.addColorStop(1, 'rgba(0,0,0,0.12)')
-  ctx.fillStyle = wash
-  ctx.fillRect(0, 0, 100, 100)
-  ctx.fillStyle = 'rgba(0,0,0,0.16)'
+  ctx.fillStyle = `rgba(0,0,0,${UPRIGHT_SHADOW})`
   if (form === 'palm') {
+    // The half of each frond below its midrib.
+    const fronds = new Path2D()
     for (const [cx, cy, x, y, belly] of palmFolds) {
-      ctx.beginPath()
-      ctx.moveTo(50, 31)
-      ctx.quadraticCurveTo(cx, cy + belly * 0.50, x, y)
-      ctx.quadraticCurveTo(cx, cy + belly, 50, 31)
-      ctx.fill()
+      fronds.moveTo(50, PALM_BUD * 100)
+      fronds.quadraticCurveTo(cx, cy + belly * 0.50, x, y)
+      fronds.quadraticCurveTo(cx, cy + belly, 50, PALM_BUD * 100)
     }
+    ctx.fill(fronds)
   } else {
-    ctx.fill(new Path2D(boughShadows[form]))
+    ctx.fill(new Path2D(weepingShadow))
   }
   ctx.restore()
 }
