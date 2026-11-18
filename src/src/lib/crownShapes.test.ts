@@ -44,10 +44,10 @@ describe('crown shapes', () => {
 })
 
 describe('the crown packed in the colour alpha', () => {
-  it('round-trips flags, form and turn exactly through a float32', () => {
+  it('round-trips flags, form (leafy and bare) and turn exactly through a float32', () => {
     const f32 = new Float32Array(1)
     for (let flags = 0; flags <= 3; flags++) {
-      for (let form = 0; form < CROWN_FORMS.length; form++) {
+      for (let form = 0; form < 2 * CROWN_FORMS.length; form++) {
         for (let turn = 0; turn < CROWN_TURNS; turn++) {
           f32[0] = packCrownAlpha(flags, form, turn)
           expect(unpackCrownAlpha(f32[0])).toEqual({ flags, form, turn })

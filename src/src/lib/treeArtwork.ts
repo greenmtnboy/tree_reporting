@@ -1,4 +1,5 @@
 import type { TreeForm } from '../types'
+import { leaflessUpright, type TreeAppearance } from './leaflessArtwork'
 
 /** Normalized vector artwork shared by native icons and close-range sprites. */
 export type TreeShape =
@@ -42,7 +43,12 @@ function contour(x: number, y: number, ...arcs: number[]): TreeShape {
 }
 
 /** Broad, overlapping masses read at marker scale without tiny leaf details. */
-export function treeArtwork(form: TreeForm): TreeArtwork {
+export function treeArtwork(form: TreeForm, appearance: TreeAppearance = 'leafy'): TreeArtwork {
+  if (appearance === 'leafless') {
+    // Retain the leafy envelope so a seasonal swap does not rescale the tree.
+    const summer = treeArtwork(form)
+    return { ...summer, trunk: leaflessUpright(form), foliage: [], blooms: [] }
+  }
   let trunk = stem(0.49, 0.43)
   let foliage: TreeShape[]
   const blooms: TreeShape[] = []

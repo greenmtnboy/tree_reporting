@@ -44,14 +44,20 @@
   ]
   let calls = 0, empty = false, mobile = false
   // The harness runs on a software GL, which keeps plain discs unless told otherwise; ?shapes=auto leaves it to the renderer.
+  const appearance = new URLSearchParams(location.search).get('appearance') === 'leafless' ? 'leafless' : 'leafy'
   const shapes = new URLSearchParams(location.search).get('shapes') === 'auto' ? undefined : true
+  // The day the batch is built for: ?date=YYYY-MM-DD, a winter's day under ?appearance=leafless, else the layer's own.
+  const dateParam = new URLSearchParams(location.search).get('date')
+  const harnessDate = dateParam ? new Date(dateParam + 'T12:00:00').getTime() : appearance === 'leafless' ? new Date(2027, 0, 15).getTime() : undefined
   // A list of trees as the worker's columns, built into a batch the way the worker does.
   const batch = (list, camera, options) => buildCrownBatch({
     id: list.map(t => t.id), lng: Float64Array.from(list, t => t.lng), lat: Float64Array.from(list, t => t.lat),
     width: Float64Array.from(list, t => t.width ?? NaN), measured: Uint8Array.from(list, t => (t.measured ? 1 : 0)),
     color: list.map(t => t.color), category: list.map(t => t.category ?? 'broadleaf'),
     dbh: Float64Array.from(list, t => t.dbh ?? 18), height: Float64Array.from(list, t => t.height ?? NaN),
-  }, camera, options)
+    // ?appearance=leafless: every tree deciduous, on a winter's day, so every tree is bare.
+    deciduous: Uint8Array.from(list, t => (appearance === 'leafless' || t.deciduous ? 1 : 0)),
+  }, camera, { ...options, date: harnessDate ?? options.date })
   const load = async (camera, options) => {
     calls++
     const delay = Number(new URLSearchParams(location.search).get('delay') ?? 0)
@@ -87,7 +93,7 @@
       const samples = document.createElement('div'); samples.className = 'marker-samples'
       for (const size of [24, 48]) {
         const figure = document.createElement('figure'), caption = document.createElement('figcaption')
-        const icon = drawTreeIcon(form, 48, '#4CAF50'); icon.style.width = `${size}px`; icon.style.height = `${size}px`
+        const icon = drawTreeIcon(form, 48, '#4CAF50', appearance); icon.style.width = `${size}px`; icon.style.height = `${size}px`
         caption.textContent = `${size}px`
         figure.append(icon, caption); samples.append(figure)
       }

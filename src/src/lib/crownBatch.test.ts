@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildCrownBatch, CROWN_STRIDE } from './crownBatch'
+import { CROWN_FORMS, unpackCrownAlpha } from './crownShapes'
 import { DEFAULT_CROWN_WIDTH, metersPerMercatorUnit, type TreeCrownColumns } from './treeCrowns'
 
 function columns(rows: { id: string; lat: number; width?: number }[]): TreeCrownColumns {
@@ -48,5 +49,23 @@ describe('buildCrownBatch', () => {
     const batch = buildCrownBatch(c, camera, { simplified: true, bearing: 0 })
     expect(batch.id).toEqual(['measured'])
     expect(batch.rows).toBe(2)
+  })
+
+  it('draws a deciduous tree bare in the winter where it stands, and only there', () => {
+    // Trees far from the camera in latitude, so the desktop draws them all (no distance cut).
+    const rows = [
+      { id: 'boston', lat: 42, deciduous: 1 }, { id: 'boston-pine', lat: 42, deciduous: 0 },
+      { id: 'melbourne', lat: -37, deciduous: 1 }, { id: 'singapore', lat: 1.3, deciduous: 1 },
+    ]
+    const c = { ...columns(rows), deciduous: Uint8Array.from(rows, r => r.deciduous) }
+    const bareIn = (date: Date) => {
+      const b = buildCrownBatch(c, camera, { simplified: false, bearing: 0, date: date.getTime() })
+      return b.id.filter((_, i) => unpackCrownAlpha(b.vertices[i * 6 * CROWN_STRIDE + 8]).form >= CROWN_FORMS.length).sort()
+    }
+    expect(bareIn(new Date(2027, 0, 15))).toEqual(['boston'])
+    expect(bareIn(new Date(2027, 6, 15))).toEqual(['melbourne'])
+    expect(bareIn(new Date(2027, 4, 15))).toEqual([])
+    // No date: every tree in leaf, as on a renderer that was never told the season.
+    expect(buildCrownBatch(c, camera, { simplified: false, bearing: 0 }).bare).toBe(0)
   })
 })

@@ -1,3 +1,4 @@
+import type { TreeAppearance } from '../lib/leaflessArtwork'
 import type { TreeForm } from '../types'
 import { CATEGORY_COLORS } from '../treeFormColors'
 import { treeArtwork, paintUprightShade, fillTreeShape, TREE_TRUNK_COLOR, TREE_BLOOM_COLOR } from '../lib/treeArtwork'
@@ -64,13 +65,13 @@ export function getTreeForm(qSpecies: string): CategoryInfo {
 }
 
 /** Generate a canvas image for a tree category silhouette */
-export function drawTreeIcon(category: TreeForm, size: number, color?: string): HTMLCanvasElement {
+export function drawTreeIcon(category: TreeForm, size: number, color?: string, appearance: TreeAppearance = 'leafy'): HTMLCanvasElement {
   const canvas = document.createElement('canvas')
   canvas.width = size
   canvas.height = size
   const ctx = canvas.getContext('2d')!
   color = color ?? CATEGORY_COLORS[category]
-  const artwork = treeArtwork(category)
+  const artwork = treeArtwork(category, appearance)
   ctx.fillStyle = color
   for (const shape of artwork.foliage) fillTreeShape(ctx, shape, size)
   ctx.globalCompositeOperation = 'source-atop'

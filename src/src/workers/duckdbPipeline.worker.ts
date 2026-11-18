@@ -85,6 +85,8 @@ const MAX_PARALLEL_TILE_WORK = 3
 /** The first zoom whose tiles hold a point per tree; below it a tile is an aggregate. */
 const DETAIL_TILE_ZOOM = 15
 const PUBLISHED_TREE_FILTER_TABLE = 'published_tree_filter_ids'
+/** The species that drop their leaves, for the crowns' bare winter shapes. */
+const DECIDUOUS_SPECIES_TABLE = '__deciduous_species'
 
 import { CATEGORY_COLORS as DEFAULT_CATEGORY_COLORS } from '../treeFormColors'
 import { snapShade } from '../lib/foliageSeason'
@@ -1374,6 +1376,14 @@ async function doInit() {
   } finally {
     if (speciesBytes) await db.dropFile(speciesFile).catch(() => {})
   }
+  // The species the crowns draw bare in their winter (lib/crownBatch): a few thousand names, one
+  // semi-join per crown query. Empty when the enrichment table did not load.
+  try {
+    await conn.query(`CREATE OR REPLACE TABLE ${DECIDUOUS_SPECIES_TABLE} AS
+      SELECT DISTINCT species FROM species_enrichment WHERE is_evergreen = false AND species IS NOT NULL`)
+  } catch {
+    await conn.query(`CREATE OR REPLACE TABLE ${DECIDUOUS_SPECIES_TABLE} (species VARCHAR)`)
+  }
 
   // The three columns the worker keeps, from the projection the pipeline
   // publishes for it; the full dimension (5.75 MB, almost all geometry) only
@@ -2185,11 +2195,11 @@ async function getMapTrees(camera: TreeRenderView): Promise<TreeCrownColumns> {
     result = await withCells(near, async () => {
       const tables = cells.flatMap((key) => win.cellTable.get(key) || [])
       const scope = scopeSql(tables)
-      return conn!.query(crownQuery(camera, filter, color, { from: scope, trees: filter ? treesSelectSql(scope) : null }))
+      return conn!.query(crownQuery(camera, filter, color, { from: scope, trees: filter ? treesSelectSql(scope) : null, deciduous: DECIDUOUS_SPECIES_TABLE }))
     })
   } else {
     await viewIsCurrent()
-    result = await conn.query(crownQuery(camera, filter, color))
+    result = await conn.query(crownQuery(camera, filter, color, { from: 'trees_fast', deciduous: DECIDUOUS_SPECIES_TABLE }))
   }
   if (!current()) return empty
   // Read column by column: no per-row proxy objects.
@@ -2212,6 +2222,7 @@ async function getMapTrees(camera: TreeRenderView): Promise<TreeCrownColumns> {
   const columns: TreeCrownColumns = {
     id: strings('id'), lng: numbers('lng'), lat: numbers('lat'), width: numbers('width'), measured: flags('measured'),
     color: strings('color'), category: strings('category'), dbh: numbers('dbh'), height: numbers('height'), notable: flags('notable'),
+    deciduous: flags('deciduous'),
   }
   return columns
 }

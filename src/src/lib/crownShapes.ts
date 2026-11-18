@@ -1,4 +1,5 @@
 import type { TreeForm } from '../types'
+import { leaflessCrown, type TreeAppearance } from './leaflessArtwork'
 
 /**
  * A crown seen from overhead, drawn by its form: a palm's fronds, a conifer's star of whorls, a
@@ -17,11 +18,18 @@ const FORM_INDEX = new Map<string, number>(CROWN_FORMS.map((form, i) => [form, i
 export const CROWN_TURNS = 8
 
 /**
- * The colour's alpha carries the tree's flags (1 measured, 2 notable) in its integer part and its
- * form and turn in its fraction: fraction * 128 = form * 8 + turn + 0.5. A float holds that to
- * well under a step, so the vertex shader reads all three back exactly.
+ * A bare (leafless) crown's shape index: its form's, past the leafy forms. A deciduous tree in
+ * its winter draws from the leafless atlases (lib/leaflessArtwork) under the same index arithmetic.
  */
-const SHAPE_SLOTS = 128
+export const LEAFLESS_OFFSET = CROWN_FORMS.length
+
+/**
+ * The colour's alpha carries the tree's flags (1 measured, 2 notable) in its integer part and its
+ * shape and turn in its fraction: fraction * 256 = shape * 8 + turn + 0.5, the shape being the
+ * form index plus LEAFLESS_OFFSET when bare. A float holds that to well under a step, so the
+ * vertex shader reads all three back exactly.
+ */
+const SHAPE_SLOTS = 256
 
 export function crownFormIndex(category: string): number {
   return FORM_INDEX.get(category) ?? DEFAULT_FORM
@@ -42,7 +50,7 @@ export function unpackCrownAlpha(alpha: number): { flags: number; form: number; 
   return { flags, form: Math.floor(slot / CROWN_TURNS), turn: slot % CROWN_TURNS }
 }
 
-/** Vertex-shader GLSL: unpack the alpha into (flags, form, turn). */
+/** Vertex-shader GLSL: unpack the alpha into (flags, shape, turn); a shape at or past LEAFLESS_OFFSET is bare. */
 export const CROWN_UNPACK_GLSL = `
       vec3 unpackCrown(float alpha) {
         float flags = floor(alpha);
@@ -152,7 +160,8 @@ const blossomPetals = [
 const frondLengths = [.99,.94,1,.90,.98,.94,.98]
 const firLengths = [1,.88,.96,.99,.89,.98,.92,1,.91,.96]
 
-export function crownShape(form: TreeForm, x: number, y: number): { edge: number; detail: number } {
+export function crownShape(form: TreeForm, x: number, y: number, appearance: TreeAppearance = 'leafy'): { edge: number; detail: number } {
+  if (appearance === 'leafless') return leaflessCrown(form,x,y)
   const r = Math.sqrt(x*x + y*y), a = Math.atan2(y, x)
   switch (form) {
     case 'conifer': {

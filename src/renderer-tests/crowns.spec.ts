@@ -192,7 +192,7 @@ test('first sprites wait for complete sizing and cross the former handoff withou
   expect(Math.max(...frames.widths) - Math.min(...frames.widths)).toBeLessThanOrEqual(2)
 })
 
-test('enlarged sprite edges stay sharp and all materials share one draw and two textures', async ({ page }, testInfo) => {
+test('enlarged sprite edges stay sharp and all materials share one draw and four textures', async ({ page }, testInfo) => {
   await page.goto('/renderer-tests/crowns.html')
   await settle(page)
   await page.evaluate(() => {
@@ -213,14 +213,15 @@ test('enlarged sprite edges stay sharp and all materials share one draw and two 
     // Only the edge should contain intermediate coverage, not a several-pixel
     // enlarged raster fringe. The tree spans roughly 400 screen pixels here.
     const partial = Array.from({ length: 600 }, (_, i) => i).filter(i => row[i * 4] > 94 && row[i * 4] < 237)
-    return { partial: partial.length, width: Math.max(...covered) - Math.min(...covered), expected, textureCount: layer.textures.length, error: gl.getError() }
+    return { partial: partial.length, width: Math.max(...covered) - Math.min(...covered), expected, textureCount: layer.textures.filter(Boolean).length, error: gl.getError() }
   })
   expect(edge.error).toBe(0)
   expect(edge.expected).toBeGreaterThan(350)
   expect(edge.partial).toBeLessThanOrEqual(4)
   expect(Math.abs(edge.width - edge.expected)).toBeLessThan(3)
-  // The side sprites' atlas and the overhead crowns'.
-  expect(edge.textureCount).toBe(2)
+  // The side sprites' atlas and the overhead crowns', and 1×1 placeholders for their leafless
+  // twins until a winter's deciduous tree is drawn.
+  expect(edge.textureCount).toBe(4)
   await page.screenshot({ path: testInfo.outputPath('close-up.png') })
   await page.getByRole('button', { name: 'All tree shapes' }).click()
   await settle(page)
@@ -466,11 +467,12 @@ test('a software renderer keeps plain crown discs: no shape atlas, the crown as 
     const pixels = new Uint8Array(200 * 4)
     gl.readPixels(Math.round(point.x * ratio) - 100, canvas.height - Math.round(point.y * ratio), 200, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels)
     const green = Array.from({ length: 200 }, (_, i) => i).filter(i => pixels[i * 4 + 1] - pixels[i * 4] > 20)
-    return { software: !layer.shapes, textures: layer.textures.length, width: Math.max(...green) - Math.min(...green), expected, error: gl.getError() }
+    return { software: !layer.shapes, textures: layer.textures.filter(Boolean).length, width: Math.max(...green) - Math.min(...green), expected, error: gl.getError() }
   })
   expect(disc.error).toBe(0)
   expect(disc.software).toBe(true)
-  expect(disc.textures).toBe(1)
+  // The side atlas, and its leafless twin's 1×1 placeholder: no crown atlas.
+  expect(disc.textures).toBe(2)
   // A disc: the row through its trunk is the whole crown.
   expect(Math.abs(disc.width - disc.expected)).toBeLessThan(5)
 })
