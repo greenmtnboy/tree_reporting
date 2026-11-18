@@ -99,12 +99,12 @@ export interface TreeCrownColumns {
   height: Float64Array
   /** 1 on a notable tree (a proper name or a blurb); absent reads as none. */
   notable?: Uint8Array
-  /** 1 where the species drops its leaves (species_enrichment.is_evergreen false); absent reads as none. */
-  deciduous?: Uint8Array
+  /** The months the tree is bare (lib/foliageSeason leafOffSql; bit 0 January); absent reads as never. */
+  leafOff?: Uint16Array
 }
 
 export function crownColumnBuffers(c: TreeCrownColumns): ArrayBuffer[] {
-  return [c.lng, c.lat, c.width, c.measured, c.dbh, c.height, ...(c.notable ? [c.notable] : []), ...(c.deciduous ? [c.deciduous] : [])].map(a => a.buffer as ArrayBuffer)
+  return [c.lng, c.lat, c.width, c.measured, c.dbh, c.height, ...(c.notable ? [c.notable] : []), ...(c.leafOff ? [c.leafOff] : [])].map(a => a.buffer as ArrayBuffer)
 }
 
 export function crownZoomOpacity(zoom: number): number {

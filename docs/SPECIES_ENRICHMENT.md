@@ -94,10 +94,14 @@ purple-leaved or blue-green species), `fall_foliage_colors` (the autumn leaf,
 empty for an evergreen) and `trunk_color` (the mature bark). The map's
 **Leaf shade (seasonal)** colour mode (`?colorBy=foliage`,
 `src/src/lib/foliageSeason.ts`) paints each tree with the shade for the season,
-decided from the calendar and the city's hemisphere: autumn is
-September to November north of the tropics and March to May south of them;
-December to March a deciduous tree is shown by its bark, or a bare-branch
-grey when none is recorded; inside the tropics it is always the growing season.
+decided from the calendar and the city's latitude (`SEASON_BANDS`): winters
+lengthen poleward, from January alone just outside the tropics to November
+to April past 55 degrees, with the south six months out; in winter a
+deciduous tree is shown by its bark, or a bare-branch grey when none is
+recorded; inside the tropics it is always the growing season. The map's bare
+crowns use the same calendar, and for a tree recorded only to its genus the
+habit published for its genus where it stands (`DATA_PIPELINE.md`, *Leaf
+habit where a tree stands*).
 A list with two shades is spread across the species' trees by tree id. A
 species with no shade keeps its tree-form colour, which is most of the map
 until coverage grows. Coverage is sparse on purpose; the fields are not part

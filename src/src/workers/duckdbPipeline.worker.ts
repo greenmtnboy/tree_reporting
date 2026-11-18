@@ -21,6 +21,7 @@ WHERE latitude IS NOT NULL AND longitude IS NOT NULL
 
 import {
   REMOTE_SPECIES_PARQUET_URL,
+  REMOTE_FOLIAGE_DEFAULTS_PARQUET_URL,
   REMOTE_ECOREGION_PARQUET_URL,
   REMOTE_ECOREGION_BROWSER_PARQUET_URL,
   REMOTE_LANDMARKS_PARQUET_URL,
@@ -36,6 +37,7 @@ import {
 } from './parquetUrls'
 import { normalizeValue } from './normalizeValue'
 import {
+  CITY_ENUM_TYPES,
   COLOR_OVERRIDE_TABLE,
   DBH_COLORS,
   SPECIES_SHADE_TABLE,
@@ -85,18 +87,21 @@ const MAX_PARALLEL_TILE_WORK = 3
 /** The first zoom whose tiles hold a point per tree; below it a tile is an aggregate. */
 const DETAIL_TILE_ZOOM = 15
 const PUBLISHED_TREE_FILTER_TABLE = 'published_tree_filter_ids'
-/** The species that drop their leaves, for the crowns' bare winter shapes. */
-const DECIDUOUS_SPECIES_TABLE = '__deciduous_species'
 
 import { CATEGORY_COLORS as DEFAULT_CATEGORY_COLORS } from '../treeFormColors'
-import { snapShade } from '../lib/foliageSeason'
+import { FoliageLookup, foliageDefaultsSql, foliageSpeciesSql, snapShade } from '../lib/foliageSeason'
 import type { InitStage } from '../lib/loadProgress'
 import { encodePointTiles, type PointProperty } from './pointTiles'
 import { SparseBlock, type Box } from './sparseBlocks'
 import {
-  CHUNK_ZOOM, bucketByChunk, flaggedRows, gridOrderChunks, pointChunkColorsSql, pointChunksSql, pointPalette,
+  CHUNK_ZOOM, bucketByChunk, chunkLeafOff, flaggedRows, gridOrderChunks, pointChunkColorsSql, pointChunksSql, pointPalette,
   type PointChunkBatch, type PointChunkColors, type PointChunkDirectory, type PointKeys,
 } from './cityPoints'
+
+/** The published genus shares by cell, read once at start (lib/foliageSeason). */
+let foliageDefaults: { cell: number; genus: string; deciduous: boolean }[] = []
+/** Each tree's leaf-off months by its species code: rebuilt with each world, whose species ENUM it is keyed on. */
+let foliage = FoliageLookup.none()
 
 /** The source layer a tree with no colour lands in: the style's own fallback colour. */
 const MVT_FALLBACK_LAYER = '#66BB6A'
@@ -361,6 +366,7 @@ type EarlyFiles = {
   vocab: Promise<Uint8Array>
   species: Promise<Uint8Array | null>
   ecoregions: Promise<Uint8Array | null>
+  foliage: Promise<Uint8Array | null>
 }
 let earlyFiles: EarlyFiles | null = null
 
@@ -375,6 +381,7 @@ function startEarlyFiles(): EarlyFiles {
     vocab,
     species: fetchPublishedFile(REMOTE_SPECIES_PARQUET_URL),
     ecoregions: fetchPublishedFile(REMOTE_ECOREGION_BROWSER_PARQUET_URL),
+    foliage: fetchPublishedFile(REMOTE_FOLIAGE_DEFAULTS_PARQUET_URL),
   }
 }
 
@@ -869,6 +876,7 @@ async function loadWorld(early?: EarlyFiles): Promise<void> {
       timings.push([sql.trim().slice(0, 40).replace(/\s+/g, ' '), Math.round(nowMs() - started)])
     }
   })
+  foliage = await buildFoliageLookup()
   windowGeneration += 1
   world = {
     manifest,
@@ -891,6 +899,26 @@ async function loadWorld(early?: EarlyFiles): Promise<void> {
     ms: Math.round(nowMs() - t0),
     steps: timings.map(([label, ms]) => `${ms} ${label}`).join(' | '),
   })
+}
+
+/**
+ * The leaf-habit lookup over the world's species ENUM: one row a species code, joined to the
+ * enrichment table once here rather than in every crown and chunk read. With no enrichment
+ * table (it failed to load) every tree keeps its leaves.
+ */
+async function buildFoliageLookup(): Promise<FoliageLookup> {
+  try {
+    const table = await conn!.query(foliageSpeciesSql(CITY_ENUM_TYPES.species))
+    const code = table.getChild('code')!, deciduous = table.getChild('deciduous')!, genus = table.getChild('open_genus')!
+    const species = Array.from({ length: table.numRows }, (_, i) => {
+      const d = deciduous.get(i), g = genus.get(i)
+      return { code: Number(code.get(i)), deciduous: d == null ? null : !!d, open_genus: g == null ? null : String(g) }
+    })
+    return new FoliageLookup(species, foliageDefaults)
+  } catch (e) {
+    console.warn('[Perf] duckdb-worker:foliage-lookup:failed', e)
+    return FoliageLookup.none()
+  }
 }
 
 /**
@@ -1336,6 +1364,8 @@ async function doInit() {
   // republishes with them; the "Leaf shade" colour mode and the tree card
   // read nulls and fall back to the tree-form colour meanwhile.
   const hasShades = await parquetHasColumn(speciesFile, 'foliage_colors')
+  // The genus decides a generic tree's leaf habit where it stands (lib/foliageSeason).
+  const genusColumn = await parquetHasColumn(speciesFile, 'genus') ? 'genus' : 'CAST(NULL AS VARCHAR) AS genus'
   const shadeColumns = hasShades
     ? 'foliage_colors, fall_foliage_colors, trunk_color'
     : 'CAST(NULL AS VARCHAR[]) AS foliage_colors, CAST(NULL AS VARCHAR[]) AS fall_foliage_colors, CAST(NULL AS VARCHAR) AS trunk_color'
@@ -1349,6 +1379,7 @@ async function doInit() {
         tree_form,
         native_ecoregions,
         is_evergreen,
+        ${genusColumn},
         mature_height_min_ft,
         mature_height_max_ft,
         canopy_spread_min_ft,
@@ -1376,13 +1407,22 @@ async function doInit() {
   } finally {
     if (speciesBytes) await db.dropFile(speciesFile).catch(() => {})
   }
-  // The species the crowns draw bare in their winter (lib/crownBatch): a few thousand names, one
-  // semi-join per crown query. Empty when the enrichment table did not load.
+  // The published genus shares by cell (lib/foliageSeason): a generic tree's leaf habit where it
+  // stands. Until the file is published, or if it fails, a species keeps the enrichment's answer.
+  const foliageBytes = await early.foliage
   try {
-    await conn.query(`CREATE OR REPLACE TABLE ${DECIDUOUS_SPECIES_TABLE} AS
-      SELECT DISTINCT species FROM species_enrichment WHERE is_evergreen = false AND species IS NOT NULL`)
-  } catch {
-    await conn.query(`CREATE OR REPLACE TABLE ${DECIDUOUS_SPECIES_TABLE} (species VARCHAR)`)
+    if (!foliageBytes) throw new Error('foliage defaults not published')
+    await db.registerFileBuffer('foliage_defaults.parquet', foliageBytes)
+    const table = await conn.query(foliageDefaultsSql('foliage_defaults.parquet'))
+    const cell = table.getChild('cell')!, genus = table.getChild('genus')!, deciduous = table.getChild('deciduous')!
+    foliageDefaults = Array.from({ length: table.numRows }, (_, i) => ({
+      cell: Number(cell.get(i)), genus: String(genus.get(i)), deciduous: !!deciduous.get(i),
+    }))
+  } catch (e) {
+    console.warn('[Perf] duckdb-worker:foliage-defaults:failed', e)
+    foliageDefaults = []
+  } finally {
+    if (foliageBytes) await db.dropFile('foliage_defaults.parquet').catch(() => {})
   }
 
   // The three columns the worker keeps, from the projection the pipeline
@@ -2195,11 +2235,11 @@ async function getMapTrees(camera: TreeRenderView): Promise<TreeCrownColumns> {
     result = await withCells(near, async () => {
       const tables = cells.flatMap((key) => win.cellTable.get(key) || [])
       const scope = scopeSql(tables)
-      return conn!.query(crownQuery(camera, filter, color, { from: scope, trees: filter ? treesSelectSql(scope) : null, deciduous: DECIDUOUS_SPECIES_TABLE }))
+      return conn!.query(crownQuery(camera, filter, color, { from: scope, trees: filter ? treesSelectSql(scope) : null, speciesCode: true }))
     })
   } else {
     await viewIsCurrent()
-    result = await conn.query(crownQuery(camera, filter, color, { from: 'trees_fast', deciduous: DECIDUOUS_SPECIES_TABLE }))
+    result = await conn.query(crownQuery(camera, filter, color, { from: 'trees_fast', speciesCode: true }))
   }
   if (!current()) return empty
   // Read column by column: no per-row proxy objects.
@@ -2222,8 +2262,11 @@ async function getMapTrees(camera: TreeRenderView): Promise<TreeCrownColumns> {
   const columns: TreeCrownColumns = {
     id: strings('id'), lng: numbers('lng'), lat: numbers('lat'), width: numbers('width'), measured: flags('measured'),
     color: strings('color'), category: strings('category'), dbh: numbers('dbh'), height: numbers('height'), notable: flags('notable'),
-    deciduous: flags('deciduous'),
   }
+  // Each tree's leaf-off months, from its species code and where it stands (lib/foliageSeason).
+  const lookup = foliage, code = result.getChild('species_code')!, leafOff = new Uint16Array(n)
+  for (let i = 0; i < n; i++) leafOff[i] = lookup.leafOff(Number(code.get(i) ?? -1), columns.lat[i], columns.lng[i])
+  columns.leafOff = leafOff
   return columns
 }
 
@@ -2239,7 +2282,7 @@ function pointColorKey(): string {
 }
 
 /** Copy an Arrow column into its own buffer, so it can be transferred. */
-function columnArray<T extends Float32Array | Uint8Array | Uint32Array>(table: { getChild(name: string): { toArray(): unknown } | null }, name: string, Ctor: { new(source: ArrayLike<number>): T }): T {
+function columnArray<T extends Float32Array | Uint8Array | Uint16Array | Uint32Array | Int32Array>(table: { getChild(name: string): { toArray(): unknown } | null }, name: string, Ctor: { new(source: ArrayLike<number>): T }): T {
   const column = table.getChild(name)
   return new Ctor((column ? column.toArray() : []) as ArrayLike<number>)
 }
@@ -2293,7 +2336,7 @@ async function getPointChunks(rowsKey: string, keys: number[]): Promise<PointChu
   return withCells(cellsOfChunks(keys), async (tables) => {
     if (pointRowsKey() !== rowsKey || pointColorKey() !== colorKey) return null
     const { src, color, palette } = pointSource(tables)
-    const table = await conn!.query(pointChunksSql(src, keys, color.expr, palette, DECIDUOUS_SPECIES_TABLE))
+    const table = await conn!.query(pointChunksSql(src, keys, color.expr, palette, true))
     if (pointRowsKey() !== rowsKey || pointColorKey() !== colorKey) return null
     const { offsets, columns } = bucketByChunk(columnArray(table, 'chunk', Uint32Array), keys, {
       x: columnArray(table, 'x', Float32Array),
@@ -2303,13 +2346,14 @@ async function getPointChunks(rowsKey: string, keys: number[]): Promise<PointChu
       color: columnArray(table, 'color', Uint8Array),
       rowid: columnArray(table, 'rowid', Uint32Array),
       notable: columnArray(table, 'notable', Uint8Array),
-      deciduous: columnArray(table, 'deciduous', Uint8Array),
+      species: columnArray(table, 'species_code', Int32Array),
     })
-    const { notable: flags, ...drawn } = columns
-    const grids = gridOrderChunks(offsets, drawn.x, drawn.y, { dbh: drawn.dbh, crown: drawn.crown, color: drawn.color, rowid: drawn.rowid, deciduous: drawn.deciduous, notable: flags })
+    const { notable: flags, species, ...drawn } = columns
+    const leafOff = chunkLeafOff(foliage, keys, offsets, drawn.x, drawn.y, species)
+    const grids = gridOrderChunks(offsets, drawn.x, drawn.y, { dbh: drawn.dbh, crown: drawn.crown, color: drawn.color, rowid: drawn.rowid, leafOff, notable: flags })
     const notable = flaggedRows(flags)
     console.info('[Perf] duckdb-worker:point-chunks', { chunks: keys.length, rows: table.numRows, notable: notable.length, ms: Math.round(nowMs() - t0) })
-    return { rowsKey, colorKey, palette, keys, offsets, ...drawn, notable, grids }
+    return { rowsKey, colorKey, palette, keys, offsets, ...drawn, leafOff, notable, grids }
   })
 }
 
@@ -2456,7 +2500,7 @@ ctx.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         const { rowsKey, keys } = msg.params as WorkerMethodMap['getPointChunks']['params']
         const result = await getPointChunks(rowsKey, keys)
         send({ type: 'response', requestId: msg.requestId, ok: true, result },
-          result ? [result.offsets.buffer, result.x.buffer, result.y.buffer, result.dbh.buffer, result.crown.buffer, result.color.buffer, result.rowid.buffer, result.notable.buffer, result.deciduous.buffer,
+          result ? [result.offsets.buffer, result.x.buffer, result.y.buffer, result.dbh.buffer, result.crown.buffer, result.color.buffer, result.rowid.buffer, result.notable.buffer, result.leafOff.buffer,
             ...result.grids.map((g) => g.start.buffer)] : undefined)
         break
       }

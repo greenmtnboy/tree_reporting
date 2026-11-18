@@ -1,6 +1,12 @@
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 import { DuckDBInstance, type DuckDBConnection } from '@duckdb/node-api'
-import { BARE_BRANCH_COLOR, foliagePhase, SHADE_PALETTE, snapShade, speciesShadeSql } from './foliageSeason'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import {
+  BARE_BRANCH_COLOR, FoliageLookup, foliageCell, foliageDefaultsSql, foliagePhase, foliageSpeciesSql,
+  leafOffBit, leafOffMonths, SHADE_PALETTE, snapShade, speciesCodeSql, speciesShadeSql,
+} from './foliageSeason'
 import { colorSql, SPECIES_SHADE_TABLE, UNKNOWN_SHADE_COLOR } from '../workers/cityTables'
 
 describe('foliage phase', () => {
@@ -21,6 +27,116 @@ describe('foliage phase', () => {
     expect(foliagePhase(at(12), MELBOURNE)).toBe('growing')
     expect(foliagePhase(at(10), SINGAPORE)).toBe('growing')
     expect(foliagePhase(at(1), SINGAPORE)).toBe('growing')
+  })
+})
+
+describe('leaf-off months', () => {
+  const months = (latitude: number) => [...Array(12).keys()].filter(m => leafOffMonths(latitude) & (1 << m)).map(m => m + 1)
+
+  test('lengthen poleward and are six months out in the south', () => {
+    expect(months(1.35)).toEqual([])
+    expect(months(23.4)).toEqual([])
+    expect(months(-23.4)).toEqual([])
+    expect(months(26.15)).toEqual([1])
+    expect(months(29.76)).toEqual([1, 2, 12])
+    expect(months(42.36)).toEqual([1, 2, 3, 12])
+    expect(months(60.2)).toEqual([1, 2, 3, 4, 11, 12])
+    expect(months(-37.81)).toEqual([6, 7, 8, 9])
+  })
+
+  test('agree with the phase table and the month bit', () => {
+    for (const latitude of [-60.5, -37.8, -23.6, 0, 25.03, 29.76, 42.36, 60.2]) {
+      for (let month = 0; month < 12; month++) {
+        const date = new Date(2027, month, 15)
+        expect((leafOffMonths(latitude) & leafOffBit(date)) !== 0).toBe(foliagePhase(date, latitude) === 'bare')
+      }
+    }
+  })
+})
+
+describe('leaf-off lookup', () => {
+  let conn: DuckDBConnection
+  let dir: string
+  const BOSTON = [42.36, -71.06], NAPLES = [26.15, -81.79]
+  beforeAll(async () => {
+    dir = mkdtempSync(join(tmpdir(), 'foliage-')).split('\\').join('/')
+    conn = await (await DuckDBInstance.create(':memory:')).connect()
+    // Trees carry their species as the world's ENUM does (workers/cityTables.ts), which holds
+    // species the enrichment never saw.
+    await conn.run(`CREATE TABLE species_enrichment (species VARCHAR, genus VARCHAR, is_evergreen BOOLEAN);
+      INSERT INTO species_enrichment VALUES
+        ('Quercus', 'Quercus', NULL),
+        ('Quercus virginiana', 'Quercus', true),
+        ('Quercus rubra', 'Quercus', false),
+        ('Acer', 'Acer', false),
+        ('Ginkgo biloba', 'Ginkgo', NULL);
+      CREATE TABLE published (cell BIGINT, genus VARCHAR, deciduous_share DOUBLE);
+      INSERT INTO published VALUES
+        (47628, 'Quercus', 1.0),
+        ((26 + 90) * 360 + -82 + 180, 'Quercus', 0.0),
+        (47628, 'Ginkgo', NULL);
+      COPY published TO '${dir}/foliage_defaults.parquet' (FORMAT PARQUET);
+      CREATE TYPE species_t AS ENUM ('Acer', 'Ginkgo biloba', 'Newtaxon alba', 'Quercus', 'Quercus rubra', 'Quercus virginiana');
+      CREATE TABLE trees (tree_id VARCHAR, species species_t, latitude DOUBLE, longitude DOUBLE);
+      INSERT INTO trees VALUES
+        ('boston-oak', 'Quercus', ${BOSTON}),
+        ('naples-oak', 'Quercus', ${NAPLES}),
+        ('boston-live-oak', 'Quercus virginiana', ${BOSTON}),
+        ('naples-red-oak', 'Quercus rubra', ${NAPLES}),
+        ('boston-maple', 'Acer', ${BOSTON}),
+        ('boston-ginkgo', 'Ginkgo biloba', ${BOSTON}),
+        ('mystery', 'Newtaxon alba', ${BOSTON}),
+        ('no-species', NULL, ${BOSTON});`)
+  })
+  afterAll(() => {
+    conn.closeSync()
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  /** The lookup as the worker builds it, from the same SQL. */
+  const lookup = async () => {
+    const species = (await conn.runAndReadAll(foliageSpeciesSql('species_t'))).getRowObjects()
+    const defaults = (await conn.runAndReadAll(foliageDefaultsSql(`${dir}/foliage_defaults.parquet`))).getRowObjects()
+    return new FoliageLookup(
+      species.map(r => ({ code: Number(r.code), deciduous: r.deciduous as boolean | null, open_genus: r.open_genus as string | null })),
+      defaults.map(r => ({ cell: Number(r.cell), genus: String(r.genus), deciduous: !!r.deciduous })),
+    )
+  }
+
+  test('keys a tree on the cell the published table is', () => {
+    // data/raw/tests/test_foliage_defaults.py pins the same cell from the model's side.
+    expect(foliageCell(BOSTON[0], BOSTON[1])).toBe(47628)
+  })
+
+  test("a generic oak is bare in Boston's winter and never in Naples", async () => {
+    const foliage = await lookup()
+    const rows = (await conn.runAndReadAll(`SELECT tree_id, ${speciesCodeSql('t')} AS code, latitude, longitude FROM trees t`)).getRowObjects()
+    const mask = Object.fromEntries(rows.map(r => [String(r.tree_id), foliage.leafOff(Number(r.code), Number(r.latitude), Number(r.longitude))]))
+    expect(mask).toEqual({
+      'boston-oak': leafOffMonths(BOSTON[0]),
+      'naples-oak': 0,
+      // A binomial keeps its own habit wherever it stands.
+      'boston-live-oak': 0,
+      'naples-red-oak': leafOffMonths(NAPLES[0]),
+      // No published share for the genus here: the enrichment's answer for the genus row stands.
+      'boston-maple': leafOffMonths(BOSTON[0]),
+      // A null share (too few identified trees) and an unknown habit: in leaf.
+      'boston-ginkgo': 0,
+      mystery: 0,
+      'no-species': 0,
+    })
+    expect(leafOffMonths(BOSTON[0])).not.toBe(0)
+    expect(leafOffMonths(NAPLES[0])).not.toBe(0)
+  })
+
+  test('without the published shares a generic tree keeps the enrichment answer', async () => {
+    const species = (await conn.runAndReadAll(foliageSpeciesSql('species_t'))).getRowObjects()
+    const foliage = new FoliageLookup(species.map(r => ({ code: Number(r.code), deciduous: r.deciduous as boolean | null, open_genus: r.open_genus as string | null })), [])
+    // An ENUM's codes are its values' places in the order the type lists them.
+    const code = (name: string) => ['Acer', 'Ginkgo biloba', 'Newtaxon alba', 'Quercus', 'Quercus rubra', 'Quercus virginiana'].indexOf(name)
+    expect(foliage.leafOff(code('Quercus'), BOSTON[0], BOSTON[1])).toBe(0)
+    expect(foliage.leafOff(code('Acer'), BOSTON[0], BOSTON[1])).toBe(leafOffMonths(BOSTON[0]))
+    expect(FoliageLookup.none().leafOff(0, BOSTON[0], BOSTON[1])).toBe(0)
   })
 })
 

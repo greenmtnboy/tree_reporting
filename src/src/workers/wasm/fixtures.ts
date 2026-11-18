@@ -42,6 +42,7 @@ export const fixtureParquetUrls = {
   TREE_DATA_VERSION: 2,
   REMOTE_TREES_PARQUET_URL: `${FIXTURE_DIR}/full_tree_info_v2.parquet`,
   REMOTE_SPECIES_PARQUET_URL: `${FIXTURE_DIR}/tree_enrichment_v2.parquet`,
+  REMOTE_FOLIAGE_DEFAULTS_PARQUET_URL: `${FIXTURE_DIR}/foliage_defaults_v2.parquet`,
   REMOTE_ECOREGION_PARQUET_URL: `${FIXTURE_DIR}/ecoregion_info_v2.parquet`,
   REMOTE_ECOREGION_BROWSER_PARQUET_URL: `${FIXTURE_DIR}/ecoregion_browser_v2.parquet`,
   REMOTE_LANDMARKS_PARQUET_URL: `${FIXTURE_DIR}/full_landmark_info_v2.parquet`,

@@ -36,6 +36,7 @@
   import { SPRITE_FORMS } from '/src/composables/treeSpriteAtlas.ts'
   import { treeArtwork } from '/src/lib/treeArtwork.ts'
   import { buildCrownBatch } from '/src/lib/crownBatch.ts'
+  import { leafOffMonths } from '/src/lib/foliageSeason.ts'
   const center = [-122.4194, 37.7749]
   const crowns = [
     { id: 'measured', lng: center[0] - 0.00035, lat: center[1], width: 12, measured: true, color: '#4CAF50' },
@@ -55,8 +56,9 @@
     width: Float64Array.from(list, t => t.width ?? NaN), measured: Uint8Array.from(list, t => (t.measured ? 1 : 0)),
     color: list.map(t => t.color), category: list.map(t => t.category ?? 'broadleaf'),
     dbh: Float64Array.from(list, t => t.dbh ?? 18), height: Float64Array.from(list, t => t.height ?? NaN),
-    // ?appearance=leafless: every tree deciduous, on a winter's day, so every tree is bare.
-    deciduous: Uint8Array.from(list, t => (appearance === 'leafless' || t.deciduous ? 1 : 0)),
+    // ?appearance=leafless: every tree deciduous, on a winter's day, so every tree is bare. A
+    // deciduous tree's leaf-off months are its latitude's, as the worker reads them.
+    leafOff: Uint16Array.from(list, t => (appearance === 'leafless' || t.deciduous ? leafOffMonths(t.lat) : 0)),
   }, camera, { ...options, date: harnessDate ?? options.date })
   const load = async (camera, options) => {
     calls++

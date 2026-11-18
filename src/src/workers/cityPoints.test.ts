@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { DuckDBInstance } from '@duckdb/node-api'
 import {
-  CHUNK_SIZE_M, CHUNK_ZOOM, MAX_POINT_PALETTE, POINT_FALLBACK_COLOR, bucketByChunk, gridOrderChunks, chunkFromKey, chunkKey, chunkOrigin,
+  CHUNK_SIZE_M, CHUNK_ZOOM, MAX_POINT_PALETTE, POINT_FALLBACK_COLOR, bucketByChunk, gridOrderChunks, chunkFromKey, chunkKey, chunkLeafOff, chunkOrigin,
   chunksInBox, paletteIndexSql, pointChunkColorsSql, pointChunksSql, pointPalette,
 } from './cityPoints'
 import { CELL_ZOOM } from './cityWindow'
 import { WEB_MERCATOR_MAX, WEB_MERCATOR_WORLD } from './cityTables'
+import { FoliageLookup, foliageCell, leafOffMonths } from '../lib/foliageSeason'
+import { lngLatFrom3857 } from '../lib/treeDots'
 
 const toX = (lng: number) => (lng * WEB_MERCATOR_MAX) / 180
 const toY = (lat: number) => 6378137 * Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360))
@@ -38,6 +40,43 @@ describe('chunk grid', () => {
     expect(keys.length).toBe(9)
     const [tx, ty] = tile(-71.06, 42.36, CHUNK_ZOOM)
     expect(keys[0]).toBe(chunkKey(tx, ty))
+  })
+})
+
+describe('chunkLeafOff', () => {
+  // Species code 0 an open 'Quercus' (its genus share decides it), 1 a deciduous binomial, 2 an evergreen.
+  const species = [
+    { code: 0, deciduous: null, open_genus: 'Quercus' },
+    { code: 1, deciduous: true, open_genus: null },
+    { code: 2, deciduous: false, open_genus: null },
+  ]
+  const chunkOf = (lng: number, lat: number) => { const [x, y] = tile(lng, lat, CHUNK_ZOOM); return chunkKey(x, y) }
+  /** Metres off a chunk's origin for a point in it. */
+  const offset = (key: number, lng: number, lat: number) => { const [ox, oy] = chunkOrigin(key); return [toX(lng) - ox, toY(lat) - oy] }
+
+  it('gives every tree of a chunk inside one degree cell its centre answer', () => {
+    const key = chunkOf(-71.06, 42.36)
+    const lookup = new FoliageLookup(species, [{ cell: foliageCell(42.36, -71.06), genus: 'Quercus', deciduous: true }])
+    const points = [[-71.06, 42.36], [-71.061, 42.361], [-71.059, 42.359], [-71.06, 42.36]].map(([lng, lat]) => offset(key, lng, lat))
+    const out = chunkLeafOff(lookup, [key], Uint32Array.of(0, 4), Float32Array.from(points, p => p[0]), Float32Array.from(points, p => p[1]), Int32Array.of(0, 1, 2, -1))
+    expect(Array.from(out)).toEqual([leafOffMonths(42.36), leafOffMonths(42.36), 0, 0])
+  })
+
+  it('works out each tree in a chunk across a degree line', () => {
+    const key = chunkOf(-71.5, 42.0005)
+    const [ox, oy] = chunkOrigin(key)
+    const [, south] = lngLatFrom3857(ox, oy)
+    const [, north] = lngLatFrom3857(ox + CHUNK_SIZE_M, oy + CHUNK_SIZE_M)
+    expect(Math.floor(south)).toBe(41)
+    expect(Math.floor(north)).toBe(42)
+    // Generic oaks drop their leaves north of the line and keep them south of it.
+    const lookup = new FoliageLookup(species, [
+      { cell: foliageCell(42.01, -71.5), genus: 'Quercus', deciduous: true },
+      { cell: foliageCell(41.99, -71.5), genus: 'Quercus', deciduous: false },
+    ])
+    const points = [offset(key, -71.5, 42.001), offset(key, -71.5, 41.999)]
+    const out = chunkLeafOff(lookup, [key], Uint32Array.of(0, 2), Float32Array.from(points, p => p[0]), Float32Array.from(points, p => p[1]), Int32Array.of(0, 0))
+    expect(Array.from(out)).toEqual([leafOffMonths(42.001), 0])
   })
 })
 

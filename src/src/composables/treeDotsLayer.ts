@@ -11,7 +11,7 @@ import {
 } from '../lib/treeDots'
 import { DEFAULT_CROWN_WIDTH, MAX_CROWN_WIDTH, REACH_FADE } from '../lib/treeCrowns'
 import { NOTABLE_GLOW_ALPHA, NOTABLE_GLOW_PX, NOTABLE_GLOW_RGB } from '../lib/notableGlow'
-import { foliagePhase } from '../lib/foliageSeason'
+import { leafOffBit } from '../lib/foliageSeason'
 import { mapDate } from '../lib/mapDate'
 
 /** A bare dot: the alpha of its wash. */
@@ -135,7 +135,7 @@ function uniforms(gl: GL2, program: WebGLProgram, names: string[]): Record<strin
 const CIRCLE_VS = `#version 300 es
 precision highp float;
 layout(location = 0) in vec2 a_pos;
-// Palette index, dbh (inches), crown width (CROWN_BYTE_PER_M; 0 unknown), notable (1) + deciduous (2).
+// Palette index, dbh (inches), crown width (CROWN_BYTE_PER_M; 0 unknown), notable (1) + bare on the map's date (2).
 layout(location = 1) in vec4 a_attr;
 uniform mat4 u_matrix;
 uniform vec2 u_center;
@@ -157,8 +157,6 @@ uniform float u_altitude;
 uniform float u_scale;
 // The sprite batch's query camera, on the ground in chunk coordinates (off the centre when pitched).
 uniform vec2 u_eye;
-// 1 while it is winter where this chunk stands (lib/foliageSeason): its deciduous trees draw bare.
-uniform float u_winter;
 out vec3 v_color;
 // 1 for a bare tree; its twigs turned by v_turn (0 to 1), from its position.
 out float v_bare;
@@ -201,7 +199,7 @@ void main() {
   float radius = max(mix(u_radius.x, u_radius.y, s), crown * 0.5 * u_px_per_m) * u_dpr * (gl_Position.w > 0.0 ? u_camdist / gl_Position.w : 0.0);
   v_radius = radius;
   // A notable tree's halo: the same point, wider. Every other tree takes the path above unchanged.
-  v_bare = u_winter * step(1.5, a_attr.w);
+  v_bare = step(1.5, a_attr.w);
   v_turn = fract(sin(dot(a_pos, vec2(12.9898, 78.233))) * 43758.5453);
   v_glow = mod(a_attr.w, 2.0) > 0.5 ? max(${NOTABLE_GLOW_PX.toFixed(1)} * u_dpr, radius * 0.6) : 0.0;
   gl_PointSize = 2.0 * (radius + v_glow) + 2.0;
@@ -282,10 +280,10 @@ interface Chunk {
   rowid: Uint32Array
   /** This chunk's notable rows, as indices here: their attribute's `.w` is set and they glow. */
   notable: Uint32Array
-  /** 1 for a deciduous tree. */
-  deciduous: Uint8Array
-  /** Whether it is winter here on the map's date (`date`, ms), worked out once a date. */
-  winter: { date: number; bare: boolean }
+  /** The months each tree is bare (lib/foliageSeason; bit 0 January). */
+  leafOff: Uint16Array
+  /** The month bit the attributes were uploaded for: the bare flag is baked into `.w`, so a new month re-uploads them. */
+  month: number
   /** A row's index here by its rowid; -1 for a row the current filter leaves out. */
   indexByRowid: Int32Array
   palette: string[]
@@ -438,7 +436,7 @@ export class TreeDotsLayer implements CustomLayerInterface {
   private initialize() {
     const gl = this.gl!
     this.circleProgram = compile(gl, CIRCLE_VS, CIRCLE_FS, 'Circle')
-    this.circleU = uniforms(gl, this.circleProgram, ['u_matrix', 'u_center', 'u_radius', 'u_dpr', 'u_camdist', 'u_px_per_m', 'u_palette', 'u_opacity', 'u_reach', 'u_far_opacity', 'u_altitude', 'u_scale', 'u_eye', 'u_poly', 'u_winter'])
+    this.circleU = uniforms(gl, this.circleProgram, ['u_matrix', 'u_center', 'u_radius', 'u_dpr', 'u_camdist', 'u_px_per_m', 'u_palette', 'u_opacity', 'u_reach', 'u_far_opacity', 'u_altitude', 'u_scale', 'u_eye', 'u_poly'])
   }
 
   private createGpu(gl: GL2): ChunkGpu {
@@ -756,8 +754,8 @@ export class TreeDotsLayer implements CustomLayerInterface {
         color: batch.color.subarray(from, to),
         rowid: batch.rowid.subarray(from, to),
         notable: notableIn(batch.notable, from, to),
-        deciduous: batch.deciduous.subarray(from, to),
-        winter: { date: NaN, bare: false },
+        leafOff: batch.leafOff.subarray(from, to),
+        month: 0,
         indexByRowid: new Int32Array(),
         palette: batch.palette, colorKey: batch.colorKey, grid: batch.grids[s],
         uploadPoints: true, uploadColors: true,
@@ -774,7 +772,7 @@ export class TreeDotsLayer implements CustomLayerInterface {
 
   // --- Drawing ---
 
-  private upload(gl: GL2, chunk: Chunk) {
+  private upload(gl: GL2, chunk: Chunk, month: number) {
     if (!chunk.gpu) {
       chunk.gpu = this.createGpu(gl)
       chunk.uploadPoints = chunk.uploadColors = true
@@ -787,11 +785,13 @@ export class TreeDotsLayer implements CustomLayerInterface {
       gl.bufferData(gl.ARRAY_BUFFER, pos, gl.STATIC_DRAW)
       chunk.uploadPoints = false
     }
+    if (chunk.month !== month) chunk.uploadColors = true
     if (chunk.uploadColors) {
       const attr = new Uint8Array(chunk.count * 4)
       for (let i = 0; i < chunk.count; i++) { attr[i * 4] = chunk.color[i]; attr[i * 4 + 1] = chunk.dbh[i]; attr[i * 4 + 2] = chunk.crown[i] }
       for (const i of chunk.notable) attr[i * 4 + 3] = 1
-      for (let i = 0; i < chunk.count; i++) attr[i * 4 + 3] += chunk.deciduous[i] * 2
+      for (let i = 0; i < chunk.count; i++) if (chunk.leafOff[i] & month) attr[i * 4 + 3] += 2
+      chunk.month = month
       gl.bindBuffer(gl.ARRAY_BUFFER, gpu.attr)
       gl.bufferData(gl.ARRAY_BUFFER, attr, gl.STATIC_DRAW)
       chunk.uploadColors = false
@@ -844,7 +844,8 @@ export class TreeDotsLayer implements CustomLayerInterface {
     const g = gl as GL2
     this.freeDropped(g)
     if (!this.map || !this.circleProgram) return
-    for (const chunk of this.chunks.values()) this.upload(g, chunk)
+    const month = leafOffBit(mapDate())
+    for (const chunk of this.chunks.values()) this.upload(g, chunk, month)
   }
 
   render(gl: WebGLRenderingContext | WebGL2RenderingContext, matrix: Parameters<CustomLayerInterface['render']>[1]) {
@@ -883,7 +884,6 @@ export class TreeDotsLayer implements CustomLayerInterface {
       g.activeTexture(g.TEXTURE0)
       g.uniform1i(this.circleU.u_palette, 0)
       const view = this.viewBox3857(0, maxDotRadius(radius, pxPerMetre) + NOTABLE_GLOW_PX + 2)
-      const date = mapDate()
       for (const chunk of this.chunks.values()) {
         if (!chunk.gpu || !intersects(this.chunkBox(chunk), view)) continue
         const local = this.chunkCamera(matrix as ArrayLike<number>, chunk, cam.camX, cam.camY)
@@ -892,7 +892,6 @@ export class TreeDotsLayer implements CustomLayerInterface {
         g.uniform2f(this.circleU.u_eye, eyeX - chunk.originX, eyeY - chunk.originY)
         corners.forEach(([x, y], i) => { poly[i * 2] = x - chunk.originX; poly[i * 2 + 1] = y - chunk.originY })
         g.uniform2fv(this.circleU.u_poly, poly)
-        g.uniform1f(this.circleU.u_winter, this.winter(chunk, date) ? 1 : 0)
         g.bindTexture(g.TEXTURE_2D, this.paletteTexture(g, chunk.palette))
         g.bindVertexArray(chunk.gpu.pointVao)
         this.drawRanges(g, visibleRanges(chunk.grid,
@@ -901,16 +900,6 @@ export class TreeDotsLayer implements CustomLayerInterface {
       g.bindTexture(g.TEXTURE_2D, null)
     }
     g.bindVertexArray(null)
-  }
-
-  /** Whether the chunk's deciduous trees are bare on `date`, by the latitude of its centre. */
-  private winter(chunk: Chunk, date: Date): boolean {
-    const ms = date.getTime()
-    if (chunk.winter.date !== ms) {
-      const [, lat] = lngLatFrom3857(chunk.originX + CHUNK_SIZE_M / 2, chunk.originY + CHUNK_SIZE_M / 2)
-      chunk.winter = { date: ms, bare: foliagePhase(date, lat) === 'bare' }
-    }
-    return chunk.winter.bare
   }
 
   // --- Picking ---

@@ -40,7 +40,7 @@ describe('nearby crown query', () => {
   const camera = { lng: 0, lat: 0, altitude: 800 }
   const color = colorSql('tf', false)
   const run = async (base = 'SELECT tree_id FROM trees_fast', eye = camera, colour = color) =>
-    (await conn.runAndReadAll(crownQuery(eye, base, colour))).getRowObjects().map(({ category: _category, dbh: _dbh, height: _height, notable: _notable, deciduous: _deciduous, ...row }) => row)
+    (await conn.runAndReadAll(crownQuery(eye, base, colour))).getRowObjects().map(({ category: _category, dbh: _dbh, height: _height, notable: _notable, species_code: _speciesCode, ...row }) => row)
 
   test('prefers measurements, uses published predictions, rejects missing and corrupt widths', async () => {
     expect(await run()).toEqual([

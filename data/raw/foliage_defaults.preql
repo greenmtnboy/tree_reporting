@@ -1,0 +1,93 @@
+# Whether a genus drops its leaves *here*: the map's default for a tree whose
+# own name does not say. Built by the `refresh-foliage-defaults` [[cloud.job]]
+# after the rollup and the enrichment table, in the core's tick; at most
+# weekly, on the fits' watermark (prediction_inputs.preql).
+#
+# The map draws a deciduous tree bare in its winter (src/src/lib/foliageSeason.ts).
+# A binomial answers that from the enrichment table's `is_evergreen`. A tree
+# recorded only to its genus -- 'Quercus', 16.5k of them in Boston alone --
+# or a species whose leaf habit the enrichment left unknown does not, and the
+# right answer depends on where it stands: Boston's identified oaks were
+# 99.96% deciduous in November 2026, Naples, Florida's 100% evergreen (live
+# oak), Houston's 67% and Madrid's 75% evergreen. So a generic oak is drawn
+# bare in a Boston winter and in leaf in Florida.
+#
+# The default is the share of a genus's identified trees that are deciduous,
+# counted where the tree stands, at the finest level with enough of them:
+#
+#   cell    the 1-degree cell (about a city)
+#   region  the 5-degree cell around it (a city's neighbours)
+#   genus   every identified tree of the genus in the world
+#
+# One row per (cell, genus) with a tree of the genus in the cell: about 11k
+# rows and 60 kB in November 2026. The browser joins on (cell, genus) only for
+# the trees whose own name leaves the habit open; a binomial with a known
+# habit keeps it, and a tree with no row, or a null share (too few identified
+# trees anywhere), keeps the enrichment's own answer.
+#
+# Not filtered to the rows some open tree needs: a `where` on an aggregate
+# filters the trees the aggregates count (Trilogy filters before it
+# aggregates), which would leave the region and genus shares counting only
+# the cells that pass. The whole table is small enough to ship.
+#
+# A tree counts as identified when its species is a binomial (not the genus
+# alone) with a known `is_evergreen`. The cell is `foliage_cell` below and the
+# browser computes it the same way (src/src/lib/foliageSeason.ts,
+# foliageCellSql); `test_foliage_defaults.py` pins both.
+
+import full_tree_info_source;
+import tree_enrichment_source;
+import prediction_inputs;
+
+# The fewest identified trees a level needs before its share is used.
+const foliage_min_identified <- 20;
+
+auto foliage_cell <- (cast(floor(latitude) as bigint) + 90) * 360 + cast(floor(longitude) as bigint) + 180; # 1-degree cell: (floor(lat) + 90) * 360 + floor(lng) + 180
+auto foliage_region <- (cast(floor(latitude / 5) as bigint) + 18) * 72 + cast(floor(longitude / 5) as bigint) + 36; # 5-degree cell, the same way
+
+# Identified: a binomial whose leaf habit the enrichment knows. Open: the rest
+# of the enriched trees -- the genus alone, or an unknown habit.
+auto foliage_identified <- case when is_evergreen is not null and species != genus then true else false end;
+auto foliage_open <- case when genus is not null and not foliage_identified then true else false end;
+auto foliage_deciduous_tree <- case when foliage_identified and is_evergreen = false then true else false end;
+
+auto foliage_cell_identified <- count(tree_id ? foliage_identified) by genus, foliage_cell;
+auto foliage_cell_deciduous <- count(tree_id ? foliage_deciduous_tree) by genus, foliage_cell;
+auto foliage_cell_open <- count(tree_id ? foliage_open) by genus, foliage_cell;
+auto foliage_region_identified <- count(tree_id ? foliage_identified) by genus, foliage_region;
+auto foliage_region_deciduous <- count(tree_id ? foliage_deciduous_tree) by genus, foliage_region;
+auto foliage_genus_identified <- count(tree_id ? foliage_identified) by genus;
+auto foliage_genus_deciduous <- count(tree_id ? foliage_deciduous_tree) by genus;
+
+# The level a (cell, genus) row's share comes from, and the share.
+auto foliage_default_level <- case
+    when foliage_cell_identified >= foliage_min_identified then 'cell'
+    when foliage_region_identified >= foliage_min_identified then 'region'
+    when foliage_genus_identified >= foliage_min_identified then 'genus'
+    else null
+end;
+auto foliage_deciduous_share <- case
+    when foliage_cell_identified >= foliage_min_identified then foliage_cell_deciduous / foliage_cell_identified
+    when foliage_region_identified >= foliage_min_identified then foliage_region_deciduous / foliage_region_identified
+    when foliage_genus_identified >= foliage_min_identified then foliage_genus_deciduous / foliage_genus_identified
+    else null
+end;
+
+# `foliage_cell is not null`: the enrichment source is partial, so the planner
+# joins it with a FULL join, which also emits a row for every enrichment
+# species no published tree carries (allometry_fits.preql); a tree with no
+# position has no cell either.
+datasource foliage_defaults (
+    cell: foliage_cell,
+    genus: genus,
+    deciduous_share: ?foliage_deciduous_share,
+    level: ?foliage_default_level,
+    open_trees: foliage_cell_open,
+    prediction_inputs_published_through: prediction_inputs_published_through,
+)
+grain (foliage_cell, genus)
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/foliage_defaults_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/foliage_defaults_v{data_version}.parquet`
+where foliage_cell is not null and genus is not null
+freshness by prediction_inputs_published_through
+order by cell asc, genus asc
+assert @kept(genus, 0.75);

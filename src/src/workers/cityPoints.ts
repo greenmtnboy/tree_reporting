@@ -11,8 +11,9 @@
 // exactly 4 x 4 of the phone's window cells (workers/cityWindow.ts).
 
 import { tileIndexSql, WEB_MERCATOR_MAX, WEB_MERCATOR_WORLD } from './cityTables'
-import { CROWN_BYTE_PER_M, DRAW_CHUNK_MAX_CELLS, DRAW_CHUNK_MIN_M, buildPickGrid, type PickGrid } from '../lib/treeDots'
+import { CROWN_BYTE_PER_M, DRAW_CHUNK_MAX_CELLS, DRAW_CHUNK_MIN_M, buildPickGrid, lngLatFrom3857, type PickGrid } from '../lib/treeDots'
 import { MAX_CROWN_WIDTH } from '../lib/treeCrowns'
+import { speciesCodeSql, type FoliageLookup } from '../lib/foliageSeason'
 
 /** A chunk's draw grid without its order: the points are already stored in it. */
 export type ChunkGrid = Pick<PickGrid, 'cell' | 'cols' | 'rows' | 'start'>
@@ -100,8 +101,8 @@ export interface PointChunkBatch {
    * than a byte per tree on the page.
    */
   notable: Uint32Array
-  /** 1 for a tree of a species that drops its leaves: the dots draw it bare in its winter. */
-  deciduous: Uint8Array
+  /** The months the tree is bare (lib/foliageSeason FoliageLookup; bit 0 January): the dots draw it bare in them. */
+  leafOff: Uint16Array
   /**
    * Each chunk's 512 m draw grid. A chunk's rows are stored in its grid's
    * cell order, so a frame draws the ranges of the cells in view and a pick
@@ -173,8 +174,32 @@ export function crownByteSql(alias = 'tf'): string {
   return `CAST(CASE WHEN ${width} IS NULL THEN 0 ELSE LEAST(255, GREATEST(1, round(${width} * ${CROWN_BYTE_PER_M}))) END AS UTINYINT)`
 }
 
+/**
+ * Each row's leaf-off months (lib/foliageSeason), its rows grouped by chunk as `bucketByChunk`
+ * leaves them. The lookup reads latitude and longitude by whole degree, so a chunk inside one
+ * 1-degree cell (nearly all: a chunk is ~10 km) gives every tree its centre's answer; only a
+ * chunk across a degree line works each tree's position out, from metres off its origin.
+ */
+export function chunkLeafOff(lookup: FoliageLookup, keys: readonly number[], offsets: Uint32Array, x: Float32Array, y: Float32Array, species: Int32Array): Uint16Array {
+  const out = new Uint16Array(species.length)
+  for (let s = 0; s < keys.length; s++) {
+    const [originX, originY] = chunkOrigin(keys[s])
+    const [west, south] = lngLatFrom3857(originX, originY)
+    const [east, north] = lngLatFrom3857(originX + CHUNK_SIZE_M, originY + CHUNK_SIZE_M)
+    const whole = Math.floor(west) === Math.floor(east) && Math.floor(south) === Math.floor(north)
+    const lng = (west + east) / 2, lat = (south + north) / 2
+    for (let i = offsets[s]; i < offsets[s + 1]; i++) {
+      if (!lookup.mayDrop(species[i])) continue
+      if (whole) { out[i] = lookup.leafOff(species[i], lat, lng); continue }
+      const [treeLng, treeLat] = lngLatFrom3857(originX + x[i], originY + y[i])
+      out[i] = lookup.leafOff(species[i], treeLat, treeLng)
+    }
+  }
+  return out
+}
+
 /** Every drawn tree of the chunks: its chunk, rowid, position from the chunk's origin, size and colour. */
-export function pointChunksSql(src: PointRowSource, keys: readonly number[], colorExpr: string, palette: readonly string[], deciduous?: string): string {
+export function pointChunksSql(src: PointRowSource, keys: readonly number[], colorExpr: string, palette: readonly string[], speciesCode = false): string {
   const chunk = chunkKeySql()
   const cx = `${tileIndexSql('tf', 'x', CHUNK_ZOOM)}`
   const cy = `${tileIndexSql('tf', 'y', CHUNK_ZOOM)}`
@@ -187,7 +212,7 @@ SELECT
   CAST(LEAST(255, GREATEST(1, round(${src.dbh}))) AS UTINYINT) AS dbh,
   ${crownByteSql()} AS crown,
   CAST(COALESCE(tf.notable, false) AS UTINYINT) AS notable,
-  CAST(${deciduous ? `CAST(tf.species AS VARCHAR) IN (SELECT species FROM ${deciduous})` : 'false'} AS UTINYINT) AS deciduous,
+  ${speciesCode ? speciesCodeSql('tf') : '-1'} AS species_code,
   ${paletteIndexSql(colorExpr, palette)} AS color
 FROM ${src.from}
 WHERE ${src.where}${chunkFilterSql(keys)}`
@@ -206,7 +231,7 @@ WHERE ${src.where}${chunkFilterSql(keys)}`
  * Returns the order of `keys` (as given, empty chunks included), the
  * offsets of each chunk's rows, and each column permuted to match.
  */
-export function bucketByChunk<T extends Record<string, Float32Array | Uint8Array | Uint32Array>>(
+export function bucketByChunk<T extends Record<string, Float32Array | Uint8Array | Uint16Array | Uint32Array | Int32Array>>(
   chunk: ArrayLike<number>, keys: readonly number[], columns: T,
 ): { offsets: Uint32Array; columns: T } {
   const slot = new Map<number, number>()
@@ -223,9 +248,9 @@ export function bucketByChunk<T extends Record<string, Float32Array | Uint8Array
   const fill = offsets.slice(0, keys.length)
   const order = new Uint32Array(offsets[keys.length])
   for (let i = 0; i < n; i++) if (slots[i] >= 0) order[fill[slots[i]]++] = i
-  const out = {} as Record<string, Float32Array | Uint8Array | Uint32Array>
+  const out = {} as Record<string, Float32Array | Uint8Array | Uint16Array | Uint32Array | Int32Array>
   for (const [name, values] of Object.entries(columns)) {
-    const Ctor = values.constructor as { new(length: number): Float32Array | Uint8Array | Uint32Array }
+    const Ctor = values.constructor as { new(length: number): Float32Array | Uint8Array | Uint16Array | Uint32Array | Int32Array }
     const permuted = new Ctor(order.length)
     for (let k = 0; k < order.length; k++) permuted[k] = values[order[k]]
     out[name] = permuted
@@ -247,11 +272,11 @@ export function flaggedRows(flags: Uint8Array): Uint32Array {
  * grid's cell order, in place, and return the grids. Runs in the DuckDB
  * worker, so the page only uploads what arrives.
  */
-export function gridOrderChunks<T extends Record<string, Float32Array | Uint8Array | Uint32Array>>(
+export function gridOrderChunks<T extends Record<string, Float32Array | Uint8Array | Uint16Array | Uint32Array | Int32Array>>(
   offsets: Uint32Array, x: Float32Array, y: Float32Array, columns: T,
 ): ChunkGrid[] {
   const grids: ChunkGrid[] = []
-  const all: (Float32Array | Uint8Array | Uint32Array)[] = [x, y, ...Object.values(columns)]
+  const all: (Float32Array | Uint8Array | Uint16Array | Uint32Array | Int32Array)[] = [x, y, ...Object.values(columns)]
   for (let s = 0; s + 1 < offsets.length; s++) {
     const from = offsets[s], to = offsets[s + 1]
     const grid = buildPickGrid(x.subarray(from, to), y.subarray(from, to), to - from, DRAW_CHUNK_MAX_CELLS, DRAW_CHUNK_MIN_M)

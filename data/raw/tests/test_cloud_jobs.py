@@ -463,7 +463,7 @@ def test_the_core_shares_one_cron():
         key: jobs_by_key()[key]["schedule"]
         for key in (
             "publish-full", "refresh-enrichment", "refresh-ecoregions", "refresh-allometry-fits",
-            "refresh-height-fits", "validate-core",
+            "refresh-height-fits", "refresh-foliage-defaults", "validate-core",
             "publish-website", "publish-website-species", "refresh-rollups",
         )
     }
@@ -484,7 +484,7 @@ def test_the_core_reads_only_published_parquets():
     have not quietly re-acquired the import.
     """
     for key in ("publish-full", "refresh-enrichment", "refresh-allometry-fits", "refresh-height-fits",
-                "validate-core", "refresh-rollups"):
+                "refresh-foliage-defaults", "validate-core", "refresh-rollups"):
         entrypoint = jobs_by_key()[key]["entrypoint"]
         text = statements(DATA_DIR / entrypoint)
         for code in CITY_CODES:
