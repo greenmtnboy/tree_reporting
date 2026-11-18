@@ -8,7 +8,8 @@
 # The crown model, and where it comes from
 # ---------------------------------------------------------------------------
 #
-#     crown_width_m = 2 * scale * dbh_cm ** b        (dbh clamped to the fitted range)
+#     crown_width_m = 2 * scale * dbh_cm ** b        (up to the fit's largest stem;
+#                                                     past it, at the division's rate)
 #
 # A genus-level power law fitted on Tallo (Jucker et al. 2022, CC-BY 4.0;
 # 312,829 trees with a measured crown radius across 1,453 genera), which is
@@ -57,7 +58,9 @@ property genus.crown_fit_taxon string; # the taxon that fit was made on
 property genus.crown_fit_n int; # Tallo trees behind the fit
 property genus.crown_fit_b float; # exponent on dbh_cm
 property genus.crown_fit_scale float; # exp(ln_a + sigma^2/2): crown_radius_m = scale * dbh_cm ** b
-property genus.crown_fit_dbh_max_cm float; # largest stem the fit saw; predictions clamp to it
+property genus.crown_fit_dbh_max_cm float; # largest stem the fit saw; past it the tail fit's exponent takes over
+property genus.crown_fit_tail_b float; # exponent of the row's division fit (else global), for stems past dbh_max_cm
+property genus.crown_fit_tail_dbh_max_cm float; # largest stem that fit saw: where the crown stops growing
 
 root datasource crown_width_coefficients (
     level: crown_coefficient_level,
@@ -68,9 +71,11 @@ root datasource crown_width_coefficients (
     b: crown_fit_b,
     scale: crown_fit_scale,
     dbh_max_cm: crown_fit_dbh_max_cm,
+    tail_b: crown_fit_tail_b,
+    tail_dbh_max_cm: crown_fit_tail_dbh_max_cm,
 )
 grain (genus)
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/trees/reference/crown_width_coefficients_850666b75f15.parquet`
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/trees/reference/crown_width_coefficients_98c30457b12a.parquet`
 where crown_coefficient_level = 'genus';
 
 # The class a tree falls back to when its genus has no fit, decided by the
@@ -114,7 +119,7 @@ root datasource crown_width_fallbacks (
     dbh_max_cm: crown_fallback_row_dbh_max_cm,
 )
 grain (crown_fallback_taxon)
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/trees/reference/crown_width_coefficients_850666b75f15.parquet`
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/trees/reference/crown_width_coefficients_98c30457b12a.parquet`
 where crown_fallback_row_level = 'division' or crown_fallback_row_level = 'global';
 
 auto crown_fallback_level <- @for_class(crown_fallback_row_level, crown_fallback_taxon);
@@ -126,15 +131,25 @@ auto crown_fallback_dbh_max_cm <- @for_class(crown_fallback_row_dbh_max_cm, crow
 auto crown_scale <- coalesce(crown_fit_scale, crown_fallback_scale);
 auto crown_b <- coalesce(crown_fit_b, crown_fallback_b);
 auto crown_dbh_max_cm <- coalesce(crown_fit_dbh_max_cm, crown_fallback_dbh_max_cm);
+# A division or global row is its own tail.
+auto crown_tail_b <- coalesce(crown_fit_tail_b, crown_fallback_b);
+auto crown_tail_dbh_max_cm <- coalesce(crown_fit_tail_dbh_max_cm, crown_fallback_dbh_max_cm);
 
-# Clamped to [1 cm, the fit's largest stem]: an exponent below one keeps a
-# power law tame, but a data-entry DBH of 400 inches should predict the crown
-# of the largest tree the genus was fitted on, not extrapolate past it. The
-# null case is spelled out because DuckDB's greatest() skips nulls -- without
-# it a tree with no diameter is a 1 cm stem with a 70 cm crown.
+# The row's own power law up to the largest stem its fit saw; past that, the
+# same curve bent to the tail fit's exponent (its division's), so the crown
+# keeps growing at a rate fitted on stems that size; and nothing past the
+# largest stem the tail saw, so a data-entry DBH of 400 inches cannot
+# extrapolate without bound. Most genus fits stop well short of the trees the
+# map carries (Salix at 33 cm, Platanus at 71); clamping to them drew a 290 cm
+# willow with a 6 m crown. `crown_allometry_fit.crown_width_m` is the same
+# formula in Python. The null case is spelled out because DuckDB's greatest()
+# skips nulls -- without it a tree with no diameter is a 1 cm stem with a 70 cm
+# crown.
 def crown_width_at(dbh) -> case
     when dbh is null then null
-    else 2 * crown_scale * (least(greatest(dbh, 1.0), crown_dbh_max_cm) ** crown_b)
+    else 2 * crown_scale
+        * (least(least(greatest(dbh, 1.0), crown_tail_dbh_max_cm), crown_dbh_max_cm) ** crown_b)
+        * ((greatest(least(greatest(dbh, 1.0), crown_tail_dbh_max_cm), crown_dbh_max_cm) / crown_dbh_max_cm) ** crown_tail_b)
 end;
 
 # --- The tree's own measurements ------------------------------------------

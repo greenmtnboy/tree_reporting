@@ -89,7 +89,8 @@ def test_the_model_reads_the_committed_csv():
 
 def test_csv_has_the_columns_the_model_reads(rows):
     assert list(rows[0].keys()) == fit.CSV_COLUMNS
-    for column in ("level", "taxon", "fit_level", "fit_taxon", "n", "b", "scale", "dbh_max_cm"):
+    for column in ("level", "taxon", "fit_level", "fit_taxon", "n", "b", "scale", "dbh_max_cm",
+                   "tail_b", "tail_dbh_max_cm"):
         assert f"{column}:" in statements(ARITHMETIC), f"the model no longer maps {column}"
 
 
@@ -448,7 +449,7 @@ def crown_width(tree: dict, dbh_cm: float, crown_rows: list[dict[str, str]]) -> 
     row = by_genus.get(tree["genus"]) or fallbacks.get(tree["class"])
     if row is None:
         return None
-    return 2 * float(row["scale"]) * min(max(dbh_cm, 1.0), float(row["dbh_max_cm"])) ** float(row["b"])
+    return fit.crown_width_m(row, dbh_cm)
 
 
 @pytest.fixture(scope="module")
@@ -712,8 +713,7 @@ def genus_row(rows: list[dict[str, str]], genus: str) -> dict[str, str]:
 
 
 def crown_from(row: dict[str, str], dbh_cm: float) -> float:
-    dbh_cm = min(max(dbh_cm, 1.0), float(row["dbh_max_cm"]))
-    return 2 * float(row["scale"]) * dbh_cm ** float(row["b"])
+    return fit.crown_width_m(row, dbh_cm)
 
 
 def test_every_fixture_tree_comes_back_once(predictions):
@@ -743,10 +743,38 @@ def test_a_genus_fit_is_applied_as_documented(predictions, rows):
     assert math.isclose(row["predicted_crown_width_m"], crown_from(acer, 30.0), rel_tol=1e-6)
 
 
-def test_diameter_is_clamped_to_the_fitted_range(predictions, rows):
+def test_diameter_is_clamped_to_the_tail_fits_range(predictions, rows):
+    """5000 inches: past Acer's own fit (140 cm) the crown grows at the
+    angiosperm rate, and stops at the largest stem that fit saw (385 cm)."""
     acer = genus_row(rows, "Acer")
+    assert acer["tail_taxon"] == "Angiosperm"
     row = by_id(predictions)["t-acer-huge"]
-    assert math.isclose(row["predicted_crown_width_m"], crown_from(acer, float(acer["dbh_max_cm"])), rel_tol=1e-6)
+    top = float(acer["tail_dbh_max_cm"])
+    assert math.isclose(row["predicted_crown_width_m"], crown_from(acer, top), rel_tol=1e-6)
+    assert row["predicted_crown_width_m"] > crown_from(acer, float(acer["dbh_max_cm"]))
+
+
+def test_past_its_fitted_range_a_genus_crown_keeps_growing_continuously(rows):
+    """Tallo's Salix fit stops at 33 cm; bos-54663 is a 290 cm, five-stem
+    white willow. Clamped, it drew a 6 m crown; the tail carries it on from
+    the genus curve's own value at 33 cm."""
+    salix = genus_row(rows, "Salix")
+    m, b, scale = float(salix["dbh_max_cm"]), float(salix["b"]), float(salix["scale"])
+    assert m < 50 and salix["fit_level"] == "genus"
+    assert math.isclose(crown_from(salix, 20.0), 2 * scale * 20.0 ** b, rel_tol=1e-12)
+    assert math.isclose(crown_from(salix, m), 2 * scale * m ** b, rel_tol=1e-12)
+    assert math.isclose(crown_from(salix, m * 1.000001), crown_from(salix, m), rel_tol=1e-5)
+    assert 20 < crown_from(salix, 114 * 2.54) < 30
+
+
+def test_every_row_tail_starts_where_its_fit_stops(rows):
+    """A tail that stopped short of its own fit would shrink the clamp; a
+    division or global row is its own tail, so it reduces to the plain clamp."""
+    for r in rows:
+        assert float(r["tail_dbh_max_cm"]) >= float(r["dbh_max_cm"]), r
+        assert fit.B_RANGE[0] <= float(r["tail_b"]) <= fit.B_RANGE[1], r
+        if r["fit_level"] in ("division", "global"):
+            assert (r["tail_b"], r["tail_dbh_max_cm"]) == (r["b"], r["dbh_max_cm"]), r
 
 
 def test_no_diameter_and_no_date_means_no_prediction(predictions):

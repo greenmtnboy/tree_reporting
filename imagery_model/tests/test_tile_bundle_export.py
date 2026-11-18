@@ -84,6 +84,9 @@ COEFFICIENT_ROWS = [
     {"level": "genus", "taxon": "Phoenix", "family": "Arecaceae", "division": "Angiosperm",
      "fit_level": "family", "fit_taxon": "Arecaceae", "n": "50", "b": "0.5", "scale": "0.2",
      "dbh_max_cm": "60"},
+    {"level": "genus", "taxon": "Salix", "family": "Salicaceae", "division": "Angiosperm",
+     "fit_level": "genus", "fit_taxon": "Salix", "n": "59", "b": "0.566406", "scale": "0.418346",
+     "dbh_max_cm": "33", "tail_taxon": "Angiosperm", "tail_b": "0.646075", "tail_dbh_max_cm": "385"},
     {"level": "division", "taxon": "Angiosperm", "family": "", "division": "Angiosperm",
      "fit_level": "division", "fit_taxon": "Angiosperm", "n": "211929", "b": "0.646075",
      "scale": "0.347503", "dbh_max_cm": "385"},
@@ -109,6 +112,22 @@ def test_crown_width_applies_the_shared_power_law():
     assert table.crown_width_m("Platanus", None) is None
     assert table.crown_width_m("Platanus", 0.0) is None
     assert table.crown_width_m("Platanus", math.nan) is None
+
+
+def test_crown_width_past_the_genus_range_grows_at_the_tail_rate():
+    """bos-54663: a 114 in, five-stem white willow; Tallo's Salix fit stops at 33 cm."""
+    table = export.CrownCoefficients(COEFFICIENT_ROWS)
+    at_max = 2 * 0.418346 * 33 ** 0.566406
+    within, _ = table.crown_width_m("Salix", 10.0)
+    assert within == pytest.approx(2 * 0.418346 * 25.4 ** 0.566406)
+    edge, _ = table.crown_width_m("Salix", 33 / 2.54)
+    assert edge == pytest.approx(at_max)  # continuous at the switch
+    big, _ = table.crown_width_m("Salix", 114.0)
+    assert big == pytest.approx(at_max * (114 * 2.54 / 33) ** 0.646075)
+    assert 20 < big < 30
+    # Still bounded: past the tail's own range nothing grows.
+    huge, _ = table.crown_width_m("Salix", 5000.0)
+    assert huge == pytest.approx(at_max * (385 / 33) ** 0.646075)
 
 
 def test_candidate_tree_ids_are_suggestions_nearest_first():

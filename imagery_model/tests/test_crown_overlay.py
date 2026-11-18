@@ -13,6 +13,16 @@ if(window.estimateCrown({species:'Quercus rubra',dbh_in:10,tree_form:'palm'}))th
     subprocess.run(['node','-e',js],check=True,capture_output=True,text=True)
 
 
+def test_estimate_past_the_genus_range_grows_at_the_tail_rate():
+    js = "const window={crownCoefficients:{'genus:Salix':{scale:.418346,b:.566406,dbh_max_cm:33,tail_b:.646075,tail_dbh_max_cm:385,fit_level:'genus',fit_taxon:'Salix'}}};" + CROWN_JS + """
+const edge=2*.418346*33**.566406, near=(a,b)=>Math.abs(a-b)<1e-9*b;
+if(!near(window.estimateCrown({species:'Salix alba',dbh_in:33/2.54}).width_m,edge))throw Error('continuous');
+if(!near(window.estimateCrown({species:'Salix alba',dbh_in:114}).width_m,edge*(114*2.54/33)**.646075))throw Error('tail');
+if(!near(window.estimateCrown({species:'Salix alba',dbh_in:5000}).width_m,edge*(385/33)**.646075))throw Error('bounded');
+"""
+    subprocess.run(['node','-e',js],check=True,capture_output=True,text=True)
+
+
 def test_missing_table_is_explicit_not_fabricated(tmp_path,monkeypatch):
     monkeypatch.setenv('TREE_ML_DATA_ROOT',str(tmp_path/'imagery/artifacts'))
     html=inject_crown_overlay('<head></head><header></header>')

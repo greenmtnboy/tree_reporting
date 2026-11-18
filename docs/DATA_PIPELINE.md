@@ -445,7 +445,9 @@ none counts toward density; its crown reaches the map from the city's
 parquet), with a
 predicted crown width (a genus-level power law fitted on Tallo, committed as
 `crown_width_coefficients.csv`, refit with `tools/crown_allometry_fit.py
---write --coverage`), a diameter predicted from planting age where the tree
+--write --coverage`; past the largest stem a genus fit saw, the crown keeps
+growing at its division fit's rate rather than clamping, since most genus fits
+stop short of the map's veterans), a diameter predicted from planting age where the tree
 has a date and no diameter, a predicted height (a genus-level power law
 fitted on the map's own LIDAR-heighted trees), the observed LIDAR
 `height_m` carried beside it (read from the city's own parquet; a city with
