@@ -127,6 +127,11 @@ import duckdb
 HERE = Path(__file__).resolve().parent
 RAW = HERE.parent
 COEFFICIENTS_CSV = RAW / "crown_width_coefficients.csv"
+# The imagery model's packaged copy: its training labels (crown_size.py) run
+# where data/raw is not shipped. The columns it reads, rewritten with the CSV.
+TRAINING_COPY = RAW.parent.parent / "imagery_model" / "src" / "urban_tree_ml" / "crown_width_coefficients.csv"
+TRAINING_COLUMNS = ["level", "taxon", "family", "scale", "b", "dbh_max_cm", "fit_level", "fit_taxon",
+                    "tail_b", "tail_dbh_max_cm"]
 
 TALLO_ZIP_URL = "https://raw.githubusercontent.com/selva-lab-repo/TALLO/main/DB/Tallo.csv.zip"
 TALLO_VERSION = "Tallo 1.0.0 (Jucker et al. 2022)"
@@ -340,6 +345,11 @@ def format_row(row: dict) -> dict[str, str]:
 def write_csv(rows: list[dict]) -> None:
     with COEFFICIENTS_CSV.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=CSV_COLUMNS, lineterminator="\n")
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(format_row(row))
+    with TRAINING_COPY.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=TRAINING_COLUMNS, lineterminator="\n", extrasaction="ignore")
         writer.writeheader()
         for row in rows:
             writer.writerow(format_row(row))

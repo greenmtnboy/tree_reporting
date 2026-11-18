@@ -5,10 +5,28 @@ import json
 from pathlib import Path
 
 
+COEFFICIENTS = Path(__file__).with_name('crown_width_coefficients.csv')
+
+
+def allometric_crown_radius_m(fit, dbh_cm):
+    """The shared Tallo prediction (crown_allometry_fit.crown_width_m), halved.
+
+    Up to the fit's largest stem, its own power law; past it, the tail fit's
+    exponent from the value the fit reaches there, up to the tail's largest
+    stem. Clamping at the genus's own range labelled every willow over 33 cm
+    with a 33 cm stem's crown. A row without tail columns is its own tail.
+    """
+    m = float(fit['dbh_max_cm'])
+    tail_b = float(fit.get('tail_b') or fit['b'])
+    top = max(float(fit.get('tail_dbh_max_cm') or m), m)
+    d = min(max(dbh_cm, 1.0), top)
+    return float(fit['scale']) * min(d, m) ** float(fit['b']) * (max(d, m) / m) ** tail_b
+
+
 def assign_crown_labels(frame, regions, taxonomy, *, estimated=True):
     """Human radius wins; allometric radius supplies weak supervision only."""
-    table = {(r['level'], r['taxon']): r for r in csv.DictReader(
-        Path(__file__).with_name('crown_width_coefficients.csv').open(encoding='utf-8'))}
+    with COEFFICIENTS.open(encoding='utf-8', newline='') as handle:
+        table = {(r['level'], r['taxon']): r for r in csv.DictReader(handle)}
     overrides = {str(r['tree_id']): r for r in regions if r.get('tree_id') and r['mode']=='confirmed-tree'}
     frame = frame.copy()
     for column, default in [('crown_radius_m', np.nan), ('crown_source', ''), ('crown_weight', 0.)]:
@@ -35,8 +53,7 @@ def assign_crown_labels(frame, regions, taxonomy, *, estimated=True):
         if row.get('tree_form')=='palm' or name in {'Palm','Cactus'} or (fit and fit['family']=='Arecaceae'): continue
         fit = fit or table.get(('global','all'))
         if not fit: continue
-        cm = np.clip(np.expm1(row.dbh_log1p)*2.54,1,float(fit['dbh_max_cm']))
-        radius = float(fit['scale'])*cm**float(fit['b'])
+        radius = allometric_crown_radius_m(fit, float(np.expm1(row.dbh_log1p))*2.54)
         if np.isfinite(radius) and radius>0:
             frame.loc[i, ['crown_radius_m','crown_source','crown_weight']] = [radius,'allometric',.2]
     return frame
