@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
+  SPECIES_SHADE_FINE_TABLE,
   SPECIES_SHADE_TABLE,
   UNKNOWN_SHADE_COLOR,
   CITY_ENUM_TYPES,
@@ -220,6 +221,20 @@ describe('world tables', () => {
     const perCell = await rows(`SELECT DISTINCT ${cells.expr} AS c FROM ${sf} ${cells.join} ORDER BY 1`)
     expect(perCell.map((r) => r.c)).toEqual([UNKNOWN_SHADE_COLOR, '#e8c547'])
     await conn.run(`DROP TABLE ${SPECIES_SHADE_TABLE}`)
+  })
+
+  test('the fine leaf shades come from their own table', async () => {
+    await conn.run(`CREATE TEMP TABLE ${SPECIES_SHADE_TABLE} AS SELECT 'Washingtonia robusta' AS species, ['#5a8a3c'] AS shades`)
+    await conn.run(`CREATE TEMP TABLE ${SPECIES_SHADE_FINE_TABLE} AS SELECT 'Washingtonia robusta' AS species, ['#4f8a3a'] AS shades`)
+    const sf = `${windowCellTable(key(SF))} tf`
+    const read = async (fine: boolean) => {
+      const color = colorSql('tf', false, 'shade', { fine })
+      return (await rows(`SELECT DISTINCT ${color.expr} AS c FROM ${sf} ${color.join} ORDER BY 1`)).map((r) => r.c)
+    }
+    expect(await read(false)).toEqual(['#5a8a3c', UNKNOWN_SHADE_COLOR])
+    expect(await read(true)).toEqual(['#4f8a3a', UNKNOWN_SHADE_COLOR])
+    await conn.run(`DROP TABLE ${SPECIES_SHADE_TABLE}`)
+    await conn.run(`DROP TABLE ${SPECIES_SHADE_FINE_TABLE}`)
   })
 
   test('the trunk scheme colours a row by its recorded diameter, and a missing one as unknown, with no table', async () => {

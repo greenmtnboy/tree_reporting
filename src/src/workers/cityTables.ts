@@ -39,8 +39,14 @@ import { CATEGORY_COLORS as DEFAULT_CATEGORY_COLORS } from '../treeFormColors'
 export const TREES_TABLE = 'trees_fast'
 export const TREES_VIEW = 'trees'
 export const COLOR_OVERRIDE_TABLE = '__tree_color_override'
-/** (species VARCHAR, shades VARCHAR[]): the leaf-shade scheme's colours, one row per species that has any. */
+/**
+ * (species VARCHAR, shades VARCHAR[]): the leaf-shade scheme's colours, one
+ * row per species that has any, snapped to the vector tiles' short palette
+ * (lib/foliageSeason snapShade).
+ */
 export const SPECIES_SHADE_TABLE = '__species_shade'
+/** The same species and shades on the finer palette the desktop's dots and the crowns paint (lib/foliageSeason fineShadeMap). */
+export const SPECIES_SHADE_FINE_TABLE = '__species_shade_fine'
 /** The leaf-shade scheme's colour for a tree whose species has no recorded shade. */
 export const UNKNOWN_SHADE_COLOR = '#9e9e9e'
 export const TILE_INDEX_ZOOM = 20
@@ -378,14 +384,17 @@ export type BaseColorScheme = 'form' | 'shade' | 'dbh'
  * `aggregated` is for the overview zooms, where rows are grid cells grouped
  * by colour: the species' first shade for every tree, so a two-shade species
  * does not split each cell in two (the hash split is a point-zoom effect).
+ *
+ * `fine` reads the leaf shades from the finer palette, for a renderer that
+ * draws any colour from one layer (the desktop's dots, the crowns).
  */
-export function colorSql(alias: string, overrideActive: boolean, scheme: BaseColorScheme | boolean = 'form', { aggregated = false } = {}): { join: string; expr: string } {
+export function colorSql(alias: string, overrideActive: boolean, scheme: BaseColorScheme | boolean = 'form', { aggregated = false, fine = false } = {}): { join: string; expr: string } {
   const joins: string[] = []
   // The scheme was a `shadeActive` flag before the trunk scheme became one.
   const baseScheme: BaseColorScheme = scheme === true ? 'shade' : scheme === false ? 'form' : scheme
   let base = defaultColorSql(`${alias}.tree_form`)
   if (baseScheme === 'shade') {
-    joins.push(`LEFT JOIN ${SPECIES_SHADE_TABLE} __ss ON CAST(${alias}.species AS VARCHAR) = __ss.species`)
+    joins.push(`LEFT JOIN ${fine ? SPECIES_SHADE_FINE_TABLE : SPECIES_SHADE_TABLE} __ss ON CAST(${alias}.species AS VARCHAR) = __ss.species`)
     const pick = aggregated ? '1' : `1 + CAST(hash(${alias}.tree_id) % len(__ss.shades) AS INTEGER)`
     base = `COALESCE(list_extract(__ss.shades, ${pick}), '${UNKNOWN_SHADE_COLOR}')`
   } else if (baseScheme === 'dbh') {

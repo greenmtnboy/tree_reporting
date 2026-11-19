@@ -237,11 +237,13 @@ GROUP BY species`
 }
 
 /**
- * The colours the map paints leaf shades with. The map draws one heatmap
- * layer per colour and groups its overview cells by colour, and the
+ * The colours the vector tiles paint leaf shades with. The tiles (a phone,
+ * or a desktop without WebGL2) draw one heatmap, one circle and one halo
+ * layer per colour and group their overview cells by colour, and the
  * enrichment table holds thousands of distinct hexes (one per species leaf
- * photo), so the worker snaps every shade to its nearest entry here when it
- * builds the species table. The tree card shows the exact recorded hexes.
+ * photo), so the worker snaps every shade to its nearest entry here for
+ * them. The desktop's dots and the crowns take the finer `fineShadeMap`.
+ * The tree card shows the exact recorded hexes.
  */
 export const SHADE_PALETTE = [
   // greens, deep conifer to fresh spring leaf, and the blue-greens
@@ -259,13 +261,24 @@ function rgb(hex: string): [number, number, number] | null {
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
 }
 
-/** The palette entry nearest a hex ("redmean" weighted RGB distance); null for something that is not a colour. */
+/** The greens and blue-greens at the head of SHADE_PALETTE. */
+const LEAF_PALETTE = SHADE_PALETTE.slice(0, 8)
+
+/**
+ * The palette entry nearest a hex ("redmean" weighted RGB distance); null for
+ * something that is not a colour. A shade whose green channel leads is a leaf
+ * and snaps among the greens only: the muted grey- and olive-greens of
+ * conifers and glaucous foliage (Pinus parviflora's #778e68) sit nearer the
+ * bark entries by plain distance, and an evergreen painted bark-grey reads as
+ * a bare tree.
+ */
 export function snapShade(hex: string): string | null {
   const c = rgb(hex)
   if (!c) return null
-  let best: string = SHADE_PALETTE[0]
+  const candidates = c[1] >= c[0] && c[1] >= c[2] ? LEAF_PALETTE : SHADE_PALETTE
+  let best: string = candidates[0]
   let bestDistance = Infinity
-  for (const entry of SHADE_PALETTE) {
+  for (const entry of candidates) {
     const p = rgb(entry)!
     const rMean = (c[0] + p[0]) / 2
     const [dr, dg, db] = [c[0] - p[0], c[1] - p[1], c[2] - p[2]]
@@ -276,4 +289,49 @@ export function snapShade(hex: string): string | null {
     }
   }
   return best
+}
+
+/**
+ * Distinct shades the desktop's dots and the crowns may paint. The dots
+ * address a palette by one byte (workers/cityPoints.ts MAX_POINT_PALETTE,
+ * 255 after the fallback); the rest is left for a chat override's colours
+ * and the no-shade grey.
+ */
+export const FINE_SHADE_BUDGET = 200
+
+const hex2 = (v: number) => v.toString(16).padStart(2, '0')
+
+/**
+ * Each recorded shade's paint colour where a palette of `budget` entries is
+ * all the renderer needs: the shades binned on an even RGB grid, each bin
+ * painted the mean of the shades in it, the grid's step the finest that
+ * leaves no more than `budget` bins. Over the published table (3,260
+ * growing-season shades) that is a step of 26 and a mean redmean error of 14,
+ * against 44 for the nearest of SHADE_PALETTE. Something not a colour is left
+ * out, as snapShade refuses it.
+ */
+export function fineShadeMap(hexes: Iterable<string>, budget = FINE_SHADE_BUDGET): Map<string, string> {
+  const colors = new Map<string, [number, number, number]>()
+  for (const hex of hexes) {
+    const c = rgb(hex)
+    if (c) colors.set(hex, c)
+  }
+  for (let step = 1; step <= 256; step += step < 8 ? 1 : 2) {
+    const bins = new Map<string, { sum: [number, number, number]; members: string[] }>()
+    for (const [hex, c] of colors) {
+      const key = `${Math.floor(c[0] / step)},${Math.floor(c[1] / step)},${Math.floor(c[2] / step)}`
+      let bin = bins.get(key)
+      if (!bin) bins.set(key, bin = { sum: [0, 0, 0], members: [] })
+      bin.sum[0] += c[0]; bin.sum[1] += c[1]; bin.sum[2] += c[2]
+      bin.members.push(hex)
+    }
+    if (bins.size > budget) continue
+    const out = new Map<string, string>()
+    for (const { sum, members } of bins.values()) {
+      const paint = '#' + sum.map((s) => hex2(Math.round(s / members.length))).join('')
+      for (const hex of members) out.set(hex, paint)
+    }
+    return out
+  }
+  return new Map()
 }
