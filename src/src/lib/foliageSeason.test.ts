@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   BARE_BRANCH_COLOR, FINE_SHADE_BUDGET, fineShadeMap, FoliageLookup, foliageCell, foliageDefaultsSql, foliagePhase, foliageSpeciesSql,
-  leafOffBit, leafOffMonths, SHADE_PALETTE, snapShade, speciesCodeSql, speciesShadeSql,
+  fittedShadeMap, leafOffBit, leafOffMonths, speciesCodeSql, speciesShadeSql,
 } from './foliageSeason'
 import { colorSql, SPECIES_SHADE_TABLE, UNKNOWN_SHADE_COLOR } from '../workers/cityTables'
 
@@ -208,35 +208,49 @@ describe('leaf-shade colour scheme', () => {
   })
 })
 
-describe('shade palette', () => {
-  test('snaps every recorded shade to a handful of paint colours', () => {
-    const palette = new Set<string>(SHADE_PALETTE)
-    for (const hex of ['#4b732f', '#a8d572', '#2b330c', '#8e924c', '#C62828', '#e65100', '#f4d03f', '7d7367']) {
-      expect(palette.has(snapShade(hex)!)).toBe(true)
+describe('fitted shade map', () => {
+  // A spread of leaf, autumn and bark shades as the enrichment table records them.
+  const recorded = [
+    '#4b732f', '#a8d572', '#2b330c', '#8e924c', '#3e7a3a', '#5d9b3c', '#7d9cae', '#6f8f7a',
+    '#c62828', '#e65100', '#f4d03f', '#b5651d', '#9b2d30', '#7d7367', '#6f665d', '#c8b8a2',
+    // Pinus parviflora, Pinus sylvestris, Abies sibirica, Araucaria heterophylla.
+    '#778e68', '#303016', '#70714c', '#50502d',
+  ]
+  const greenLed = (hex: string) => {
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16))
+    return g >= r && g >= b
+  }
+
+  test('paints every shade from no more than the colours asked for', () => {
+    for (const count of [1, 4, 8]) {
+      const map = fittedShadeMap(recorded, count)
+      expect(map.size).toBe(recorded.length)
+      expect(new Set(map.values()).size).toBeLessThanOrEqual(count)
     }
-    expect(SHADE_PALETTE.length).toBeLessThanOrEqual(20)
   })
 
-  test('keeps a shade in its family', () => {
-    expect(snapShade('#c62828')).toBe('#c0392b')
-    expect(snapShade('#f4d03f')).toBe('#e8c547')
-    expect(snapShade('#e65100')).toBe('#d9661f')
-    expect(snapShade(BARE_BRANCH_COLOR)).toBe(BARE_BRANCH_COLOR)
-    expect(['#3f7034', '#5a8a3c']).toContain(snapShade('#4b732f'))
+  test('keeps every shade while there are colours enough', () => {
+    const map = fittedShadeMap(recorded, recorded.length)
+    for (const hex of recorded) expect(map.get(hex)).toBe(hex)
   })
 
-  test('keeps a muted green leaf among the greens', () => {
-    const greens = new Set<string>(SHADE_PALETTE.slice(0, 8))
-    // Pinus parviflora, Pinus sylvestris, Abies sibirica, Araucaria heterophylla as the enrichment table records them.
-    for (const hex of ['#778e68', '#303016', '#70714c', '#50502d']) {
-      expect(greens.has(snapShade(hex)!), hex).toBe(true)
-    }
-    expect(snapShade('#778e68')).toBe('#5f8a78')
+  test('the same shades always give the same colours', () => {
+    expect([...fittedShadeMap(recorded, 6)]).toEqual([...fittedShadeMap([...recorded].reverse(), 6)].sort((x, y) => recorded.indexOf(x[0]) - recorded.indexOf(y[0])))
   })
 
-  test('refuses what is not a colour', () => {
-    expect(snapShade('red')).toBeNull()
-    expect(snapShade("#abc'); DROP TABLE x; --")).toBeNull()
+  test('keeps a green leaf on a green colour', () => {
+    const map = fittedShadeMap(recorded, 6)
+    for (const hex of recorded.filter(greenLed)) expect(greenLed(map.get(hex)!), `${hex} -> ${map.get(hex)}`).toBe(true)
+  })
+
+  test('keeps the autumn apart from the leaves', () => {
+    const map = fittedShadeMap(recorded, 8)
+    for (const hex of ['#c62828', '#e65100', '#f4d03f']) expect(greenLed(map.get(hex)!), hex).toBe(false)
+  })
+
+  test('leaves out what is not a colour', () => {
+    expect(fittedShadeMap(['red', "#abc'); DROP TABLE x; --", '#778e68'], 4)).toEqual(new Map([['#778e68', '#778e68']]))
+    expect(fittedShadeMap([], 4).size).toBe(0)
   })
 })
 

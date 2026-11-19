@@ -236,23 +236,7 @@ export function speciesShadeSql(phase: FoliagePhase): string {
 GROUP BY species`
 }
 
-/**
- * The colours the vector tiles paint leaf shades with. The tiles (a phone,
- * or a desktop without WebGL2) draw one heatmap, one circle and one halo
- * layer per colour and group their overview cells by colour, and the
- * enrichment table holds thousands of distinct hexes (one per species leaf
- * photo), so the worker snaps every shade to its nearest entry here for
- * them. The desktop's dots and the crowns take the finer `fineShadeMap`.
- * The tree card shows the exact recorded hexes.
- */
-export const SHADE_PALETTE = [
-  // greens, deep conifer to fresh spring leaf, and the blue-greens
-  '#1f3d1c', '#2f5a2a', '#3f7034', '#5a8a3c', '#7aa54a', '#9cbf5e', '#3d6b5a', '#5f8a78',
-  // autumn
-  '#e8c547', '#d99a2b', '#d9661f', '#c0392b', '#8e2335', '#6d3b5c',
-  // bark
-  '#5e5048', '#7a5a3c', BARE_BRANCH_COLOR,
-] as const
+const hex2 = (v: number) => v.toString(16).padStart(2, '0')
 
 function rgb(hex: string): [number, number, number] | null {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim())
@@ -261,34 +245,80 @@ function rgb(hex: string): [number, number, number] | null {
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
 }
 
-/** The greens and blue-greens at the head of SHADE_PALETTE. */
-const LEAF_PALETTE = SHADE_PALETTE.slice(0, 8)
+type Rgb = [number, number, number]
+
+/** "Redmean" weighted RGB distance, squared: cheap, and closer to the eye than plain RGB. */
+function shadeDistance(c: Rgb, p: Rgb): number {
+  const rMean = (c[0] + p[0]) / 2
+  const dr = c[0] - p[0], dg = c[1] - p[1], db = c[2] - p[2]
+  return (2 + rMean / 256) * dr * dr + 4 * dg * dg + (2 + (255 - rMean) / 256) * db * db
+}
+
+/** A shade whose green channel leads: a leaf, whatever its grey or olive cast. */
+const greenLed = (c: Rgb) => c[1] >= c[0] && c[1] >= c[2]
 
 /**
- * The palette entry nearest a hex ("redmean" weighted RGB distance); null for
- * something that is not a colour. A shade whose green channel leads is a leaf
- * and snaps among the greens only: the muted grey- and olive-greens of
- * conifers and glaucous foliage (Pinus parviflora's #778e68) sit nearer the
- * bark entries by plain distance, and an evergreen painted bark-grey reads as
- * a bare tree.
+ * How many colours the overview tiles (z11 to z14, grid cells under a
+ * heatmap) paint leaf shades with, on a phone or a desktop without WebGL2.
+ * Each colour is a heatmap and a circle layer, so the count is their cost.
+ * Over the published table's 3,260 growing-season shades the mean redmean
+ * error is 42 at eight fitted colours, against 44 for the 17 fixed colours
+ * the tiles painted before. The tree tiles (z15 up) carry their colour on
+ * each feature and take the fine palette (fineShadeMap).
  */
-export function snapShade(hex: string): string | null {
-  const c = rgb(hex)
-  if (!c) return null
-  const candidates = c[1] >= c[0] && c[1] >= c[2] ? LEAF_PALETTE : SHADE_PALETTE
-  let best: string = candidates[0]
-  let bestDistance = Infinity
-  for (const entry of candidates) {
-    const p = rgb(entry)!
-    const rMean = (c[0] + p[0]) / 2
-    const [dr, dg, db] = [c[0] - p[0], c[1] - p[1], c[2] - p[2]]
-    const distance = (2 + rMean / 256) * dr * dr + 4 * dg * dg + (2 + (255 - rMean) / 256) * db * db
-    if (distance < bestDistance) {
-      bestDistance = distance
-      best = entry
-    }
+export const OVERVIEW_SHADE_COUNT = 8
+
+/**
+ * Each recorded shade's paint colour from `count` colours fitted to the
+ * shades themselves (k-means under the redmean distance, from the farthest
+ * points, so the same shades always give the same colours). A green-led shade
+ * takes the nearest green-led colour: the grey- and olive-greens of conifers
+ * and glaucous foliage (Pinus parviflora's #778e68) can sit nearer a bark
+ * colour, and an evergreen painted bark reads as a bare tree. Something not a
+ * colour is left out.
+ */
+export function fittedShadeMap(hexes: Iterable<string>, count: number, iterations = 12): Map<string, string> {
+  const shades = new Map<string, Rgb>()
+  for (const hex of hexes) {
+    const c = rgb(hex)
+    if (c) shades.set(hex, c)
   }
-  return best
+  const points = [...shades.values()]
+  if (!points.length || count < 1) return new Map()
+  const mean: Rgb = [0, 1, 2].map((i) => points.reduce((s, c) => s + c[i], 0) / points.length) as Rgb
+  let first = points[0]
+  for (const c of points) if (shadeDistance(c, mean) < shadeDistance(first, mean)) first = c
+  const centres: Rgb[] = [[...first]]
+  const nearestSoFar = points.map((c) => shadeDistance(c, first))
+  while (centres.length < Math.min(count, points.length)) {
+    let far = 0
+    for (let i = 1; i < points.length; i++) if (nearestSoFar[i] > nearestSoFar[far]) far = i
+    if (nearestSoFar[far] === 0) break
+    centres.push([...points[far]])
+    for (let i = 0; i < points.length; i++) nearestSoFar[i] = Math.min(nearestSoFar[i], shadeDistance(points[i], points[far]))
+  }
+  const nearest = (c: Rgb, among: readonly number[]) => {
+    let best = among[0], bestDistance = Infinity
+    for (const j of among) {
+      const d = shadeDistance(c, centres[j])
+      if (d < bestDistance) { bestDistance = d; best = j }
+    }
+    return best
+  }
+  const all = centres.map((_, j) => j)
+  for (let it = 0; it < iterations; it++) {
+    const sums = centres.map(() => [0, 0, 0, 0])
+    for (const c of points) {
+      const s = sums[nearest(c, all)]
+      s[0] += c[0]; s[1] += c[1]; s[2] += c[2]; s[3]++
+    }
+    sums.forEach((s, j) => { if (s[3]) centres[j] = [s[0] / s[3], s[1] / s[3], s[2] / s[3]] })
+  }
+  const paints = centres.map((c) => '#' + c.map((v) => hex2(Math.round(v))).join(''))
+  const greens = all.filter((j) => greenLed(centres[j]))
+  const out = new Map<string, string>()
+  for (const [hex, c] of shades) out.set(hex, paints[nearest(c, greenLed(c) && greens.length ? greens : all)])
+  return out
 }
 
 /**
@@ -299,16 +329,13 @@ export function snapShade(hex: string): string | null {
  */
 export const FINE_SHADE_BUDGET = 200
 
-const hex2 = (v: number) => v.toString(16).padStart(2, '0')
-
 /**
  * Each recorded shade's paint colour where a palette of `budget` entries is
  * all the renderer needs: the shades binned on an even RGB grid, each bin
  * painted the mean of the shades in it, the grid's step the finest that
  * leaves no more than `budget` bins. Over the published table (3,260
- * growing-season shades) that is a step of 26 and a mean redmean error of 14,
- * against 44 for the nearest of SHADE_PALETTE. Something not a colour is left
- * out, as snapShade refuses it.
+ * growing-season shades) that is a step of 26 and a mean redmean error of 14.
+ * Something not a colour is left out.
  */
 export function fineShadeMap(hexes: Iterable<string>, budget = FINE_SHADE_BUDGET): Map<string, string> {
   const colors = new Map<string, [number, number, number]>()

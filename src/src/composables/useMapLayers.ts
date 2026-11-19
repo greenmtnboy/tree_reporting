@@ -6,6 +6,7 @@ import { SPRITE_CROWN_ZOOM_START, SPRITE_OPAQUE_ZOOM } from '../lib/treeCrowns'
 import { NOTABLE_GLOW_ALPHA, NOTABLE_GLOW_COLOR, NOTABLE_GLOW_PX } from '../lib/notableGlow'
 import { TreeDotsLayer, type TreeDotsPick } from './treeDotsLayer'
 import { useDuckDB } from './useDuckDB'
+import { COLOR_PROPERTY, TREE_SOURCE_LAYER } from '../workers/pointTiles'
 
 // --- Exported constants ---
 
@@ -67,26 +68,39 @@ const HEATMAP_OPACITY_NORMAL: any[] = [
 
 // --- Per-colour layers ---
 
-// The worker writes one MVT source layer per colour, named by the colour
-// (workers/pointTiles.ts), and the map draws one heatmap and one circle layer
-// per source layer. Each layer's bucket then reads only its own features:
-// with a single source layer and a colour filter per layer, MapLibre ran
-// every layer's filter over every feature of the tile.
+// The overview tiles (below z15, grid cells under the heatmaps) hold one MVT
+// source layer per colour, named by the colour (workers/pointTiles.ts), and
+// the map draws one heatmap and one circle layer per source layer. Each
+// layer's bucket then reads only its own features: with a single source
+// layer and a colour filter per layer, MapLibre ran every layer's filter
+// over every feature of the tile. A heatmap's colour cannot come from the
+// feature, so this is what the heatmaps need.
+//
+// The tree tiles (z15 up, past the heatmaps) are one source layer with the
+// colour on each feature, drawn by one circle layer: any number of colours,
+// no filter. The per-colour circles stay at every zoom, so a z14 tile still
+// on screen while the z15 tiles load keeps its trees, and the other way out.
 const HEAT_LAYER_PREFIX = 'trees-heat-'
 const CIRCLE_LAYER_PREFIX = 'trees-circle-'
-/** A notable tree's halo under its circle, one per colour's source layer (lib/notableGlow.ts). */
-const NOTABLE_LAYER_PREFIX = 'trees-notable-'
+/** The tree tiles' circles; under the circle prefix, so a tap and a feature query read it with the rest. */
+const TREE_CIRCLE_LAYER_ID = `${CIRCLE_LAYER_PREFIX}trees`
+/** Notable trees' halos (lib/notableGlow.ts), read from the tree tiles: an overview cell is never notable. */
+const NOTABLE_LAYER_ID = 'trees-notable'
+/** The per-colour halo layers the one above replaced, removed if a map still has them. */
+const LEGACY_NOTABLE_LAYER_PREFIX = 'trees-notable-'
+/** A tree tile's feature with no colour of its own: the worker's fallback (MVT_FALLBACK_LAYER). */
+const TREE_FALLBACK_COLOR = '#66BB6A'
 
 function styleLayerIds(mapInstance: maplibregl.Map, prefix: string): string[] {
   return (mapInstance.getStyle()?.layers ?? []).filter((l) => l.id.startsWith(prefix)).map((l) => l.id)
 }
 
-/** The circle layers, one per colour: the tree layers a tap or a feature query reads. */
+/** The circle layers, one per overview colour and the tree tiles' one: the tree layers a tap or a feature query reads. */
 export function treeCircleLayerIds(mapInstance: maplibregl.Map): string[] {
   return styleLayerIds(mapInstance, CIRCLE_LAYER_PREFIX)
 }
 
-/** The heatmap layers, one per colour. */
+/** The heatmap layers, one per overview colour. */
 export function treeHeatLayerIds(mapInstance: maplibregl.Map): string[] {
   return styleLayerIds(mapInstance, HEAT_LAYER_PREFIX)
 }
@@ -175,17 +189,21 @@ function heatLayerSpec(hexColor: string): maplibregl.LayerSpecification {
   }
 }
 
-function circleLayerSpec(hexColor: string, simplified: boolean): maplibregl.LayerSpecification {
+/**
+ * A circle layer: one colour's source layer of the overview tiles, or, for a
+ * null colour, the tree tiles' one layer, coloured by each feature.
+ */
+function circleLayerSpec(hexColor: string | null, simplified: boolean): maplibregl.LayerSpecification {
   return {
-    id: `${CIRCLE_LAYER_PREFIX}${hexColor}`,
+    id: hexColor ? `${CIRCLE_LAYER_PREFIX}${hexColor}` : TREE_CIRCLE_LAYER_ID,
     type: 'circle',
     source: 'trees',
-    'source-layer': hexColor,
+    'source-layer': hexColor ?? TREE_SOURCE_LAYER,
     minzoom: CIRCLE_ZOOM_MIN,
     ...(simplified ? {} : { maxzoom: CIRCLE_ZOOM_MAX }),
     paint: {
       'circle-radius': [...buildCircleRadiusExpression()] as maplibregl.ExpressionSpecification,
-      'circle-color': hexColor,
+      'circle-color': hexColor ?? ['coalesce', ['get', COLOR_PROPERTY], TREE_FALLBACK_COLOR],
       'circle-opacity': (simplified
         ? ['interpolate', ['linear'], ['zoom'],
           CIRCLE_ZOOM_OPACITY_START, 0,
@@ -210,12 +228,12 @@ function circleLayerSpec(hexColor: string, simplified: boolean): maplibregl.Laye
  * filtered to the features that carry `notable` (the worker writes it only
  * on those), so it matches almost nothing. Wider than the circle and blurred.
  */
-function notableLayerSpec(hexColor: string, simplified: boolean): maplibregl.LayerSpecification {
+function notableLayerSpec(simplified: boolean): maplibregl.LayerSpecification {
   return {
-    id: `${NOTABLE_LAYER_PREFIX}${hexColor}`,
+    id: NOTABLE_LAYER_ID,
     type: 'circle',
     source: 'trees',
-    'source-layer': hexColor,
+    'source-layer': TREE_SOURCE_LAYER,
     filter: ['has', 'notable'],
     minzoom: CIRCLE_ZOOM_MIN,
     ...(simplified ? {} : { maxzoom: CIRCLE_ZOOM_MAX }),
@@ -412,9 +430,10 @@ export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRev
   }
 
   function removeColorLayers(mapInstance: maplibregl.Map) {
-    for (const id of [...treeHeatLayerIds(mapInstance), ...treeCircleLayerIds(mapInstance), ...styleLayerIds(mapInstance, NOTABLE_LAYER_PREFIX)]) {
+    for (const id of [...treeHeatLayerIds(mapInstance), ...treeCircleLayerIds(mapInstance), ...styleLayerIds(mapInstance, LEGACY_NOTABLE_LAYER_PREFIX)]) {
       mapInstance.removeLayer(id)
     }
+    if (mapInstance.getLayer(NOTABLE_LAYER_ID)) mapInstance.removeLayer(NOTABLE_LAYER_ID)
     // Legacy single-source-layer ids.
     for (const id of ['trees-circle', ...TREE_CATEGORIES.map((cat) => `${HEAT_LAYER_PREFIX}${cat}`)]) {
       if (mapInstance.getLayer(id)) mapInstance.removeLayer(id)
@@ -423,7 +442,8 @@ export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRev
   }
 
   /**
-   * One heatmap and one circle layer per colour. The heatmaps sit under the
+   * One heatmap and one circle layer per overview colour, then the tree
+   * tiles' one circle layer and their halos. The heatmaps sit under the
    * sprites; the circles sit under them on the desktop (whose sprites take
    * over from z13) and over them on a phone, as the single circle layer did.
    */
@@ -433,9 +453,10 @@ export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRev
     const circleBefore = simplified
       ? (mapInstance.getLayer('landmarks-eye') ? 'landmarks-eye' : undefined)
       : crownId
-    // Each colour's halo under every circle, so a neighbour's circle is never hidden by it.
-    for (const hex of colors) mapInstance.addLayer(notableLayerSpec(hex, simplified), circleBefore)
+    // The halos under every circle, so a neighbour's circle is never hidden by one.
+    mapInstance.addLayer(notableLayerSpec(simplified), circleBefore)
     for (const hex of colors) mapInstance.addLayer(circleLayerSpec(hex, simplified), circleBefore)
+    mapInstance.addLayer(circleLayerSpec(null, simplified), circleBefore)
     lastBuiltColors = [...colors]
   }
 
@@ -453,6 +474,7 @@ export function useMapLayers({ map, simplified, activeHeatmapColors, mapQueryRev
     const existingSource = mapInstance.getSource('trees') as any
     const hasColorLayers = colors.length > 0
       && colors.every((hex) => !!mapInstance.getLayer(`${HEAT_LAYER_PREFIX}${hex}`) && !!mapInstance.getLayer(`${CIRCLE_LAYER_PREFIX}${hex}`))
+      && !!mapInstance.getLayer(TREE_CIRCLE_LAYER_ID)
     const hasSpriteLayer = !!mapInstance.getLayer(simplified ? 'trees-crown' : 'trees-icon')
     const hasAllLayers = hasColorLayers && hasSpriteLayer
 

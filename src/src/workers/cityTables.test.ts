@@ -4,7 +4,8 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
-  SPECIES_SHADE_FINE_TABLE,
+  SHADE_TABLES,
+  type ShadeTier,
   SPECIES_SHADE_TABLE,
   UNKNOWN_SHADE_COLOR,
   CITY_ENUM_TYPES,
@@ -223,18 +224,19 @@ describe('world tables', () => {
     await conn.run(`DROP TABLE ${SPECIES_SHADE_TABLE}`)
   })
 
-  test('the fine leaf shades come from their own table', async () => {
-    await conn.run(`CREATE TEMP TABLE ${SPECIES_SHADE_TABLE} AS SELECT 'Washingtonia robusta' AS species, ['#5a8a3c'] AS shades`)
-    await conn.run(`CREATE TEMP TABLE ${SPECIES_SHADE_FINE_TABLE} AS SELECT 'Washingtonia robusta' AS species, ['#4f8a3a'] AS shades`)
+  test('each palette of leaf shades comes from its own table', async () => {
+    const painted: Record<ShadeTier, string> = { overview: '#5a8a3c', fine: '#4e8b39' }
+    for (const [tier, table] of Object.entries(SHADE_TABLES) as [ShadeTier, string][]) {
+      await conn.run(`CREATE TEMP TABLE ${table} AS SELECT 'Washingtonia robusta' AS species, ['${painted[tier]}'] AS shades`)
+    }
     const sf = `${windowCellTable(key(SF))} tf`
-    const read = async (fine: boolean) => {
-      const color = colorSql('tf', false, 'shade', { fine })
+    const read = async (shades?: ShadeTier) => {
+      const color = colorSql('tf', false, 'shade', shades ? { shades } : {})
       return (await rows(`SELECT DISTINCT ${color.expr} AS c FROM ${sf} ${color.join} ORDER BY 1`)).map((r) => r.c)
     }
-    expect(await read(false)).toEqual(['#5a8a3c', UNKNOWN_SHADE_COLOR])
-    expect(await read(true)).toEqual(['#4f8a3a', UNKNOWN_SHADE_COLOR])
-    await conn.run(`DROP TABLE ${SPECIES_SHADE_TABLE}`)
-    await conn.run(`DROP TABLE ${SPECIES_SHADE_FINE_TABLE}`)
+    expect(await read()).toEqual([painted.overview, UNKNOWN_SHADE_COLOR])
+    for (const tier of Object.keys(SHADE_TABLES) as ShadeTier[]) expect(await read(tier)).toEqual([painted[tier], UNKNOWN_SHADE_COLOR])
+    for (const table of Object.values(SHADE_TABLES)) await conn.run(`DROP TABLE ${table}`)
   })
 
   test('the trunk scheme colours a row by its recorded diameter, and a missing one as unknown, with no table', async () => {

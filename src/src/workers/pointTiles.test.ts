@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import { createRequire } from 'node:module'
-import { encodePointTiles, type PointProperty, type TileRowColumns } from './pointTiles'
+import { COLOR_PROPERTY, encodePointTiles, TREE_SOURCE_LAYER, type PointProperty, type TileRowColumns } from './pointTiles'
 
 const require = createRequire(createRequire(import.meta.url).resolve('maplibre-gl'))
 const { VectorTile } = require('@mapbox/vector-tile')
@@ -74,6 +74,30 @@ describe('point tiles', () => {
     const [plain, famous] = decode(tiles.get('5/6')!.mvt)['#111111']
     expect(Object.keys(plain).sort()).toEqual(['extent', 'id', 'type', 'xy'])
     expect(famous).toMatchObject({ id: 'famous', dbh: 40, notable: true })
+  })
+
+  test('a single-layer tile holds every tree in one layer, its colour on the feature', () => {
+    const at = inTile(16, 5, 6, 0.1, 0.1)
+    const tiles = encodePointTiles(columns([
+      { ...at, layer: '#111111', id: 'a', dbh: 3, notable: null },
+      { ...at, layer: '#222222', id: 'b', dbh: 4, notable: true },
+      { ...at, layer: '#111111', id: 'c', dbh: 5, notable: null },
+      { ...at, layer: null, id: 'd', dbh: 6, notable: null },
+    ]), 16, POINT_PROPERTIES, '#66BB6A', { singleLayer: true })
+    const layers = decode(tiles.get('5/6')!.mvt)
+    expect(Object.keys(layers)).toEqual([TREE_SOURCE_LAYER])
+    expect(layers[TREE_SOURCE_LAYER].map((f) => [f.id, f[COLOR_PROPERTY] ?? null, f.notable ?? false])).toEqual([
+      ['a', '#111111', false], ['b', '#222222', true], ['c', '#111111', false], ['d', null, false],
+    ])
+  })
+
+  test('a colour shared by many trees is one value in the tile', () => {
+    const at = inTile(16, 5, 6, 0.5, 0.5)
+    const rows = Array.from({ length: 200 }, (_, i) => ({ ...at, layer: i % 2 ? '#111111' : '#222222', id: `t${i}`, dbh: 3, notable: null }))
+    const single = encodePointTiles(columns(rows), 16, POINT_PROPERTIES, '#66BB6A', { singleLayer: true }).get('5/6')!.mvt
+    const bare = encodePointTiles(columns(rows.map((r) => ({ ...r, layer: '#111111' }))), 16, POINT_PROPERTIES, '#66BB6A').get('5/6')!.mvt
+    // Two colour strings and a few bytes of tag a feature, not a string a feature.
+    expect(single.length - bare.length).toBeLessThan(200 * 3 + 64)
   })
 
   test('rows of several tiles come back as one tile each', () => {

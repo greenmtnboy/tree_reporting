@@ -5,6 +5,7 @@ import { executedSql, registeredFiles } from './wasm/nodeDuckDB'
 import { FIXTURE_DIR, fetchedWorldFiles, writeCityProjection, writeWorld } from './wasm/fixtures'
 import { startWorker, type WorkerHarness } from './wasm/workerHarness'
 import { TREES_AT_TOKEN } from './cityTables'
+import { COLOR_PROPERTY, TREE_SOURCE_LAYER } from './pointTiles'
 import type { PointChunkBatch, PointChunkColors, PointChunkDirectory, PointKeys } from './cityPoints'
 import { blockAt, blockKey, type WorldDirectory } from './worldBlocks'
 
@@ -205,13 +206,14 @@ describe('tile worker on DuckDB-WASM', () => {
     expect(loads[loads.length - 1]).toBe(0)
   })
 
-  it('every tile holds one source layer per colour, named by the colour (pointTiles.ts)', async () => {
+  it('an overview tile holds one source layer per colour, a tree tile one layer with the colour on each feature (pointTiles.ts)', async () => {
     // What each zoom's features carry: the heatmaps read point_count and
-    // grid_m, the circles (tiles z12 and up) dbh, a tap the tree id.
+    // grid_m, the circles (tiles z12 and up) dbh, a tap the tree id, and a
+    // tree tile's one circle layer the colour.
     const expected: Record<number, string[]> = {
       11: ['grid_m', 'point_count'],
       13: ['dbh', 'grid_m', 'point_count'],
-      16: ['dbh', 'id'],
+      16: [COLOR_PROPERTY, 'dbh', 'id'],
     }
     for (const [z, properties] of Object.entries(expected).map(([z, p]) => [Number(z), p] as const)) {
       await worker.call('setViewportZoom', { zoom: z + 0.5 })
@@ -221,8 +223,9 @@ describe('tile worker on DuckDB-WASM', () => {
       const layers = tileLayers((await worker.call<TileResult>('getTile', { z, x: c.x, y: c.y })).tileBuffer)
       const names = Object.keys(layers)
       expect(names.length, `z${z} has no layers`).toBeGreaterThan(0)
+      if (z >= 15) expect(names, `z${z}`).toEqual([TREE_SOURCE_LAYER])
       for (const name of names) {
-        expect(name, `z${z}`).toMatch(/^#[0-9a-fA-F]{6}$/)
+        if (z < 15) expect(name, `z${z}`).toMatch(/^#[0-9a-fA-F]{6}$/)
         // `notable` rides only on a notable tree's own feature (written when true), never on an aggregate.
         const props = layers[name].properties
         expect(props.filter((p) => p !== 'notable'), `z${z} ${name}`).toEqual(properties)
@@ -231,26 +234,25 @@ describe('tile worker on DuckDB-WASM', () => {
     }
   })
 
-  it('a colour change recolours the tiles: a tree\'s layer is its colour when the tile is read', async () => {
+  it('a colour change recolours the tiles: a tree\'s colour is the one it has when the tile is read', async () => {
     const z = 15
     const c = lngLatToTile(CENTER[0], CENTER[1], z)
     await worker.call('setViewportZoom', { zoom: z + 0.5 })
     await worker.call('setViewportCenter', { lng: CENTER[0], lat: CENTER[1] })
     await worker.call('setVisibleTileRange', { z, ...rangeAround(z, 1) })
-    const before = tileLayers((await worker.call<TileResult>('getTile', { z, x: c.x, y: c.y })).tileBuffer)
-    const trees = Object.values(before).reduce((sum, layer) => sum + layer.features, 0)
-    expect(trees).toBeGreaterThan(0)
+    const colours = async () => (tileFeatures((await worker.call<TileResult>('getTile', { z, x: c.x, y: c.y })).tileBuffer)[TREE_SOURCE_LAYER] ?? [])
+      .map((f) => [f.id, f[COLOR_PROPERTY]])
+    const before = await colours()
+    expect(before.length).toBeGreaterThan(0)
+    expect(new Set(before.map(([, colour]) => colour)).has('#123456')).toBe(false)
     // A per-tree override, as a chat publish installs one.
     await worker.call('setColorOverrideSql', { sql: "SELECT tree_id, '#123456' AS override_color FROM trees" })
-    const tile = await worker.call<TileResult>('getTile', { z, x: c.x, y: c.y })
-    const recoloured = tileLayers(tile.tileBuffer)
     try {
-      expect(Object.keys(recoloured)).toEqual(['#123456'])
-      expect(recoloured['#123456'].features).toBe(trees)
+      expect(await colours()).toEqual(before.map(([id]) => [id, '#123456']))
     } finally {
       await worker.call('setColorOverrideSql', { sql: null })
     }
-    expect(tileLayers((await worker.call<TileResult>('getTile', { z, x: c.x, y: c.y })).tileBuffer)).toEqual(before)
+    expect(await colours()).toEqual(before)
   })
 
   it('an intro prefetch of an overview range is one aggregate and serves the range with fetching paused (#146)', async () => {
