@@ -579,7 +579,9 @@ runs the model's SQL over fixtures and checks the CSVs against the fit gate.
 ## Correcting a species by hand
 
 `data/raw/enrichment/admin/server.py` is a localhost form over the
-enrichment table. Edits are staged locally; **Publish** re-reads the live
+enrichment table, and `cli.py` beside it the same backend (`backend.py`) from
+the command line (`show`, `search`, `set field=value`, `pending`, `publish`).
+Edits are staged locally; **Publish** re-reads the live
 parquet, patches the staged rows and every alias row of the taxon, uploads
 and reads back to verify. An edited row carries today's `enriched_at`, which
 keeps the daily job from overwriting it. Sentinel rows and alias rows are

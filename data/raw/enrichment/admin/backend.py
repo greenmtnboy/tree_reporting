@@ -1,0 +1,901 @@
+"""The enrichment admin's backend: everything but the transport.
+
+The form (`server.py`) and the command line (`cli.py`) are two front ends
+over this module and know nothing of each other.  It owns the one place a
+hand edit is checked (`coerce_row`), staged (`AdminState`, persisted to
+`enrichment_admin_edits.json`), folded into its alias rows (`apply_edits`)
+and published (`AdminState.publish`).  Both front ends stage into the same
+file, and every write re-reads it first, so the form and the CLI can be open
+at once without one dropping what the other staged.
+
+See `server.py` for what publishing does and why, and
+`docs/SPECIES_ENRICHMENT.md` for the table itself.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import subprocess
+import sys
+import threading
+from datetime import datetime, timezone
+from pathlib import Path
+from random import randint
+
+import pyarrow as pa
+import pyarrow.parquet as pq
+
+HERE = Path(__file__).resolve().parent
+RAW_DIR = HERE.parents[1]
+sys.path.insert(0, str(RAW_DIR))
+
+from shared.ingest import (  # noqa: E402
+    SPECIES_MISSPELLINGS,
+    SPECIES_SYNONYMS,
+    _sanitize_taxon,
+    synonyms_of,
+)
+from enrichment._foliage_colors import FOLIAGE_COLUMNS  # noqa: E402
+from enrichment._tree_enrichment_helpers import (  # noqa: E402
+    normalize_hex_color,
+    normalize_hex_colors,
+)
+from enrichment._tree_shared import (  # noqa: E402
+    DATA_VERSION,
+    ENRICHMENT_GCS_URI,
+    SKIP_SPECIES,
+    SPECIES_SENTINELS,
+    TREE_INFO_PARQUET,
+    alias_keys,
+    normalize_common_names,
+    other_names,
+)
+
+# The pieces of tree_enrichment.py we reuse, loaded without running its
+# __main__ -- the same trick enrichment/backfill.py uses.
+import importlib.util as _ilu  # noqa: E402
+
+_te_spec = _ilu.spec_from_file_location("tree_enrichment", RAW_DIR / "tree_enrichment.py")
+_te = _ilu.module_from_spec(_te_spec)  # type: ignore[arg-type]
+_te_spec.loader.exec_module(_te)  # type: ignore[union-attr]
+
+SCHEMA: pa.Schema = _te.SCHEMA
+HTML = HERE / "index.html"
+# Staged edits survive a restart.  Gitignored.
+EDITS_PATH = HERE / "enrichment_admin_edits.json"
+# What publish writes before uploading; `data/raw/*.parquet` is gitignored.
+PUBLISH_PATH = HERE / "tree_enrichment_admin_publish.parquet"
+PUBLISHED_URL = ENRICHMENT_GCS_URI.replace("gs://", "https://storage.googleapis.com/")
+# Versioned like the enrichment table.  `shared.ecoregions.REMOTE_ECOREGION_PARQUET`
+# still names v1, which is gone from the bucket.
+ECOREGION_URL = f"https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ecoregion_info_v{DATA_VERSION}.parquet"
+
+
+def published_url() -> str:
+    """A cache-busted URL for the published table.
+
+    `_tree_shared.ENRICHMENT_PARQUET` carries one random `cb` per process, so
+    reading it twice in one process can hand back a cached copy.  Reload and
+    publish both need the object as it is *now*.
+    """
+    return f"{PUBLISHED_URL}?cb={randint(0, 2**32)}"
+
+
+# ── Field vocabulary ───────────────────────────────────────────────────────────
+#
+# The enums are the values the LLM prompt (`_tree_enrichment_models.py`) is
+# allowed to return, which is also what the published table actually holds --
+# note `non-invasive` and `part_shade`, not the `non_invasive` / `partial_shade`
+# spellings the preql comments mention.  Anything else here would be a value no
+# other row has and no consumer looks for.
+
+LOW_MOD_HIGH = ["low", "moderate", "high"]
+ENUMS: dict[str, list[str]] = {
+    "growth_rate": ["slow", "moderate", "fast"],
+    "drought_tolerance": LOW_MOD_HIGH,
+    "water_needs": LOW_MOD_HIGH,
+    "pollution_tolerance": LOW_MOD_HIGH,
+    "wildlife_value": LOW_MOD_HIGH,
+    "fire_risk": LOW_MOD_HIGH,
+    "root_behavior": ["non-invasive", "moderate", "invasive"],
+    "tree_form": [
+        "broadleaf", "conifer", "palm", "columnar", "ornamental",
+        "spreading", "weeping", "multi_trunk", "default",
+    ],
+    "photo_license": sorted(_te._INAT_ACCEPTABLE_LICENSES),
+    "trunk_photo_license": sorted(_te._INAT_ACCEPTABLE_LICENSES),
+}
+LIST_ENUMS: dict[str, list[str]] = {
+    "sun_exposure": ["full_sun", "part_shade", "full_shade"],
+}
+# Ranges whose min must not exceed max.
+RANGES = [
+    ("mature_height_min_ft", "mature_height_max_ft"),
+    ("canopy_spread_min_ft", "canopy_spread_max_ft"),
+    ("lifespan_min_years", "lifespan_max_years"),
+    ("usda_zone_min", "usda_zone_max"),
+]
+LONG_TEXT = {"description"}
+KEY = "species"
+DERIVED = {"is_complete", "enriched_at"}
+EDITABLE = [f.name for f in SCHEMA if f.name != KEY and f.name not in DERIVED]
+
+# How the form groups the fields.  Every editable column must appear exactly
+# once; `test_enrichment_admin.py` checks that, so a schema addition cannot
+# silently fall off the form.
+GROUPS: list[tuple[str, list[str]]] = [
+    ("Names", ["genus", "species_epithet", "family", "synonyms", "common_names"]),
+    ("Description", ["description"]),
+    ("Form and size", [
+        "tree_form", "is_evergreen",
+        "mature_height_min_ft", "mature_height_max_ft",
+        "canopy_spread_min_ft", "canopy_spread_max_ft",
+        "lifespan_min_years", "lifespan_max_years", "growth_rate",
+    ]),
+    ("Site", [
+        "sun_exposure", "soil_preferences", "water_needs", "drought_tolerance",
+        "root_behavior", "coastal_tolerance", "salt_tolerance", "pollution_tolerance",
+        "usda_zone_min", "usda_zone_max",
+    ]),
+    ("Ecology", ["bloom_months", "wildlife_value", "fire_risk", "native_ecoregions"]),
+    ("Full tree photo", ["trunk_photo_url", "trunk_photo_license", "trunk_photo_attribution"]),
+    ("Leaf photo", ["photo_url", "photo_license", "photo_attribution"]),
+    ("Shades", list(FOLIAGE_COLUMNS)),
+]
+
+
+def field_specs() -> list[dict]:
+    """What the form renders, derived from SCHEMA so the two cannot drift."""
+    specs = []
+    for field in SCHEMA:
+        name = field.name
+        if name == KEY or name in DERIVED:
+            continue
+        t = field.type
+        if name in ENUMS:
+            kind, options = "enum", ENUMS[name]
+        elif name in LIST_ENUMS:
+            kind, options = "list<enum>", LIST_ENUMS[name]
+        elif pa.types.is_boolean(t):
+            kind, options = "bool", None
+        elif pa.types.is_integer(t):
+            kind, options = "int", None
+        elif pa.types.is_floating(t):
+            kind, options = "float", None
+        elif pa.types.is_list(t):
+            kind = "list<int>" if pa.types.is_integer(t.value_type) else "list<string>"
+            options = None
+        else:
+            kind, options = ("text" if name in LONG_TEXT else "string"), None
+        specs.append({"name": name, "kind": kind, "options": options})
+    return specs
+
+
+# ── Validation ─────────────────────────────────────────────────────────────────
+
+
+class ValidationError(ValueError):
+    def __init__(self, problems: list[str]):
+        super().__init__("; ".join(problems))
+        self.problems = problems
+
+
+def _blank(v) -> bool:
+    return v is None or (isinstance(v, str) and not v.strip()) or (isinstance(v, list) and not v)
+
+
+def coerce_row(species: str, payload: dict) -> dict:
+    """Turn a form submission into a row that fits SCHEMA, or raise.
+
+    Empty strings and empty lists become NULL -- that is how the pipeline
+    writes "unknown" (`enrichment.sun_exposure or None`), and a consumer that
+    tests `IS NOT NULL` would otherwise see an empty list as an answer.
+    """
+    problems: list[str] = []
+    row: dict = {KEY: species}
+    kinds = {s["name"]: s for s in field_specs()}
+
+    for name, spec in kinds.items():
+        v = payload.get(name)
+        kind = spec["kind"]
+        try:
+            if _blank(v):
+                row[name] = None
+            elif kind == "enum":
+                if v not in spec["options"]:
+                    raise ValueError(f"must be one of {', '.join(spec['options'])}")
+                row[name] = v
+            elif kind == "list<enum>":
+                vals = _as_str_list(v)
+                bad = [x for x in vals if x not in spec["options"]]
+                if bad:
+                    raise ValueError(f"unknown value(s) {bad}; allowed: {', '.join(spec['options'])}")
+                row[name] = _dedupe(vals) or None
+            elif kind == "bool":
+                if isinstance(v, str):
+                    v = {"true": True, "false": False, "yes": True, "no": False}.get(v.lower())
+                if not isinstance(v, bool):
+                    raise ValueError("must be true, false or blank")
+                row[name] = v
+            elif kind == "int":
+                f = float(v)
+                if not f.is_integer():
+                    raise ValueError("must be a whole number")
+                row[name] = int(f)
+            elif kind == "float":
+                # Through the column's own width, so a value that survives the
+                # parquet unchanged compares equal to what was loaded.
+                row[name] = pa.scalar(float(v), SCHEMA.field(name).type).as_py()
+            elif kind == "list<int>":
+                row[name] = sorted(_dedupe([int(x) for x in _as_list(v)])) or None
+            elif kind == "list<string>":
+                row[name] = _dedupe(_as_str_list(v)) or None
+            else:  # string / text
+                if not isinstance(v, str):
+                    raise ValueError("must be text")
+                row[name] = v.strip()
+        except (TypeError, ValueError) as exc:
+            problems.append(f"{name}: {exc}")
+
+    if problems:
+        raise ValidationError(problems)
+
+    # Cross-field rules.  These mirror what the pipeline and its consumers
+    # assume rather than inventing new policy.
+    if _blank(row["common_names"]) or _blank(row["tree_form"]):
+        problems.append(
+            "common_names and tree_form are required: without both, the freshness "
+            "probe reports the table incomplete on every run (ENRICHMENT_COMPLETE_SQL)"
+        )
+    for lo, hi in RANGES:
+        if row[lo] is not None and row[hi] is not None and row[lo] > row[hi]:
+            problems.append(f"{lo} ({row[lo]}) is greater than {hi} ({row[hi]})")
+    for name in ("mature_height_min_ft", "mature_height_max_ft", "canopy_spread_min_ft",
+                 "canopy_spread_max_ft", "lifespan_min_years", "lifespan_max_years"):
+        if row[name] is not None and row[name] < 0:
+            problems.append(f"{name} cannot be negative")
+    for name in ("usda_zone_min", "usda_zone_max"):
+        if row[name] is not None and not 1 <= row[name] <= 13:
+            problems.append(f"{name} must be between 1 and 13")
+    if row["bloom_months"] and any(not 1 <= m <= 12 for m in row["bloom_months"]):
+        problems.append("bloom_months must be between 1 and 12")
+    if row["native_ecoregions"] and any(i <= 0 for i in row["native_ecoregions"]):
+        problems.append("native_ecoregions must be positive ecoregion ids")
+    for prefix in ("photo", "trunk_photo"):
+        if row[f"{prefix}_url"] and not re.match(r"^https?://", row[f"{prefix}_url"]):
+            problems.append(f"{prefix}_url must be an http(s) URL")
+        if row[f"{prefix}_url"] and not row[f"{prefix}_license"]:
+            problems.append(f"a {prefix.replace('_', ' ')} needs a licence")
+    # Shades are stored as the map reads them, `#rrggbb` lowercase; `#abc` and
+    # a missing `#` are accepted and rewritten, anything else refused.
+    for name in ("foliage_colors", "fall_foliage_colors"):
+        bad = [c for c in row[name] or [] if normalize_hex_color(c) is None]
+        if bad:
+            problems.append(f"{name}: not CSS hex colours (#rrggbb): {', '.join(bad)}")
+        elif row[name]:
+            row[name] = normalize_hex_colors(row[name])
+    if row["trunk_color"] and normalize_hex_color(row["trunk_color"]) is None:
+        problems.append(f"trunk_color: {row['trunk_color']!r} is not a CSS hex colour (#rrggbb)")
+    elif row["trunk_color"]:
+        row["trunk_color"] = normalize_hex_color(row["trunk_color"])
+    for name in row["synonyms"] or []:
+        # Written the way the ingest emits a species, so the alias row it
+        # produces is a key a tree row can actually carry.
+        if name == species:
+            problems.append(f"synonyms: {name!r} is this species")
+        elif name in SKIP_SPECIES:
+            problems.append(f"synonyms: {name!r} is a sentinel, not a name")
+        elif _sanitize_taxon(name) != name:
+            problems.append(
+                f"synonyms: {name!r} is not a species-rank scientific name as the "
+                f"ingest would write it (expected {_sanitize_taxon(name)!r})"
+            )
+    if row["synonyms"]:
+        row["synonyms"] = sorted(row["synonyms"])
+    # Sentence case, as the run writes it; "Evergreen Pear" is staged as
+    # "Evergreen pear" and the form shows the reviewer what will be published.
+    row["common_names"] = normalize_common_names(row["common_names"])
+    if problems:
+        raise ValidationError(problems)
+
+    row["is_complete"] = is_complete(row)
+    return row
+
+
+def _as_list(v) -> list:
+    if isinstance(v, list):
+        return v
+    if isinstance(v, str):
+        return [x.strip() for x in v.split(",") if x.strip()]
+    raise ValueError("must be a list")
+
+
+def _as_str_list(v) -> list[str]:
+    out = []
+    for x in _as_list(v):
+        if not isinstance(x, str):
+            raise ValueError("must be a list of text values")
+        if x.strip():
+            out.append(x.strip())
+    return out
+
+
+def _dedupe(xs: list) -> list:
+    seen: set = set()
+    out = []
+    for x in xs:
+        if x not in seen:
+            seen.add(x)
+            out.append(x)
+    return out
+
+
+def is_complete(row: dict) -> bool:
+    """Python twin of tree_enrichment._NEW_COMPLETENESS_EXPR."""
+    return all(
+        not _blank(row.get(name))
+        for name in (
+            "common_names", "is_evergreen", "mature_height_max_ft", "canopy_spread_max_ft",
+            "growth_rate", "drought_tolerance", "tree_form",
+        )
+    )
+
+
+# ── Table patching ─────────────────────────────────────────────────────────────
+
+
+def accepted_for(species: str) -> str | None:
+    """The accepted name when *species* is a code-level fold, else None.
+
+    Such a row is an alias the daily job rewrites from the accepted row on
+    every load (`with_species_aliases`), so an edit to it would not survive;
+    the form sends the reviewer to the accepted row instead.  A synonym added
+    by hand is different: both rows list each other and editing either
+    patches both, so neither is read-only.
+
+    Both code maps count.  A misspelling is not a synonym -- POWO has never
+    heard of it -- but its row is maintained the same way, so editing it is
+    just as futile.
+    """
+    return SPECIES_SYNONYMS.get(species) or SPECIES_MISSPELLINGS.get(species)
+
+
+def apply_edits(table: pa.Table, edits: dict[str, dict]) -> tuple[pa.Table, dict]:
+    """Return *table* with each edited species' row replaced.
+
+    Every alias key of the row -- its hybrid-mark twin, each name in its
+    `synonyms`, and their twins -- gets the same values under its own key, its
+    `synonyms` rewritten to point back.  An alias with no row yet is appended,
+    which is how a hand-added synonym starts bridging the join; an alias that
+    already had a row of its own is overwritten, which is the merge.  A species
+    with no row in *table* is appended too, and the summary says so, since it
+    usually means the daily job purged it or the key changed underneath us.
+    """
+    rows = table.to_pylist()
+    index = {r[KEY]: i for i, r in enumerate(rows)}
+    replaced, aliased, appended = [], [], []
+    for species, row in edits.items():
+        synonyms = list(row.get("synonyms") or [])
+        for target in [species, *alias_keys(species, synonyms)]:
+            if target == species:
+                new = {**row, KEY: target}
+            else:
+                new = {**row, KEY: target, "synonyms": other_names(target, species, synonyms)}
+            if target in index:
+                rows[index[target]] = new
+                (aliased if target != species else replaced).append(target)
+            elif target == species:
+                index[target] = len(rows)
+                rows.append(new)
+                appended.append(target)
+            else:
+                index[target] = len(rows)
+                rows.append(new)
+                aliased.append(target)
+                appended.append(target)
+    patched = pa.Table.from_pylist(rows, schema=SCHEMA)
+    _assert_shape(table, patched, appended)
+    return patched, {"replaced": replaced, "aliased": aliased, "appended": appended}
+
+
+def _assert_shape(before: pa.Table, after: pa.Table, appended: list[str]) -> None:
+    """The invariants every consumer of this table relies on."""
+    expected = len(before) + len(appended)
+    if len(after) != expected:
+        raise RuntimeError(f"patched table has {len(after)} rows, expected {expected}")
+    species = after.column(KEY).to_pylist()
+    if len(set(species)) != len(species):
+        dupes = sorted({s for s in species if species.count(s) > 1})
+        raise RuntimeError(f"duplicate species after patch: {dupes}")
+    missing = SPECIES_SENTINELS - set(species)
+    if missing:
+        raise RuntimeError(f"sentinel rows went missing: {sorted(missing)}")
+
+
+# ── Tree counts ────────────────────────────────────────────────────────────────
+
+
+def load_tree_counts() -> dict[str, tuple[int, int]]:
+    """species -> (trees, cities) over the published cross-city rollup.
+
+    The list is ordered by this, so a reviewer enriching "the most common
+    trees first" starts at the top.  One aggregate over the rollup's `species`
+    and `city` columns; DuckDB reads only those two, so it is a few seconds
+    over HTTP rather than a 5.9M-row download.  Keyed on the species exactly
+    as the rollup carries it -- a city not yet rebuilt still publishes the old
+    synonym -- and `AdminState.trees_for` folds a row's alias keys together.
+    """
+    import duckdb
+
+    con = duckdb.connect()
+    try:
+        rows = con.execute(
+            "SELECT species, count(*), count(DISTINCT city) FROM read_parquet(?) "
+            "WHERE species IS NOT NULL GROUP BY species",
+            [TREE_INFO_PARQUET],
+        ).fetchall()
+    finally:
+        con.close()
+    return {species: (int(trees), int(cities)) for species, trees, cities in rows}
+
+
+# ── State ──────────────────────────────────────────────────────────────────────
+
+
+def _json_default(v):
+    if isinstance(v, datetime):
+        return v.isoformat()
+    raise TypeError(type(v))
+
+
+def _parse_edit(row: dict) -> dict:
+    """A staged edit read back from disk, brought up to the current SCHEMA.
+
+    An edit staged before a column was added (the trunk photo, `synonyms`)
+    has no key for it; every reader indexes rows by name, so fill the gap
+    with NULL rather than let the first search after an upgrade fail.
+    """
+    row = {f.name: None for f in SCHEMA} | dict(row)
+    if isinstance(row.get("enriched_at"), str):
+        row["enriched_at"] = datetime.fromisoformat(row["enriched_at"])
+    # An edit staged before the sentence-case rule existed is still a row
+    # this process will publish, so it follows the rule too.
+    row["common_names"] = normalize_common_names(row.get("common_names"))
+    return row
+
+
+class AdminState:
+    def __init__(self) -> None:
+        self.lock = threading.Lock()
+        self.table: pa.Table | None = None
+        self.rows: dict[str, dict] = {}
+        self.loaded_at: datetime | None = None
+        self.edits: dict[str, dict] = {}
+        self.tree_counts: dict[str, tuple[int, int]] = {}
+        self.counts_loaded_at: datetime | None = None
+        self._ecoregions: list[dict] | None = None
+        self.edits = self._read_edits()
+        if self.edits:
+            print(f"[admin] restored {len(self.edits)} staged edit(s) from {EDITS_PATH.name}", file=sys.stderr)
+
+    @staticmethod
+    def _read_edits() -> dict[str, dict]:
+        if not EDITS_PATH.exists():
+            return {}
+        saved = json.loads(EDITS_PATH.read_text(encoding="utf-8"))
+        return {k: _parse_edit(v) for k, v in saved.items()}
+
+    def _sync_edits(self) -> None:
+        """Pick up what another front end staged since this one last looked.
+
+        Called under the lock before every write, so the form and the CLI can
+        both be open: without it, a save in one would rewrite the file from its
+        own memory and drop what the other had staged."""
+        self.edits = self._read_edits()
+
+    # -- loading ---------------------------------------------------------------
+
+    def load(self, counts: bool = True) -> None:
+        """Read the published table, and (unless *counts* is false) the tree
+        counts that order the list -- a scan of the whole rollup that a
+        one-row edit from the command line does not need."""
+        print("[admin] reading the published enrichment table ...", file=sys.stderr)
+        table = _te.load_existing_table(published_url())
+        if table is None:
+            raise RuntimeError(f"no enrichment table at {PUBLISHED_URL}")
+        with self.lock:
+            self.table = table
+            self.rows = {r[KEY]: r for r in table.to_pylist()}
+            self.loaded_at = datetime.now(tz=timezone.utc)
+        print(f"[admin] {len(table)} rows", file=sys.stderr)
+        if counts:
+            self.load_counts()
+
+    def load_counts(self) -> None:
+        """Tree counts are a convenience for ordering; an unreachable rollup
+        leaves the list alphabetical rather than taking the form down."""
+        print("[admin] counting trees per species in the published rollup ...", file=sys.stderr)
+        try:
+            counts = load_tree_counts()
+        except Exception as exc:  # noqa: BLE001
+            print(f"[admin] tree counts unavailable ({exc}); list is unordered", file=sys.stderr)
+            return
+        with self.lock:
+            self.tree_counts = counts
+            self.counts_loaded_at = datetime.now(tz=timezone.utc)
+        print(f"[admin] {sum(t for t, _ in counts.values()):,} trees over {len(counts)} species keys", file=sys.stderr)
+
+    def trees_for(self, species: str, row: dict) -> tuple[int, int]:
+        """(trees, cities) for a row, its alias keys folded in: a city that
+        still publishes `Platanus x acerifolia` counts towards the London
+        plane's accepted row, because that is the row those trees will join
+        to once the city is rebuilt."""
+        synonyms = sorted({*(row.get("synonyms") or []), *synonyms_of(species)})
+        keys = [species, *alias_keys(species, synonyms)]
+        hits = [self.tree_counts[k] for k in keys if k in self.tree_counts]
+        if not hits:
+            return 0, 0
+        return sum(t for t, _ in hits), max(c for _, c in hits)
+
+    def _persist_edits(self) -> None:
+        if self.edits:
+            EDITS_PATH.write_text(json.dumps(self.edits, default=_json_default, indent=1), encoding="utf-8")
+        elif EDITS_PATH.exists():
+            EDITS_PATH.unlink()
+
+    # -- reads -------------------------------------------------------------------
+
+    def status(self) -> dict:
+        return {
+            "gcs_uri": ENRICHMENT_GCS_URI,
+            "published_url": PUBLISHED_URL,
+            "loaded_at": self.loaded_at.isoformat() if self.loaded_at else None,
+            "row_count": len(self.table) if self.table is not None else 0,
+            "pending": sorted(self.edits),
+            "tree_counts": bool(self.tree_counts),
+            "counts_loaded_at": self.counts_loaded_at.isoformat() if self.counts_loaded_at else None,
+        }
+
+    def current(self, species: str) -> dict | None:
+        return self.edits.get(species) or self.rows.get(species)
+
+    SORTS = ("trees", "name", "enriched", "incomplete")
+
+    def search(self, q: str, flt: str, limit: int, sort: str = "trees") -> list[dict]:
+        """`sort`: "trees" (most common first, the default), "name" (A-Z),
+        "enriched" (least recently enriched first, never-enriched at the
+        top), or "incomplete" (rows still short of a common name or a form
+        first, then by trees).  A query always puts exact and prefix matches
+        ahead of the chosen order, and sentinels always come last."""
+        q = q.strip().lower()
+        if sort not in self.SORTS:
+            raise ValidationError([f"sort must be one of {', '.join(self.SORTS)}"])
+        out = []
+        for species, row in self.rows.items():
+            row = self.edits.get(species, row)
+            # An alias row -- a code-level synonym, or the U+00D7 spelling of a
+            # hybrid whose ASCII row exists -- is the same taxon under another
+            # key and would sit next to it with the same count.  Listed only
+            # when the query names it.
+            if not (q and q in species.lower()) and (
+                accepted_for(species) is not None
+                or (" × " in species and species.replace(" × ", " x ") in self.rows)
+            ):
+                continue
+            if flt == "pending" and species not in self.edits:
+                continue
+            if flt == "incomplete" and row["is_complete"]:
+                continue
+            if flt == "nophoto" and row["photo_url"]:
+                continue
+            if flt == "notrunk" and row["trunk_photo_url"]:
+                continue
+            if flt == "nodesc" and row["description"]:
+                continue
+            if q:
+                hay = " ".join([species, *(row["common_names"] or []), *(row["synonyms"] or [])]).lower()
+                if q not in hay:
+                    continue
+            out.append(self._summary(species, row))
+        # Exact and prefix matches first, then the most common trees, so the
+        # default view is "what to enrich next" rather than the alphabet.
+        # Sentinels last: "Unknown" carries a million trees and nothing to enrich.
+        order = {
+            "trees": lambda s: (-s["trees"], s["species"]),
+            "name": lambda s: (s["species"],),
+            "enriched": lambda s: (s["enriched_at"] or "", -s["trees"]),
+            "incomplete": lambda s: (s["is_complete"], -s["trees"], s["species"]),
+        }[sort]
+        out.sort(key=lambda s: (
+            s["species"].lower() != q,
+            not s["species"].lower().startswith(q),
+            s["sentinel"],
+            *order(s),
+        ))
+        return out[:limit]
+
+    def _summary(self, species: str, row: dict) -> dict:
+        trees, cities = self.trees_for(species, row)
+        return {
+            "species": species,
+            "trees": trees,
+            "cities": cities,
+            "enriched_at": row["enriched_at"].isoformat() if row.get("enriched_at") else None,
+            "common_name": (row["common_names"] or [None])[0],
+            "tree_form": row["tree_form"],
+            "is_complete": row["is_complete"],
+            "has_photo": bool(row["photo_url"]),
+            "has_trunk_photo": bool(row["trunk_photo_url"]),
+            "sentinel": species in SKIP_SPECIES,
+            "alias_of": accepted_for(species),
+            "pending": species in self.edits,
+        }
+
+    def detail(self, species: str) -> dict | None:
+        published = self.rows.get(species)
+        edit = self.edits.get(species)
+        if published is None and edit is None:
+            return None
+        row = edit or published
+        synonyms = list(row.get("synonyms") or [])
+        aliases = alias_keys(species, synonyms)
+        # A synonym that has a row of its own which does not point back here
+        # is a duplicate this publish will fold in.
+        merges = [
+            name for name in synonyms
+            if name in self.rows and species not in (self.rows[name].get("synonyms") or [])
+        ]
+        trees, cities = self.trees_for(species, row)
+        return {
+            "species": species,
+            "trees": trees,
+            "cities": cities,
+            "row": row,
+            "published": published,
+            "pending": edit is not None,
+            "changed": sorted(k for k in EDITABLE if edit and (edit.get(k) != (published or {}).get(k))),
+            "sentinel": species in SKIP_SPECIES,
+            "alias_of": accepted_for(species),
+            "aliases": aliases,
+            "new_aliases": [a for a in aliases if a not in self.rows],
+            "merges": merges,
+        }
+
+    def ecoregions(self) -> list[dict]:
+        """The picker's vocabulary: every ecoregion the published table knows."""
+        if self._ecoregions is None:
+            import duckdb
+
+            con = duckdb.connect()
+            try:
+                rows = con.execute(
+                    "SELECT ecoregion_id, ecoregion_name, biome, realm FROM read_parquet(?) "
+                    "WHERE ecoregion_id IS NOT NULL ORDER BY ecoregion_name",
+                    [ECOREGION_URL],
+                ).fetchall()
+            except Exception as exc:  # noqa: BLE001 - fall back to the enrichment run's own loader
+                print(f"[admin] {ECOREGION_URL} unreadable ({exc}); using the ArcGIS fallback", file=sys.stderr)
+                rows = [
+                    (e.ecoregion_id, e.ecoregion_name, e.biome, e.realm)
+                    for e in _te.load_ecoregion_references()
+                ]
+            finally:
+                con.close()
+            self._ecoregions = [{"id": int(i), "name": n, "biome": b, "realm": r} for i, n, b, r in rows]
+        return self._ecoregions
+
+    # -- writes ------------------------------------------------------------------
+
+    def save(self, species: str, payload: dict) -> dict:
+        if species in SKIP_SPECIES:
+            raise ValidationError([f"{species!r} is a sentinel; its row is authored in shared/ingest.py"])
+        accepted = accepted_for(species)
+        if accepted is not None:
+            raise ValidationError([
+                f"{species!r} folds onto {accepted!r} ("
+                f"{'SPECIES_SYNONYMS' if species in SPECIES_SYNONYMS else 'SPECIES_MISSPELLINGS'}); its row is "
+                f"an alias rewritten from that one on every run, so edit {accepted!r} instead"
+            ])
+        if species not in self.rows:
+            raise ValidationError([f"{species!r} has no row in the published table"])
+        row = coerce_row(species, payload)
+        row["enriched_at"] = datetime.now(tz=timezone.utc)
+        with self.lock:
+            self._sync_edits()
+            if row_equals(row, self.rows[species]):
+                # Nothing changed: do not stage a no-op that would only bump enriched_at.
+                self.edits.pop(species, None)
+            else:
+                self.edits[species] = row
+            self._persist_edits()
+        return self.detail(species)  # type: ignore[return-value]
+
+    def patch(self, species: str, changes: dict) -> dict:
+        """`save` with only *changes* given: every other field keeps what the
+        row holds now (a staged edit, else the published row).  `save` takes
+        the whole form, where a missing field means NULL; a command line
+        names one or two fields and means "leave the rest alone"."""
+        unknown = sorted(set(changes) - set(EDITABLE))
+        if unknown:
+            raise ValidationError([f"{name}: not an editable column" for name in unknown])
+        with self.lock:
+            self._sync_edits()
+            current = self.current(species)
+        if current is None:
+            raise ValidationError([f"{species!r} has no row in the published table"])
+        return self.save(species, {**current, **changes})
+
+    def discard(self, species: str) -> None:
+        with self.lock:
+            self._sync_edits()
+            self.edits.pop(species, None)
+            self._persist_edits()
+
+    def discard_all(self) -> None:
+        with self.lock:
+            self.edits.clear()
+            self._persist_edits()
+
+    def publish(self) -> dict:
+        with self.lock:
+            self._sync_edits()
+            if not self.edits:
+                raise ValidationError(["nothing to publish"])
+            edits = dict(self.edits)
+        # Against the table as it is *now*, not the one this process loaded.
+        current = _te.load_existing_table(published_url())
+        if current is None:
+            raise RuntimeError("published table vanished")
+        patched, summary = apply_edits(current, edits)
+        pq.write_table(patched, PUBLISH_PATH)
+        print(f"[admin] wrote {len(patched)} rows to {PUBLISH_PATH.name}", file=sys.stderr)
+        _te.upload_to_gcs(str(PUBLISH_PATH), ENRICHMENT_GCS_URI)  # verifies after upload
+        with self.lock:
+            self.table = patched
+            self.rows = {r[KEY]: r for r in patched.to_pylist()}
+            self.loaded_at = datetime.now(tz=timezone.utc)
+            # An edit restaged elsewhere while this upload ran was not in it,
+            # so only the rows that went out are cleared.
+            self._sync_edits()
+            for species, row in edits.items():
+                if self.edits.get(species) == row:
+                    self.edits.pop(species)
+            self._persist_edits()
+        summary["rows"] = len(patched)
+        return summary
+
+
+def row_equals(a: dict, b: dict) -> bool:
+    return all(a.get(k) == b.get(k) for k in EDITABLE)
+
+
+# ── iNaturalist photo candidates ───────────────────────────────────────────────
+
+
+INAT_PAGE_SIZE = 24
+
+
+def inat_candidates(
+    species: str,
+    page: int = 1,
+    taxon_id: int | None = None,
+    limit: int = INAT_PAGE_SIZE,
+    query: str | None = None,
+    rank: str | None = None,
+) -> dict:
+    """Openly licensed photos for the picker, one page at a time.
+
+    Page 1 is the taxon's default photo followed by the best research-grade
+    observation photos (by votes); each later page is the next `limit`
+    observations, all of their photos.  Same sources and licence filter as
+    `tree_enrichment.fetch_inat_photo`.  The first ten are often foliage
+    close-ups, and a whole-tree shot -- what the trunk slot wants -- is
+    usually a few pages down, so the picker keeps a "more" button until iNat
+    runs out.  The taxon id comes back with page 1 and is passed in for the
+    rest, so a later page is one request rather than two.
+
+    The taxon is resolved the way the run resolves it (`resolve_inat_taxon`:
+    a one-word name at genus rank, plants only), unless the reviewer types a
+    `query` and `rank` of their own -- the way to reach the right taxon when
+    the row's name does not.
+    """
+    licenses = _te._INAT_ACCEPTABLE_LICENSES
+    photos: list[dict] = []
+    seen: set[str] = set()
+    taxon = None
+    if taxon_id is not None:
+        data = _te._inat_get(f"/taxa/{taxon_id}", {})
+        results = data.get("results", [])
+        taxon = results[0] if results else None
+    elif query and query.strip():
+        taxon = _te.resolve_inat_taxon(query.strip(), rank or None)
+    else:
+        for candidate in _te.build_inat_lookup_candidates(species):
+            taxon = _te.resolve_inat_taxon(candidate)
+            if taxon is not None:
+                break
+    if taxon is None:
+        return {"taxon": None, "photos": [], "page": page, "has_more": False}
+
+    def add(url: str | None, lic: str | None, attribution: str | None, source: str) -> None:
+        if not url or lic not in licenses or url in seen:
+            return
+        seen.add(url)
+        medium = re.sub(r"/(square|small|large|original)\.", "/medium.", url)
+        photos.append({
+            "url": medium,
+            "thumb": medium.replace("/medium.", "/square."),
+            "license": lic,
+            "attribution": attribution,
+            "source": source,
+        })
+
+    if page == 1:
+        dp = taxon.get("default_photo") or {}
+        add(dp.get("medium_url") or dp.get("url"), dp.get("license_code"), dp.get("attribution"), "taxon default")
+    obs = _te._inat_get("/observations", {
+        "taxon_id": taxon["id"],
+        "photos": "true",
+        "quality_grade": "research",
+        "license": ",".join(sorted(licenses)),
+        "photo_license": ",".join(sorted(licenses)),
+        "per_page": limit,
+        "page": page,
+        "order_by": "votes",
+    })
+    results = obs.get("results", [])
+    for o in results:
+        for p in o.get("photos", []):
+            add(p.get("url"), p.get("license_code"), p.get("attribution"), f"observation {o.get('id')}")
+    return {
+        "taxon": {
+            "id": taxon["id"],
+            "name": taxon.get("name"),
+            "rank": taxon.get("rank"),
+            "common_name": taxon.get("preferred_common_name"),
+            "url": f"https://www.inaturalist.org/taxa/{taxon['id']}",
+        },
+        "photos": photos,
+        "page": page,
+        "has_more": len(results) >= limit,
+    }
+
+
+# ── ranking candidates by what they show ──────────────────────────────────────
+
+RANKER = HERE / "photo_rank.py"
+# One ranking at a time: each loads a ~1.7 GB CLIP model, and two at once is
+# what pushes a laptop into swap.
+_RANK_LOCK = threading.Lock()
+RANK_TIMEOUT_S = 900
+
+
+def rank_photos(urls: list[str], runner=subprocess.run) -> dict:
+    """Score candidate photos with `photo_rank.py` (zero-shot CLIP).
+
+    Runs as its own `uv run` process: torch is a heavy dependency the admin does
+    not otherwise need, and the model is released when the process exits rather
+    than sitting in this server's memory.  Returns the ranker's JSON:
+    `{"scores": {url: {label: p}}, "duplicate_of": {url: url}, "labels": [...]}`.
+    """
+    urls = [u for u in dict.fromkeys(urls) if isinstance(u, str) and u.startswith("https://")]
+    if not urls:
+        raise ValidationError(["no photo URLs to rank"])
+    if not _RANK_LOCK.acquire(blocking=False):
+        raise ValidationError(["a ranking is already running; wait for it to finish"])
+    try:
+        proc = runner(
+            ["uv", "run", "--quiet", str(RANKER)],
+            input=json.dumps({"urls": urls}),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=RANK_TIMEOUT_S,
+        )
+    finally:
+        _RANK_LOCK.release()
+    if proc.returncode != 0:
+        tail = (proc.stderr or "").strip().splitlines()[-5:]
+        raise RuntimeError("photo ranker failed: " + " | ".join(tail))
+    return json.loads(proc.stdout)

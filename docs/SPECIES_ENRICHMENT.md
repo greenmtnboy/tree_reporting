@@ -206,7 +206,19 @@ row or value would be lost (`--publish-checkpoint` does only this step).
 
 ## Correcting by hand
 
-`enrichment/admin/server.py` is a localhost form over the table. Edits are
+`enrichment/admin/server.py` is a localhost form over the table, and
+`enrichment/admin/cli.py` the same backend (`backend.py`) from the command
+line, for a correction you can name without browsing photos:
+
+```bash
+cd data/raw
+uv run enrichment/admin/cli.py set "Pinus sylvestris" foliage_colors=#4d7466 trunk_color=#a0603a
+uv run enrichment/admin/cli.py pending
+uv run enrichment/admin/cli.py publish
+```
+
+Both stage into one file and re-read it before each write, so either can
+publish what the other staged. Edits are
 staged locally; Publish re-reads the live parquet, patches the staged rows and
 every alias row of the taxon, uploads, and reads back to verify. An edited
 row carries today's `enriched_at`, which keeps the daily job from overwriting

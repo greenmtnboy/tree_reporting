@@ -8,7 +8,7 @@ among a list by tree id so a species with two autumn shades renders mixed.
 
 Where a shade comes from, in order of trust:
 
-1. the admin form (`enrichment/admin/server.py`), a reviewer who looked;
+1. the admin (`enrichment/admin/`, its form or its CLI), a reviewer who looked;
 2. the LLM run, asked alongside everything else in `_tree_enrichment_models.py`;
 3. `HERO_FOLIAGE` below, hand-authored for the most planted and most
    recognisable street trees, applied on every load wherever the row still
