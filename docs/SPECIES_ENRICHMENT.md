@@ -125,7 +125,16 @@ Where a shade comes from, most trusted first (`enrichment/_foliage_colors.py`):
    apart from the first). It fills `foliage_colors` only. A purple-leaved
    cultivar fails the green gate on purpose, and a full-tree photo is too
    much sky and lawn to read bark from. With `--model` the LLM answers
-   instead.
+   instead. Pixels darker than HSV value 0.25 are shadow, not leaf: below
+   that floor a close-up's shaded leaves outnumbered its lit ones and the
+   reading came back near black.
+
+Whichever source wrote it, a growing-season leaf is a marker colour:
+`marker_tone` keeps its hue and saturation and holds its HLS lightness to
+`LEAF_LIGHTNESS` (0.24-0.6, the band the hero shades sit in). The photo
+reader, the admin and every load (`with_marker_foliage`) apply it. Autumn
+shades and bark are not held to it; a yellow and a birch are meant to be
+light.
 
 The sentinels have no shades. The website catalogue does not carry them yet.
 

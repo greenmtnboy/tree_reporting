@@ -36,7 +36,7 @@ from shared.ingest import (  # noqa: E402
     _sanitize_taxon,
     synonyms_of,
 )
-from enrichment._foliage_colors import FOLIAGE_COLUMNS  # noqa: E402
+from enrichment._foliage_colors import FOLIAGE_COLUMNS, marker_tones  # noqa: E402
 from enrichment._tree_enrichment_helpers import (  # noqa: E402
     normalize_hex_color,
     normalize_hex_colors,
@@ -275,6 +275,11 @@ def coerce_row(species: str, payload: dict) -> dict:
             problems.append(f"{name}: not CSS hex colours (#rrggbb): {', '.join(bad)}")
         elif row[name]:
             row[name] = normalize_hex_colors(row[name])
+            if name == "foliage_colors":
+                # A leaf too dark or too pale for a marker is staged as the
+                # load would publish it (`marker_tone`), so the form shows
+                # what will land.
+                row[name] = marker_tones(row[name])
     if row["trunk_color"] and normalize_hex_color(row["trunk_color"]) is None:
         problems.append(f"trunk_color: {row['trunk_color']!r} is not a CSS hex colour (#rrggbb)")
     elif row["trunk_color"]:
@@ -725,6 +730,31 @@ class AdminState:
         if current is None:
             raise ValidationError([f"{species!r} has no row in the published table"])
         return self.save(species, {**current, **changes})
+
+    def patch_many(self, changes: dict[str, dict]) -> dict[str, dict]:
+        """`patch` for several species, all or none: every row is checked
+        before any is staged, so a typo in the fortieth does not leave the
+        first thirty-nine staged on their own.  Problems are named by species."""
+        problems: list[str] = []
+        with self.lock:
+            self._sync_edits()
+        for species, fields in changes.items():
+            unknown = sorted(set(fields) - set(EDITABLE))
+            current = self.current(species)
+            if unknown:
+                problems += [f"{species}: {name}: not an editable column" for name in unknown]
+            elif current is None:
+                problems.append(f"{species}: no row in the published table")
+            elif species in SKIP_SPECIES or accepted_for(species) is not None:
+                problems.append(f"{species}: a sentinel or alias row; edit the accepted row")
+            else:
+                try:
+                    coerce_row(species, {**current, **fields})
+                except ValidationError as exc:
+                    problems += [f"{species}: {p}" for p in exc.problems]
+        if problems:
+            raise ValidationError(problems)
+        return {species: self.patch(species, fields) for species, fields in changes.items()}
 
     def discard(self, species: str) -> None:
         with self.lock:

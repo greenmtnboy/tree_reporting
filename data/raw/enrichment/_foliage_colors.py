@@ -20,6 +20,14 @@ Where a shade comes from, in order of trust:
    (a wrong green is worse than none), and the full-tree photo is too much sky
    and lawn to read bark from.
 
+Whatever the source, a leaf shade is a marker colour, not a measurement:
+`marker_tone` keeps its hue and saturation and holds its lightness inside
+`LEAF_LIGHTNESS`, the band the hero shades sit in. The photo reader, the admin
+form and every load (`with_marker_foliage`) apply it, so a shade read off a
+leaf in shadow (`#303016`, `#112e03`) cannot paint a tree black. Only the
+growing-season leaf is held to it: an autumn yellow and a birch's white bark
+are meant to be light.
+
 Nothing here touches the sentinels: `Unknown` has no leaves.
 """
 
@@ -67,6 +75,40 @@ HERO_FOLIAGE: dict[str, dict[str, object]] = {
 }
 
 
+# HLS lightness a growing-season leaf is painted at. The hero shades run from
+# 0.24 (the copper beech's purple) to 0.59 (the blue spruce); the photo
+# reader's misses ran from 0.09 to 0.62.
+LEAF_LIGHTNESS = (0.24, 0.6)
+
+
+def marker_tone(color: str) -> str:
+    """*color* (`#rrggbb`) with its HLS lightness held inside LEAF_LIGHTNESS."""
+    r, g, b = (int(color[i:i + 2], 16) / 255 for i in (1, 3, 5))
+    hue, lightness, saturation = colorsys.rgb_to_hls(r, g, b)
+    low, high = LEAF_LIGHTNESS
+    if low <= lightness <= high:
+        return color
+    r, g, b = colorsys.hls_to_rgb(hue, min(max(lightness, low), high), saturation)
+    return "#%02x%02x%02x" % (round(r * 255), round(g * 255), round(b * 255))
+
+
+def marker_tones(colors: list[str] | None) -> list[str] | None:
+    """`marker_tone` over a stored list, order kept, a shade that lands on an earlier one dropped."""
+    if not colors:
+        return colors
+    return list(dict.fromkeys(marker_tone(c) for c in colors))
+
+
+def with_marker_foliage(table: pa.Table) -> pa.Table:
+    """Hold every row's `foliage_colors` inside LEAF_LIGHTNESS (see `marker_tone`)."""
+    index = table.schema.get_field_index("foliage_colors")
+    current = table.column("foliage_colors").to_pylist()
+    toned = [marker_tones(value) for value in current]
+    if toned == current:
+        return table
+    return table.set_column(index, "foliage_colors", pa.array(toned, type=table.schema.field("foliage_colors").type))
+
+
 def with_hero_foliage(table: pa.Table) -> pa.Table:
     """Fill the three shade columns from HERO_FOLIAGE where a row has none.
 
@@ -91,9 +133,14 @@ RGB = tuple[int, int, int]
 
 
 def is_leaf_pixel(rgb: RGB) -> bool:
-    """A pixel that is plausibly leaf: yellow-green to blue-green, not washed out, not shadow."""
+    """A pixel that is plausibly lit leaf: yellow-green to blue-green, not washed out, not shadow.
+
+    The value floor is what keeps the shade a leaf's and not its shadow's. A
+    close-up is mostly leaves shading leaves; at the old floor of 0.12 those
+    outnumbered the lit ones, and the dominant bin came back near black
+    (`#112e03` for the black locust, `#042d04` for wax-leaf privet)."""
     hue, saturation, value = colorsys.rgb_to_hsv(rgb[0] / 255, rgb[1] / 255, rgb[2] / 255)
-    return 45 / 360 <= hue <= 170 / 360 and saturation >= 0.2 and 0.12 <= value <= 0.95
+    return 45 / 360 <= hue <= 170 / 360 and saturation >= 0.2 and 0.25 <= value <= 0.95
 
 
 def _distance(a: RGB, b: RGB) -> float:
@@ -145,7 +192,7 @@ def dominant_colors(
 
 def leaf_colors_from_pixels(pixels: Iterable[RGB]) -> list[str] | None:
     """`foliage_colors` as the table stores it, from an image's pixels; None when it is not a leaf photo."""
-    return dominant_colors(pixels) or None
+    return marker_tones(dominant_colors(pixels)) or None
 
 
 def leaf_colors_from_image_bytes(data: bytes, sample_px: int = 96) -> list[str] | None:

@@ -132,6 +132,9 @@ def main(argv: list[str] | None = None, state: AdminState | None = None) -> int:
     p.add_argument("species")
     p.add_argument("assignments", nargs="+", metavar="field=value")
 
+    p = sub.add_parser("apply", help="stage changes to many species from a JSON file, all or none")
+    p.add_argument("file", type=Path, help='{"<species>": {"<field>": <value>, ...}, ...}')
+
     sub.add_parser("pending", help="what is staged, against what is published")
 
     p = sub.add_parser("discard", help="drop a staged edit")
@@ -176,6 +179,14 @@ def main(argv: list[str] | None = None, state: AdminState | None = None) -> int:
                 print("publish with: uv run enrichment/admin/cli.py publish")
             else:
                 print(f"{args.species}: same as published; nothing staged")
+        elif args.command == "apply":
+            changes = json.loads(args.file.read_text(encoding="utf-8"))
+            if not isinstance(changes, dict) or not all(isinstance(v, dict) for v in changes.values()):
+                raise ValidationError([f"{args.file}: expected an object of species -> {{field: value}}"])
+            details = state.patch_many(changes)
+            unchanged = sorted(s for s, d in details.items() if not d["pending"])
+            print(f"staged {len(details) - len(unchanged)} species" + (f"; same as published: {', '.join(unchanged)}" if unchanged else ""))
+            print("review with `pending`, publish with `publish`")
         elif args.command == "pending":
             print_changes(state)
         elif args.command == "discard":

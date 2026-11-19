@@ -636,6 +636,39 @@ def test_cli_publish_yes_publishes(tmp_path, monkeypatch, capsys):
     assert state.edits == {}
 
 
+def test_patch_many_stages_all_or_none(tmp_path):
+    state = _state(tmp_path, _row("Pinus nigra", common_names=["Austrian pine"]), _row("Pinus pinea", common_names=["Stone pine"]))
+    with pytest.raises(admin.ValidationError) as exc:
+        state.patch_many({
+            "Pinus nigra": {"trunk_color": "#5e5650"},
+            "Pinus pinea": {"trunk_color": "bark"},
+            "Pinus nope": {"trunk_color": "#5e5650"},
+            "Unknown": {"trunk_color": "#5e5650"},
+        })
+    assert any(p.startswith("Pinus pinea: trunk_color") for p in exc.value.problems)
+    assert "Pinus nope: no row in the published table" in exc.value.problems
+    assert any(p.startswith("Unknown:") for p in exc.value.problems)
+    assert state.edits == {}, "nothing staged when any row is refused"
+
+    state.patch_many({"Pinus nigra": {"trunk_color": "#5e5650"}, "Pinus pinea": {"trunk_color": "#9a6a4a"}})
+    assert sorted(state.edits) == ["Pinus nigra", "Pinus pinea"]
+
+
+def test_cli_apply_reads_a_json_file(tmp_path, capsys):
+    state = _state(tmp_path, _row("Pinus nigra", common_names=["Austrian pine"]))
+    batch = tmp_path / "batch.json"
+    batch.write_text(json.dumps({"Pinus nigra": {"foliage_colors": ["#3a5a40"], "trunk_color": "#5e5650"}}), encoding="utf-8")
+    assert cli.main(["apply", str(batch)], state=state) == 0
+    assert "staged 1 species" in capsys.readouterr().out
+    assert state.edits["Pinus nigra"]["trunk_color"] == "#5e5650"
+
+
+def test_a_leaf_in_shadow_is_staged_as_the_load_will_publish_it(tmp_path):
+    state = _state(tmp_path, _row("Pinus sylvestris", common_names=["Scots pine"]))
+    detail = state.patch("Pinus sylvestris", {"foliage_colors": "#303016"})
+    assert detail["row"]["foliage_colors"] != ["#303016"]
+
+
 def test_the_server_is_only_a_transport_over_the_backend():
     from enrichment.admin import server
 

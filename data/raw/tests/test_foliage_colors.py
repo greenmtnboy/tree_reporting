@@ -140,3 +140,52 @@ def test_a_photo_with_no_leaf_in_it_yields_nothing():
     assert leaf_colors_from_pixels([(135, 206, 235)] * 2000) is None
     assert leaf_colors_from_pixels([(60, 120, 56)] * 10) is None, "too few pixels to be a leaf"
     assert leaf_colors_from_pixels([]) is None
+
+
+# ── marker tone ────────────────────────────────────────────────────────────────
+
+
+def test_a_leaf_in_shadow_is_lifted_to_a_marker_tone_keeping_its_hue():
+    import colorsys
+
+    from enrichment._foliage_colors import LEAF_LIGHTNESS, marker_tone
+
+    for dark in ("#303016", "#112e03", "#042d04"):
+        toned = marker_tone(dark)
+        h0, _, s0 = colorsys.rgb_to_hls(*(int(dark[i:i + 2], 16) / 255 for i in (1, 3, 5)))
+        h1, l1, s1 = colorsys.rgb_to_hls(*(int(toned[i:i + 2], 16) / 255 for i in (1, 3, 5)))
+        assert abs(l1 - LEAF_LIGHTNESS[0]) < 0.01
+        assert abs(h1 - h0) < 0.02 and abs(s1 - s0) < 0.05
+    assert marker_tone("#3f7f3a") == "#3f7f3a", "a mid-tone is left alone"
+
+
+def test_every_hero_leaf_already_sits_in_the_band():
+    """The band was drawn around the hand-authored shades; it must not move them."""
+    from enrichment._foliage_colors import marker_tones
+
+    for species, hero in HERO_FOLIAGE.items():
+        assert marker_tones(hero.get("foliage_colors")) == hero.get("foliage_colors"), species
+
+
+def test_the_load_holds_leaves_but_not_autumn_or_bark_to_the_band():
+    from enrichment._foliage_colors import with_marker_foliage
+
+    schema = pa.schema([("species", pa.string()), ("foliage_colors", pa.list_(pa.string())),
+                        ("fall_foliage_colors", pa.list_(pa.string())), ("trunk_color", pa.string())])
+    table = pa.Table.from_pylist([
+        {"species": "Pinus sylvestris", "foliage_colors": ["#303016"], "fall_foliage_colors": None, "trunk_color": "#f1ede4"},
+        {"species": "Ginkgo biloba", "foliage_colors": ["#5d9b3c"], "fall_foliage_colors": ["#f4d03f"], "trunk_color": None},
+        {"species": "Unknown", "foliage_colors": None, "fall_foliage_colors": None, "trunk_color": None},
+    ], schema=schema)
+    rows = with_marker_foliage(table).to_pylist()
+    assert rows[0]["foliage_colors"] != ["#303016"]
+    assert rows[0]["trunk_color"] == "#f1ede4"
+    assert rows[1] == table.to_pylist()[1]
+    assert rows[2]["foliage_colors"] is None
+
+
+def test_a_shaded_close_up_reads_as_the_lit_leaf():
+    """Shadow outnumbering lit leaf is the ordinary close-up; the answer is the lit green."""
+    shadow = [(20, 45, 10)] * 3000
+    lit = [(70, 130, 55)] * 1000
+    assert leaf_colors_from_pixels(shadow + lit) == ["#468237"]

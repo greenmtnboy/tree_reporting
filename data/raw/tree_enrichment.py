@@ -61,7 +61,7 @@ from enrichment._tree_enrichment_helpers import (
     parse_scientific_name,
     split_scientific_parts,
 )
-from enrichment._foliage_colors import with_hero_foliage
+from enrichment._foliage_colors import with_hero_foliage, with_marker_foliage
 from enrichment._tree_enrichment_llm import (
     DEFAULT_INSTRUCTOR_MODEL,
     DEFAULT_VERTEX_LOCATION,
@@ -623,7 +623,8 @@ def load_existing_table(source: str) -> pa.Table | None:
     #
     # with_hero_foliage goes before the alias step so an alias row inherits
     # the accepted row's shades; it fills only what is null, so a value the
-    # model or the form wrote is kept.
+    # model or the form wrote is kept. with_marker_foliage then holds every
+    # leaf shade, whoever wrote it, to the lightness a map marker can show.
     #
     # with_wcvp_family goes before the alias step for the same reason: an
     # alias row takes its family from the accepted row. It too fills only
@@ -636,7 +637,7 @@ def load_existing_table(source: str) -> pa.Table | None:
     return with_sentinel_rows(
         purge_unreachable_keys(
             with_species_aliases(
-                with_wcvp_family(with_hero_foliage(with_normalized_common_names(purge_non_taxa(table))))
+                with_wcvp_family(with_marker_foliage(with_hero_foliage(with_normalized_common_names(purge_non_taxa(table)))))
             ),
             published=published_species_keys(),
         )
