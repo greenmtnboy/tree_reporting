@@ -132,11 +132,22 @@ export function pointPalette(colors: readonly string[]): string[] {
   return [POINT_FALLBACK_COLOR, ...unique.slice(0, MAX_POINT_PALETTE)]
 }
 
-/** A colour expression's palette index; anything unlisted is 0, the fallback. */
-export function paletteIndexSql(colorExpr: string, palette: readonly string[]): string {
+/**
+ * A colour expression's palette index; anything unlisted is 0, the fallback.
+ * A hash join on the palette rather than a list scan: the leaf shades fill
+ * the palette to a couple of hundred entries, and a list_position over that
+ * many costs four times the join per tree (native DuckDB, 200k rows: 32 ms
+ * against 8, and 6 against 7 at the tree forms' 18). `join` goes after the
+ * row source's FROM.
+ */
+export function paletteIndexSql(colorExpr: string, palette: readonly string[]): { join: string; expr: string } {
   const listed = palette.slice(1)
-  if (!listed.length) return 'CAST(0 AS UTINYINT)'
-  return `CAST(COALESCE(list_position([${listed.map(sqlString).join(', ')}], ${colorExpr}), 0) AS UTINYINT)`
+  if (!listed.length) return { join: '', expr: 'CAST(0 AS UTINYINT)' }
+  const rows = listed.map((color, i) => `(${sqlString(color)}, ${i + 1})`).join(', ')
+  return {
+    join: `\nLEFT JOIN (VALUES ${rows}) __pp(color, idx) ON __pp.color = ${colorExpr}`,
+    expr: 'CAST(COALESCE(__pp.idx, 0) AS UTINYINT)',
+  }
 }
 
 export interface PointRowSource {
@@ -203,6 +214,7 @@ export function pointChunksSql(src: PointRowSource, keys: readonly number[], col
   const chunk = chunkKeySql()
   const cx = `${tileIndexSql('tf', 'x', CHUNK_ZOOM)}`
   const cy = `${tileIndexSql('tf', 'y', CHUNK_ZOOM)}`
+  const color = paletteIndexSql(colorExpr, palette)
   return `${src.prelude} __unused AS (SELECT 1)
 SELECT
   ${chunk} AS chunk,
@@ -213,16 +225,17 @@ SELECT
   ${crownByteSql()} AS crown,
   CAST(COALESCE(tf.notable, false) AS UTINYINT) AS notable,
   ${speciesCode ? speciesCodeSql('tf') : '-1'} AS species_code,
-  ${paletteIndexSql(colorExpr, palette)} AS color
-FROM ${src.from}
+  ${color.expr} AS color
+FROM ${src.from}${color.join}
 WHERE ${src.where}${chunkFilterSql(keys)}`
 }
 
 /** The same chunks' colours alone. */
 export function pointChunkColorsSql(src: PointRowSource, keys: readonly number[], colorExpr: string, palette: readonly string[]): string {
+  const color = paletteIndexSql(colorExpr, palette)
   return `${src.prelude} __unused AS (SELECT 1)
-SELECT ${chunkKeySql()} AS chunk, tf.rn AS rowid, ${paletteIndexSql(colorExpr, palette)} AS color
-FROM ${src.from}
+SELECT ${chunkKeySql()} AS chunk, tf.rn AS rowid, ${color.expr} AS color
+FROM ${src.from}${color.join}
 WHERE ${src.where}${chunkFilterSql(keys)}`
 }
 

@@ -85,7 +85,7 @@ describe('pointPalette', () => {
     expect(pointPalette(['#111111', POINT_FALLBACK_COLOR, '#111111', '#222222'])).toEqual([POINT_FALLBACK_COLOR, '#111111', '#222222'])
     const many = Array.from({ length: 400 }, (_, i) => `#${i.toString(16).padStart(6, '0')}`)
     expect(pointPalette(many)).toHaveLength(MAX_POINT_PALETTE + 1)
-    expect(paletteIndexSql('tf.c', [POINT_FALLBACK_COLOR])).toBe('CAST(0 AS UTINYINT)')
+    expect(paletteIndexSql('tf.c', [POINT_FALLBACK_COLOR])).toEqual({ join: '', expr: 'CAST(0 AS UTINYINT)' })
   })
 })
 

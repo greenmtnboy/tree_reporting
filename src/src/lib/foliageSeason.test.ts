@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
-  BARE_BRANCH_COLOR, FoliageLookup, foliageCell, foliageDefaultsSql, foliagePhase, foliageSpeciesSql,
+  BARE_BRANCH_COLOR, FINE_SHADE_BUDGET, fineShadeMap, FoliageLookup, foliageCell, foliageDefaultsSql, foliagePhase, foliageSpeciesSql,
   leafOffBit, leafOffMonths, SHADE_PALETTE, snapShade, speciesCodeSql, speciesShadeSql,
 } from './foliageSeason'
 import { colorSql, SPECIES_SHADE_TABLE, UNKNOWN_SHADE_COLOR } from '../workers/cityTables'
@@ -225,8 +225,50 @@ describe('shade palette', () => {
     expect(['#3f7034', '#5a8a3c']).toContain(snapShade('#4b732f'))
   })
 
+  test('keeps a muted green leaf among the greens', () => {
+    const greens = new Set<string>(SHADE_PALETTE.slice(0, 8))
+    // Pinus parviflora, Pinus sylvestris, Abies sibirica, Araucaria heterophylla as the enrichment table records them.
+    for (const hex of ['#778e68', '#303016', '#70714c', '#50502d']) {
+      expect(greens.has(snapShade(hex)!), hex).toBe(true)
+    }
+    expect(snapShade('#778e68')).toBe('#5f8a78')
+  })
+
   test('refuses what is not a colour', () => {
     expect(snapShade('red')).toBeNull()
     expect(snapShade("#abc'); DROP TABLE x; --")).toBeNull()
+  })
+})
+
+describe('fine shade map', () => {
+  const channel = (hex: string, i: number) => parseInt(hex.slice(1 + 2 * i, 3 + 2 * i), 16)
+  // Every shade a 4-step grid can make: far more than the budget.
+  const many: string[] = []
+  for (let r = 0; r < 256; r += 8) for (let g = 0; g < 256; g += 4) for (let b = 0; b < 256; b += 32) {
+    many.push('#' + [r, g, b].map((v) => v.toString(16).padStart(2, '0')).join(''))
+  }
+
+  test('paints no more distinct colours than the budget', () => {
+    const map = fineShadeMap(many)
+    expect(map.size).toBe(many.length)
+    expect(new Set(map.values()).size).toBeLessThanOrEqual(FINE_SHADE_BUDGET)
+    expect(new Set(fineShadeMap(many, 12).values()).size).toBeLessThanOrEqual(12)
+  })
+
+  test('keeps a shade exact while the budget allows', () => {
+    const map = fineShadeMap(['#778e68', '#303016', '#c0392b'])
+    expect([...map.entries()]).toEqual([['#778e68', '#778e68'], ['#303016', '#303016'], ['#c0392b', '#c0392b']])
+  })
+
+  test('paints a shade near itself', () => {
+    let worst = 0
+    for (const [hex, paint] of fineShadeMap(many)) {
+      for (let i = 0; i < 3; i++) worst = Math.max(worst, Math.abs(channel(hex, i) - channel(paint, i)))
+    }
+    expect(worst).toBeLessThan(40)
+  })
+
+  test('leaves out what is not a colour', () => {
+    expect(fineShadeMap(['red', "#abc'); DROP TABLE x; --", '#778e68']).size).toBe(1)
   })
 })

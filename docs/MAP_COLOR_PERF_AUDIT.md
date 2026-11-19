@@ -517,6 +517,28 @@ or the basemap are the next suspects. A frame stretched by something else can
 lower the budget's ceiling for 20 batches. The sprite atlas, picking and the
 phone's crowns are unchanged.
 
+## Sixth round: the dots' leaf shades leave the short palette
+
+The seventeen-colour snap (`SHADE_PALETTE`) was sized for one heatmap, one
+circle and one halo layer per colour. Since the third round only the vector
+tiles (a phone, a desktop without WebGL2) draw per colour; the desktop's dots
+index a 255-entry palette texture and the crowns carry RGB per vertex. So the
+worker now builds two species shade tables: `__species_shade`, snapped as
+before, for the tiles, and `__species_shade_fine`, binned by `fineShadeMap` to
+at most 200 shades, for the dots, and for the crowns on a desktop (on a
+phone a crown keeps the colour of the circle under it). Over the published
+table's 3,260 growing-season shades, the redmean error to the painted colour
+falls from a mean of 44 (worst 290) to 14 (worst 46).
+
+A muted green leaf no longer lands on a bark entry either: `snapShade` keeps
+a green-led shade among the greens. Before, 510 of 5,985 species with a shade
+had one snapped off the greens, most of them grey- and olive-green evergreens
+(Pinus parviflora's #778e68 painted the bare-branch grey all year).
+
+The dots' palette index is now a hash join on the palette, not a
+`list_position` scan, which at 200 entries cost four times as much per tree
+(native DuckDB, 200k rows: 32 ms against 8; 6 against 7 at the forms' 18).
+
 ## Is this the right stack?
 
 The data layer is right and is the product: DuckDB-WASM over published
