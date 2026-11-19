@@ -9,6 +9,7 @@ against shares worked out by hand at each fallback level.
 
 from __future__ import annotations
 
+import copy
 import math
 import re
 import sys
@@ -147,22 +148,37 @@ def rows(tmp_path_factory) -> dict[tuple[int, str], tuple]:
     enrichment = tmp / "enrichment.parquet"
     conn.execute(f"COPY e TO '{enrichment.as_posix()}' (FORMAT PARQUET)")
 
+    from trilogy.core.models.datasource import Address, AddressType
+
     env = Environment(working_path=RAW_DIR)
     env.parse(MODEL.read_text(encoding="utf-8"))
-    # Ask for the derivation, not the published table.
-    for key in [k for k, d in env.datasources.items() if d.name == "foliage_defaults"]:
-        del env.datasources[key]
-    executor = Dialects.DUCK_DB.default_executor(environment=env)
-    (sql,) = executor.generate_sql(
-        "select foliage_cell, genus, foliage_deciduous_share, foliage_default_level, foliage_cell_open"
-        " where foliage_cell is not null and genus is not null;"
-    )
-    sql, n = re.subn(r"read_parquet\('[^']*full_tree_info_v[^']*'\)", f"read_parquet('{trees.as_posix()}')", sql)
-    assert n == 1, f"expected one scan of the rollup, found {n}"
-    sql, n = re.subn(r"read_parquet\('[^']*tree_enrichment_v[^']*'\)", f"read_parquet('{enrichment.as_posix()}')", sql)
-    assert n == 1, f"expected one scan of the enrichment table, found {n}"
-    assert "read_parquet('https" not in sql
-    out = duckdb.connect().execute(sql).fetchall()
+    # The refresh itself, written to a temp file: a plain select over the same
+    # concepts plans differently, and once hid both a region join on genus
+    # alone (a row per region the genus grows in) and a sort the write step
+    # could not render.
+    sources = {
+        "full_tree_info": Address(location=trees.as_posix(), type=AddressType.PARQUET),
+        "tree_enrichment": Address(location=enrichment.as_posix(), type=AddressType.PARQUET),
+        "prediction_inputs_publication": Address(
+            location="SELECT TIMESTAMPTZ '2026-11-16 00:00:00+00' AS data_updated_through",
+            type=AddressType.QUERY,
+        ),
+    }
+    out_file = tmp / "foliage_defaults.parquet"
+    sources["foliage_defaults"] = Address(location=out_file.as_posix(), type=AddressType.PARQUET)
+    # Copies, never the parsed objects: imports are cached across environments,
+    # so a moved address would leak into every later test of these sources.
+    for key, datasource in list(env.datasources.items()):
+        moved = copy.copy(datasource)
+        moved.address = sources[datasource.name]
+        env.datasources[key] = moved
+    assert {d.name for d in env.datasources.values()} == set(sources)
+    target = next(d for d in env.datasources.values() if d.name == "foliage_defaults")
+    Dialects.DUCK_DB.default_executor(environment=env).update_datasource(target)
+    out = duckdb.connect().execute(
+        f"SELECT cell, genus, deciduous_share, level, open_trees FROM read_parquet('{out_file.as_posix()}')"
+    ).fetchall()
+    assert [row[:2] for row in out] == sorted(row[:2] for row in out), "written in (cell, genus) order"
     keys = [(row[0], row[1]) for row in out]
     assert len(keys) == len(set(keys)), "one row per (cell, genus)"
     return {(row[0], row[1]): row[2:] for row in out}

@@ -934,7 +934,7 @@ def main() -> None:
 
 Then check the wiring:
 
-  cd data/raw && uv run --no-project --with pytest --with pyarrow --with "pytrilogy>=0.3.419" --with "duckdb<2" --with requests python -m pytest tests -q
+  cd data/raw && uv run --no-project --with pytest --with pyarrow --with "pytrilogy>=0.3.511" --with "duckdb<2" --with requests python -m pytest tests -q
   cd data && trilogy refresh --dry-run raw/{args.code.lower()}/{args.slug}_tree_info.preql
   cd data && trilogy refresh --dry-run osm_staging/{args.code.lower()}_osm_staging.preql
 
