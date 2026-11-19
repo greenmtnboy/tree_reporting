@@ -43,7 +43,7 @@ pnpm bench:nearby    # a phone's wait from the Near Me tap to trees on a shaped 
 pnpm bench:dashboard # the summary dashboard's first open on a phone: bytes per file, renderer memory, time until its queries stop
 
 # data, from data/raw
-uv run --no-project --with pytest --with pyarrow --with "pytrilogy>=0.3.464" --with "duckdb<2" --with requests python -m pytest tests -q      # offline, seconds; run after touching models or the job table
+uv run --no-project --with pytest --with pyarrow --with "pytrilogy>=0.3.511" --with "duckdb<2" --with requests python -m pytest tests -q      # offline, seconds; run after touching models or the job table
 cd data && trilogy refresh --dry-run raw/{code}/{slug}_tree_info.preql   # must report exactly one asset
 ```
 

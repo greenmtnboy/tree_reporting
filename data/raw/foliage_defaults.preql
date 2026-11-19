@@ -89,5 +89,5 @@ grain (foliage_cell, genus)
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/foliage_defaults_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/foliage_defaults_v{data_version}.parquet`
 where foliage_cell is not null and genus is not null
 freshness by prediction_inputs_published_through
-order by cell asc, genus asc
+order by foliage_cell asc, genus asc
 assert @kept(genus, 0.75);
