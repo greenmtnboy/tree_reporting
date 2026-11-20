@@ -51,7 +51,12 @@ def publish():
     if storage is None:
         raise RuntimeError("The contributor publisher requires the website GCS HMAC credentials")
     generation = storage.generations(BUCKET, OBJECT).get(OBJECT, 0)
+    # The dedicated reader is required: falling back to ambient credentials
+    # would read Firestore as whatever identity the executor happens to have.
+    # Only the emulator, which ignores credentials, runs without it.
     reader = os.environ.get("CONTRIBUTOR_FIRESTORE_READER_JSON")
+    if not reader and not os.environ.get("FIRESTORE_EMULATOR_HOST"):
+        raise RuntimeError("The contributor publisher requires CONTRIBUTOR_FIRESTORE_READER_JSON")
     credentials = service_account.Credentials.from_service_account_info(json.loads(reader)) if reader else None
     db = firestore.Client(project=PROJECT, credentials=credentials)
     fields = ["userId", "treeId"]

@@ -40,6 +40,9 @@ beforeEach(async () => {
 const as = (uid: string) => env.authenticatedContext(uid).firestore() as unknown as Firestore
 const anon = () => env.unauthenticatedContext().firestore() as unknown as Firestore
 
+const seed = (fn: (db: Firestore) => Promise<unknown>) =>
+  env.withSecurityRulesDisabled((ctx) => fn(ctx.firestore() as unknown as Firestore).then(() => undefined))
+
 test('public credit must be explicit and can only be managed by its owner', async () => {
   const own = doc(as('guest'), 'contributorPreferences', 'guest')
   const other = doc(as('neighbor'), 'contributorPreferences', 'guest')
@@ -55,8 +58,6 @@ test('public credit must be explicit and can only be managed by its owner', asyn
   await assertFails(deleteDoc(other))
   await assertSucceeds(deleteDoc(own))
 })
-const seed = (fn: (db: Firestore) => Promise<unknown>) =>
-  env.withSecurityRulesDisabled((ctx) => fn(ctx.firestore() as unknown as Firestore).then(() => undefined))
 
 // Same escape as treeStatsKey() in useSubmissions.ts and treeDocKey() in the reviewer.
 const treeKey = (treeId: string) => treeId.replace(/%/g, '%25').replace(/\//g, '%2F')
