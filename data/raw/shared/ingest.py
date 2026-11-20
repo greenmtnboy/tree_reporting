@@ -2932,18 +2932,24 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "USSMO": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "FRNTE": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "CAWAT": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "USGEG": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "USRIC": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "USMSN": 10,
+    # Calibrated 2026-11-20: 8 m keeps 4.3 true per false at the margin;
+    # 10 m drops below 1 (0.80).
+    "USSMO": 8,
+    # Calibrated 2026-11-20: OSM mirrors the inventory (68% caught at 2 m);
+    # 6 m keeps 2.5 true per false, 8 m falls to 0.78.
+    "FRNTE": 6,
+    # Calibrated 2026-11-20: OSM sits on a dense inventory; 4 m keeps 16.9 true
+    # per false, 6 m falls to 1.3 with 9.8% of flagged rows false.
+    "CAWAT": 4,
+    # Calibrated 2026-11-20: 6 m keeps 4.5 true per false at the margin; 8 m
+    # adds 26 duplicates for 23 false matches (1.13).
+    "USGEG": 6,
+    # Calibrated 2026-11-20: 8 m keeps 2.6 true per false at the margin; 10 m
+    # is barely above 1 (1.14) at 7.8% false, so stop at 8.
+    "USRIC": 8,
+    # Calibrated 2026-11-20 (osm_dedup_validation): 6 m keeps 4.1 true per false
+    # at the margin; 8 m drops below 1 (0.93).
+    "USMSN": 6,
     # Calibrated 2026-11-18: 8 m keeps 2.1 true per false at the margin (88.8% recall);
     # 10 m drops below 1.
     "AUSYD": 8,
