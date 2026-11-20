@@ -272,6 +272,52 @@ describe('a phone holds the city in windows', () => {
     expect(await count(`SELECT count(*) AS n FROM duckdb_tables() WHERE table_name = '__tree_color_override'`)).toBe(0)
   })
 
+  it('colours a cell that loads after the rule was published, and learns a colour the rule did not name', async () => {
+    // Ground nothing has looked at. Its trees get a colour the rule computes
+    // (no literal to read it from); every other tree gets one it names.
+    const boxOf = (at: [number, number]) => { const c = cellAt(at[0], at[1]); return cellsBounds([cellKey(c.x, c.y)]) }
+    const within = (b: ReturnType<typeof boxOf>, alias: string) => `${alias}longitude >= ${b.west} AND ${alias}longitude < ${b.east} AND ${alias}latitude > ${b.south} AND ${alias}latitude <= ${b.north}`
+    const coloured = (color: string, where = 'true') => count(`SELECT count(*) AS n FROM trees_fast tf
+      JOIN __tree_color_override o ON hash(CAST(tf.tree_id AS VARCHAR)) = o.tree_key
+      WHERE o.display_color = '${color}' AND ${where}`)
+    const palette = (from: number) => worker.messages.slice(from).filter((m) => m.type === 'colorMapUpdate').pop()?.distinctColors as string[] | undefined
+
+    await lookAt(CENTER, 16.5)
+    await worker.call('getTile', { z: 16, ...lngLatToTile(CENTER[0], CENTER[1], 16) })
+    // Whichever of these the window does not hold right now: the tests above have moved it about.
+    let fresh: [number, number] | null = null
+    for (const at of [[-71.10, 42.41], [-71.17, 42.40], [-71.02, 42.42], [-71.18, 42.30]] as [number, number][]) {
+      if (await count(`SELECT count(*) AS n FROM trees_fast tf WHERE ${within(boxOf(at), 'tf.')}`) === 0) { fresh = at; break }
+    }
+    if (!fresh) throw new Error('every candidate cell is already held')
+    const box = boxOf(fresh)
+    const inBox = (alias: string) => within(box, alias)
+
+    const published = worker.messages.length
+    await worker.call('setTreeRule', { rule: { color: true, sql: `SELECT "map_trees"."tree_id" as "tree_id",
+      CASE WHEN ${inBox('"map_trees".')} THEN concat('#', 'c0ffee') ELSE '#654321' END as "override_color"
+      FROM "trees" as "map_trees"` } })
+    expect(palette(published)).toContain('#654321')
+    expect(palette(published)).not.toContain('#c0ffee')
+    expect(await coloured('#654321')).toBe(await count('SELECT count(*) AS n FROM trees_fast'))
+
+    // The camera moves there: the cell loads, and its trees are coloured by the same rule.
+    const moved = worker.messages.length
+    await lookAt(fresh, 16.5)
+    const tile = await worker.call<TileResult>('getTile', { z: 16, ...lngLatToTile(fresh[0], fresh[1], 16) })
+    expect(tile.tileBuffer.byteLength).toBeGreaterThan(0)
+    const there = await count(`SELECT count(*) AS n FROM trees_fast tf WHERE ${inBox('tf.')}`)
+    expect(there).toBeGreaterThan(1000)
+    expect(await coloured('#c0ffee', inBox('tf.'))).toBe(there)
+    // Every tree held has exactly one colour from the rule, whichever load brought it.
+    expect(await count(`SELECT count(*) AS n FROM trees_fast tf
+      JOIN __tree_color_override o ON hash(CAST(tf.tree_id AS VARCHAR)) = o.tree_key`)).toBe(await count('SELECT count(*) AS n FROM trees_fast'))
+    // The renderers were told about the colour first met in that cell.
+    expect(palette(moved)).toEqual(expect.arrayContaining(['#c0ffee', '#654321']))
+
+    await worker.call('setTreeRule', { rule: null })
+  })
+
   // Two ways a partial read can go wrong, each in a large block beside the
   // centre's that nothing has read yet: the requests fail, or the engine is
   // handed bytes it cannot read. Either way the cell must hold exactly its
