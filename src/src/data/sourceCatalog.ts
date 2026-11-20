@@ -11,7 +11,7 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
-  { city: 'Sheffield', label: 'TODO: Sheffield tree inventory source', url: 'TODO' },
+  { city: 'Santa Monica', label: 'TODO: Santa Monica tree inventory source', url: 'TODO' },
   { city: 'Nantes', label: 'TODO: Nantes tree inventory source', url: 'TODO' },
   { city: 'Waterloo', label: 'TODO: Waterloo tree inventory source', url: 'TODO' },
   { city: 'Spokane', label: 'TODO: Spokane tree inventory source', url: 'TODO' },
@@ -147,7 +147,7 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
-  { city: 'Sheffield', label: 'TODO: Sheffield landmark source' },
+  { city: 'Santa Monica', label: 'TODO: Santa Monica landmark source' },
   { city: 'Nantes', label: 'TODO: Nantes landmark source' },
   { city: 'Waterloo', label: 'TODO: Waterloo landmark source' },
   { city: 'Spokane', label: 'TODO: Spokane landmark source' },

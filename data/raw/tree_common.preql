@@ -51,8 +51,8 @@ property <*>.usden_data_updated_through datetime; # when Denver data is through
 # community column with the staged OSM one and nothing else.
 property <*>.ustem_osm_data_updated_through datetime; # mtime of Tempe's committed OSM staging parquet
 property <*>.usbos_osm_data_updated_through datetime;
-property <*>.gbshf_data_updated_through datetime; # when Sheffield data is through
-property <*>.gbshf_osm_data_updated_through datetime; # GCS publication time of Sheffield's staged OSM parquet
+property <*>.ussmo_data_updated_through datetime; # when Santa Monica data is through
+property <*>.ussmo_osm_data_updated_through datetime; # GCS publication time of Santa Monica's staged OSM parquet
 property <*>.frnte_data_updated_through datetime; # when Nantes data is through
 property <*>.frnte_osm_data_updated_through datetime; # GCS publication time of Nantes's staged OSM parquet
 property <*>.cawat_data_updated_through datetime; # when Waterloo data is through

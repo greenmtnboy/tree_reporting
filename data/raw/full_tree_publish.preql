@@ -215,7 +215,7 @@ file [
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usgeg_tree_info_v{data_version}.parquet`,
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cawat_tree_info_v{data_version}.parquet`,
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/frnte_tree_info_v{data_version}.parquet`,
-    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/gbshf_tree_info_v{data_version}.parquet`
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ussmo_tree_info_v{data_version}.parquet`
 ];
 
 datasource full_tree_info (

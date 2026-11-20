@@ -650,11 +650,11 @@ const CITY_DASHBOARD_CONTEXT: Record<
     biome: 'Temperate Broadleaf & Mixed Forests',
     realm: 'palearctic',
   },
-  GBSHF: {
-    ecoregionId: 651, // Celtic broadleaf forests
-    usdaZone: 8,
-    biome: 'Temperate Broadleaf & Mixed Forests',
-    realm: 'palearctic',
+  USSMO: {
+    ecoregionId: 422, // California coastal sage and chaparral
+    usdaZone: 10,
+    biome: 'Mediterranean Forests, Woodlands & Scrub',
+    realm: 'nearctic',
   },
 }
 

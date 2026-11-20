@@ -1876,7 +1876,7 @@ def _sanitize_taxon(value: str | None) -> str | None:
 # Keyed by city code so `community_source_for` can derive the community label
 # and so tests can assert the two lists agree.
 MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
-    "GBSHF": ("SHEFFIELD_OPENDATA",),
+    "USSMO": ("SANTA_MONICA_OPENDATA",),
     "FRNTE": ("NANTES_OPENDATA",),
     "CAWAT": ("WATERLOO_OPENDATA",),
     "USGEG": ("SPOKANE_OPENDATA",),
@@ -2014,7 +2014,7 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # overlapping rows under one cluster id and publishes only the survivor — see
 # tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
-    "GBSHF": "OSM_GBSHF",
+    "USSMO": "OSM_USSMO",
     "FRNTE": "OSM_FRNTE",
     "CAWAT": "OSM_CAWAT",
     "USGEG": "OSM_USGEG",
@@ -2731,7 +2731,7 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
-    "GBSHF": (53.3, 53.5, -1.81, -1.32),
+    "USSMO": (33.99, 34.05, -118.52, -118.44),
     "FRNTE": (47.08, 47.32, -1.83, -1.38),
     "CAWAT": (43.42, 43.53, -80.62, -80.47),
     "USGEG": (47.58, 47.76, -117.57, -117.3),
@@ -2895,7 +2895,7 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
     # NOT YET CALIBRATED: default; measure after the first build.
-    "GBSHF": 10,
+    "USSMO": 10,
     # NOT YET CALIBRATED: default; measure after the first build.
     "FRNTE": 10,
     # NOT YET CALIBRATED: default; measure after the first build.
@@ -3462,7 +3462,7 @@ DEDUP_CELL_METRES: dict[str, int] = {
 Box = tuple[float, float, float, float]
 
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
-    'GBSHF': ((53.3, 53.5, -1.81, -1.32),),
+    'USSMO': ((33.99, 34.05, -118.52, -118.44),),
     'FRNTE': ((47.08, 47.32, -1.83, -1.38),),
     'CAWAT': ((43.42, 43.53, -80.62, -80.47),),
     'USGEG': ((47.58, 47.76, -117.57, -117.3),),

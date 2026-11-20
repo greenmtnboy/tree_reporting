@@ -113,7 +113,7 @@ import usric.richmond_landmarks;
 import usgeg.spokane_landmarks;
 import cawat.waterloo_landmarks;
 import frnte.nantes_landmarks;
-import gbshf.sheffield_landmarks;
+import ussmo.santa_monica_landmarks;
 
 # The cross-city union is NOT declared here. It lives in
 # `full_landmark_publish.preql`, which reads the parquets these imports publish

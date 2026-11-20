@@ -204,7 +204,7 @@ file [
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/usgeg_landmark_info_v{data_version}.parquet`,
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/cawat_landmark_info_v{data_version}.parquet`,
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/frnte_landmark_info_v{data_version}.parquet`,
-    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/gbshf_landmark_info_v{data_version}.parquet`
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/ussmo_landmark_info_v{data_version}.parquet`
 ];
 
 

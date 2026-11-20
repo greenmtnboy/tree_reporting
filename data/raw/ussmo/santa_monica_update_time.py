@@ -3,7 +3,7 @@
 # requires-python = ">=3.13"
 # dependencies = ["pyarrow", "pytrilogy", "requests"]
 # ///
-"""Freshness probe for Sheffield's tree inventory.  STUB -- point it at the portal.
+"""Freshness probe for Santa Monica's tree inventory.  STUB -- point it at the portal.
 
 Mandatory: without it the pipeline re-downloads the whole dataset on every
 tick.  Hit the lightest metadata endpoint the portal exposes:
@@ -36,8 +36,8 @@ METADATA_URL = "TODO: the portal's metadata endpoint"
 
 
 def fetch_modified_at() -> datetime:
-    raise NotImplementedError("TODO: read Sheffield's published-through timestamp")
+    raise NotImplementedError("TODO: read Santa Monica's published-through timestamp")
 
 
 if __name__ == "__main__":
-    emit_freshness("GBSHF", fetch_modified_at)
+    emit_freshness("USSMO", fetch_modified_at)
