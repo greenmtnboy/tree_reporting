@@ -101,7 +101,6 @@ about the taxon.
 
 import math
 import sys
-from collections import Counter
 from datetime import date
 from pathlib import Path
 
@@ -110,6 +109,9 @@ import pyarrow as pa
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from shared.platforms.ckan import CkanResource, read_csv_rows
 from shared.ingest import (
+    coordinate_key,
+    coordinate_tree_id,
+    drop_stacked_coordinates,
     emit,
     enforce_tree_schema,
     validate_coordinates,
@@ -134,9 +136,6 @@ TAMA_COLUMNS = {"species": "name", "circumference": "perimeter", "crown": "width
 # is the swapped-column bug, not an island.
 LON_RANGE = (138.0, 141.0)
 LAT_RANGE = (34.0, 37.0)
-
-# The published coordinate precision (see the module docstring).
-COORD_DP = 7
 
 # Circumference in centimetres.  0 is the unmeasured sentinel -- 17,046 rows
 # carry it -- and the top end is two rows against a 99.99th percentile of 350.
@@ -176,7 +175,7 @@ def parse_point(row: dict, columns: dict) -> tuple[float, float] | None:
 
 def coord_key(point: tuple[float, float]) -> tuple[float, float]:
     """The rounded `(lon, lat)` a tree's id is built from."""
-    return round(point[0], COORD_DP), round(point[1], COORD_DP)
+    return coordinate_key(*point)
 
 
 def parse_crown_width(value) -> float | None:
@@ -234,7 +233,8 @@ def transform(records: list[dict]) -> pa.Table:
 
     for rec in records:
         lon, lat = rec["key"]
-        tree_id.append(f"tyo-{lon:.7f}-{lat:.7f}")
+        # `-`, not the shared `_`: Tokyo's ids were published before the helper.
+        tree_id.append(coordinate_tree_id("tyo", lon, lat, sep="-"))
         species.append(species_from_japanese_name(rec["species"]))
         borough.append(rec["borough"])
         # The survey records no planting date.  Still a typed date32 column: an
@@ -267,17 +267,7 @@ def main() -> None:
     # A coordinate carrying more than one row cannot be keyed; see the module
     # docstring.  Counted across both files together, since the two halves are
     # one inventory and a route can be surveyed from either side of a boundary.
-    counts = Counter(rec["key"] for rec in records)
-    kept = [rec for rec in records if counts[rec["key"]] == 1]
-    stacked_points = sum(1 for n in counts.values() if n > 1)
-    stacked_rows = sum(n for n in counts.values() if n > 1)
-    print(
-        f"Tokyo OpenData: {len(records)} row(s); dropped {stacked_rows} at "
-        f"{stacked_points} shared coordinate(s), leaving {len(kept)}",
-        file=sys.stderr,
-    )
-
-    table = transform(kept)
+    table = drop_stacked_coordinates(transform(records), label="Tokyo OpenData")
     table = validate_coordinates(table, city="Tokyo", city_code="JPTYO")
     table = enforce_tree_schema(table, city="Tokyo", data_source="TOKYO_OPENDATA")
     emit(table)

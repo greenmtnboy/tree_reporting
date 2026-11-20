@@ -74,7 +74,6 @@ planting date.
 """
 
 import sys
-from collections import Counter
 from pathlib import Path
 
 import pyarrow as pa
@@ -83,6 +82,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from shared.platforms.arcgis import FeatureLayer, esri_point, iter_features
 from shared.ingest import (
     UNKNOWN_SPECIES,
+    coordinate_key,
+    coordinate_tree_id,
+    drop_stacked_coordinates,
     emit,
     enforce_tree_schema,
     stream_to_table,
@@ -98,9 +100,6 @@ LAYER = FeatureLayer(
 OUT_FIELDS = "species,diameter,spread,height,trunks"
 
 FEET_TO_M = 0.3048
-
-# The coordinate the id is rendered from (see the module docstring).
-COORD_DP = 7
 
 # Refuse a run where more than this share of rows carries a code nobody has
 # decoded (a new contraction would otherwise publish as unknown trees).
@@ -651,7 +650,7 @@ def transform(features: list[dict]) -> pa.Table:
     for feature in features:
         rec = feature.get("attributes") or {}
         lat, lon = esri_point(feature.get("geometry"))
-        lat, lon = round(lat, COORD_DP), round(lon, COORD_DP)
+        lon, lat = coordinate_key(lon, lat)
         code = rec.get("species")
         name = decode_species(code)
         if name is None:
@@ -659,7 +658,7 @@ def transform(features: list[dict]) -> pa.Table:
             UNDECODED[key] = UNDECODED.get(key, 0) + 1
 
         # The coordinate is the id; see the module docstring.
-        tree_id.append(f"spokane-{lon:.7f}_{lat:.7f}")
+        tree_id.append(coordinate_tree_id("spokane", lon, lat))
         species.append(name)
         latitude.append(lat)
         longitude.append(lon)
@@ -696,27 +695,10 @@ def check_decoding(table: pa.Table) -> None:
         )
 
 
-def drop_stacked(table: pa.Table) -> pa.Table:
-    """Drop every row at a coordinate more than one row carries (the id is the coordinate)."""
-    ids = table["tree_id"].to_pylist()
-    counts = Counter(ids)
-    stacked = {k for k, n in counts.items() if n > 1}
-    if not stacked:
-        return table
-    mask = pa.array([i not in stacked for i in ids])
-    kept = table.filter(mask)
-    print(
-        f"Spokane: dropped {table.num_rows - kept.num_rows} row(s) at "
-        f"{len(stacked)} shared coordinate(s), leaving {kept.num_rows}",
-        file=sys.stderr,
-    )
-    return kept
-
-
 if __name__ == "__main__":
     table = stream_to_table(iter_row_chunks(), transform, keep=keep, label="Spokane OpenData")
     print(f"Spokane: dropped non-tree rows {DROPPED}", file=sys.stderr)
-    table = drop_stacked(table)
+    table = drop_stacked_coordinates(table, label="Spokane OpenData")
     check_decoding(table)
     table = validate_coordinates(table, city="Spokane", city_code="USGEG")
     table = enforce_tree_schema(table, city="Spokane", data_source="SPOKANE_OPENDATA")

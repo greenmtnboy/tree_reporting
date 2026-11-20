@@ -118,7 +118,12 @@ survives the publisher's next reload. Preference:
    re-measured tree. Where several rows share a coordinate the id cannot tell
    them apart, so every row at that point is dropped with a logged count;
    only where they are identical (same species and size: one tree recorded
-   twice) is one kept. Used by Philadelphia (`objectid` is a row number
+   twice) is one kept. Use the helpers in `shared/ingest.py`, never an
+   f-string: `coordinate_tree_id(prefix, lon, lat)` for the id (and
+   `coordinate_key` for the rounded position), then
+   `drop_stacked_coordinates(table, label=..., identical=(...))` on the
+   transformed table; `tests/test_coordinate_ids.py` lists the cities on
+   them. Used by Philadelphia (`objectid` is a row number
    within one year's layer), Tokyo and Longueuil (no id column at all), and
    Spokane (`OBJECTID` 1..N with one `UpdatedDT` on every row: a wholesale
    reload).

@@ -79,7 +79,7 @@ unidentified tree and is kept as Unknown.
 
 import re
 import sys
-from collections import Counter, defaultdict
+from collections import Counter
 from functools import cache
 from pathlib import Path
 
@@ -89,6 +89,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from shared.platforms.arcgis import FeatureLayer, iter_features, layer_metadata
 from shared.ingest import (
     SHRUB_SPECIES,
+    coordinate_key,
+    coordinate_tree_id,
+    drop_stacked_coordinates,
     emit,
     enforce_tree_schema,
     get_json_with_retry,
@@ -99,8 +102,6 @@ from shared.ingest import (
 SERVICES_URL = "https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services"
 LAYER_NAME = re.compile(r"ppr_tree_inventory_(\d{4})", re.IGNORECASE)
 EXPECTED_FIELDS = frozenset({"objectid", "tree_name", "tree_dbh", "loc_y", "loc_x"})
-
-COORD_DP = 7
 
 # The Latin half and the common half, split at the first spaced hyphen or en dash.
 _SEPARATOR = re.compile(r"\s+[-–]\s+")
@@ -216,7 +217,7 @@ def coord_key(rec: dict) -> tuple[float, float] | None:
     lat, lon = rec.get("loc_y"), rec.get("loc_x")
     if lat is None or lon is None:
         return None
-    return round(float(lon), COORD_DP), round(float(lat), COORD_DP)
+    return coordinate_key(lon, lat)
 
 
 def has_diameter(dbh) -> bool:
@@ -244,7 +245,11 @@ def fetch_rows() -> tuple[int, list[tuple]]:
 
 
 def select_rows(rows: list[tuple]) -> list[tuple]:
-    """Drop rows with no position, no species and no diameter, and resolve stacked points."""
+    """Drop rows with no position, or no species and no diameter; in objectid order.
+
+    Stacked points are resolved after `transform`, by `drop_stacked_coordinates`:
+    the first (lowest objectid) of identical rows is kept.
+    """
     dropped: Counter[str] = Counter()
     kept = []
     for row in rows:
@@ -256,22 +261,10 @@ def select_rows(rows: list[tuple]) -> list[tuple]:
         else:
             kept.append(row)
 
-    at_point: dict[tuple[float, float], list[tuple]] = defaultdict(list)
-    for row in kept:
-        at_point[(row[3], row[4])].append(row)
-    out = []
-    for group in at_point.values():
-        if len(group) == 1:
-            out.append(group[0])
-        elif len({(r[1], r[2]) for r in group}) == 1:
-            out.append(min(group))
-            dropped["repeat of an identical row at the same point"] += len(group) - 1
-        else:
-            dropped["different trees stacked on one point"] += len(group)
     for reason, n in sorted(dropped.items()):
         print(f"Philadelphia: dropped {n:,} rows: {reason}", file=sys.stderr)
-    out.sort()
-    return out
+    kept.sort()
+    return kept
 
 
 def transform(rows: list[tuple]) -> pa.Table:
@@ -282,7 +275,7 @@ def transform(rows: list[tuple]) -> pa.Table:
         named += bool(name)
         unparsed += not parsed
         # The coordinate is the id; see the module docstring.
-        tree_id.append(f"phl-{lon:.7f}_{lat:.7f}")
+        tree_id.append(coordinate_tree_id("phl", lon, lat))
         species.append(sp)
         cultivar.append(cv)
         latitude.append(lat)
@@ -311,6 +304,10 @@ def transform(rows: list[tuple]) -> pa.Table:
 if __name__ == "__main__":
     _, source_rows = fetch_rows()
     table = transform(select_rows(source_rows))
+    table = drop_stacked_coordinates(
+        table, label="Philadelphia",
+        identical=("species", "cultivar", "diameter_at_breast_height"),
+    )
     table = validate_coordinates(table, city="Philadelphia", city_code="USPHL")
     table = enforce_tree_schema(
         table, city="Philadelphia", data_source="PHILADELPHIA_OPENDATA"

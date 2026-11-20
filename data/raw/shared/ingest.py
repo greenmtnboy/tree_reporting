@@ -3937,6 +3937,71 @@ def snap_cell_centre(lon_index: int, lat_index: int) -> tuple[float, float]:
     )
 
 
+# --- Coordinate ids: a source with no stable per-tree id ---------------------
+#
+# The rule and its reasoning are in EXTENDING.md (step 1): key on the position,
+# rounded, rendered rather than hashed, and drop rows the key cannot tell apart.
+
+# ~1 cm: below any real re-survey, and insensitive to a float writer's last digit.
+COORDINATE_ID_DP = 7
+
+
+def coordinate_key(lon: float, lat: float) -> tuple[float, float]:
+    """The rounded `(lon, lat)` a coordinate id is built from."""
+    return round(float(lon), COORDINATE_ID_DP), round(float(lat), COORDINATE_ID_DP)
+
+
+def coordinate_tree_id(prefix: str, lon: float, lat: float, *, sep: str = "_") -> str:
+    """`{prefix}-{lon:.7f}_{lat:.7f}`: a tree's id from its position alone.
+
+    Never fold an attribute in: a re-survey re-measures DBH, and that would
+    re-key every re-measured tree.  `sep` exists only for Tokyo, whose ids
+    were published with `-` before this helper; a new city keeps `_`.
+    """
+    lon, lat = coordinate_key(lon, lat)
+    return f"{prefix}-{lon:.{COORDINATE_ID_DP}f}{sep}{lat:.{COORDINATE_ID_DP}f}"
+
+
+def drop_stacked_coordinates(
+    table: pa.Table, *, label: str, identical: tuple[str, ...] = ()
+) -> pa.Table:
+    """Drop rows whose coordinate id another row shares.
+
+    The id is the coordinate, so rows at one point cannot be told apart and
+    publishing one would assert a tree the source never positioned.  Every
+    row at a shared point is dropped -- unless `identical` names columns and
+    every row at the point agrees on all of them (one tree recorded twice),
+    when the first is kept.  Row order is otherwise preserved.  Logs counts.
+    """
+    ids = table["tree_id"].to_pylist()
+    at_point: dict[str, list[int]] = {}
+    for i, key in enumerate(ids):
+        at_point.setdefault(key, []).append(i)
+    stacked = {k: rows for k, rows in at_point.items() if len(rows) > 1}
+    if not stacked:
+        return table
+    values = {c: table[c].to_pylist() for c in identical}
+    drop: set[int] = set()
+    repeats = repeat_rows = 0
+    for rows in stacked.values():
+        if identical and len({tuple(values[c][i] for c in identical) for i in rows}) == 1:
+            drop.update(rows[1:])
+            repeats += 1
+            repeat_rows += len(rows) - 1
+        else:
+            drop.update(rows)
+    kept = table.filter(pa.array([i not in drop for i in range(len(ids))]))
+    different = len(stacked) - repeats
+    print(
+        f"{label}: dropped {len(drop) - repeat_rows} row(s) at {different} shared "
+        f"coordinate(s)"
+        + (f" and {repeat_rows} identical repeat(s) at {repeats} more" if repeats else "")
+        + f", leaving {kept.num_rows}",
+        file=sys.stderr,
+    )
+    return kept
+
+
 def validate_coordinates(
     table: pa.Table,
     city: str = "",

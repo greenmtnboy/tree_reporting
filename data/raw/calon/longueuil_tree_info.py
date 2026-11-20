@@ -50,7 +50,6 @@ at a shared coordinate is dropped: 1,870 rows, 1.9% of the file, leaving
 If Longueuil ever publishes an id, switch to it and accept the one-time churn.
 """
 
-import collections
 import sys
 from datetime import date
 from pathlib import Path
@@ -61,6 +60,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from shared.platforms.ckan import CkanResource, read_geojson_features
 from shared.ingest import (
     cm_to_inches,
+    coordinate_key,
+    coordinate_tree_id,
+    drop_stacked_coordinates,
     emit,
     enforce_tree_schema,
     normalize_species,
@@ -72,10 +74,6 @@ RESOURCE = CkanResource(
     "23cde69a-a1d7-4775-8271-e3b46b3a6d83",
     timeout=300,
 )
-
-# ~1 cm.  See the docstring: the portal publishes this dataset at two float
-# precisions already, so the key has to be insensitive to the difference.
-COORD_DP = 7
 
 # `Espece` is "Latin - French common name": "Tilia sp. - Tilleul sp.".
 SPECIES_SEPARATOR = " - "
@@ -92,7 +90,7 @@ def coord_key(feature: dict) -> tuple[float, float] | None:
     if not isinstance(coords, (list, tuple)) or len(coords) < 2:
         return None
     try:
-        return round(float(coords[0]), COORD_DP), round(float(coords[1]), COORD_DP)
+        return coordinate_key(coords[0], coords[1])
     except (TypeError, ValueError):
         return None
 
@@ -124,25 +122,11 @@ def parse_dbh(value) -> float | None:
 
 
 def usable_features(features: list[dict]) -> list[dict]:
-    """Features at a coordinate no other feature shares.  See the docstring."""
-    counts = collections.Counter()
-    for feature in features:
-        key = coord_key(feature)
-        if key is not None:
-            counts[key] += 1
-
-    kept = [
-        feature
-        for feature in features
-        if (key := coord_key(feature)) is not None and counts[key] == 1
-    ]
-    stacked_points = sum(1 for n in counts.values() if n > 1)
-    stacked_rows = sum(n for n in counts.values() if n > 1)
-    no_point = len(features) - sum(counts.values())
+    """Features with a coordinate to key on; stacked ones go after `transform`."""
+    kept = [feature for feature in features if coord_key(feature) is not None]
     print(
-        f"Longueuil OpenData: {len(features)} feature(s); dropped {stacked_rows} "
-        f"at {stacked_points} shared coordinate(s) and {no_point} without one, "
-        f"leaving {len(kept)}",
+        f"Longueuil OpenData: {len(features)} feature(s); dropped "
+        f"{len(features) - len(kept)} without a coordinate",
         file=sys.stderr,
     )
     return kept
@@ -164,7 +148,7 @@ def transform(rows: list[dict]) -> pa.Table:
         # in the parquet can be traced back to the source feature by eye.
         # `lgl-`, not `lon-`: London already publishes `lon-{uniqueid}` and
         # tree_id is a single global namespace the rollup unions.
-        tree_id.append(f"lgl-{lon:.7f}_{lat:.7f}")
+        tree_id.append(coordinate_tree_id("lgl", lon, lat))
         species.append(parse_species(props.get("Espece")))
         plant_date.append(None)
         latitude.append(lat)
@@ -186,6 +170,7 @@ def transform(rows: list[dict]) -> pa.Table:
 
 if __name__ == "__main__":
     table = transform(usable_features(read_geojson_features(RESOURCE)))
+    table = drop_stacked_coordinates(table, label="Longueuil OpenData")
     table = validate_coordinates(table, city="Longueuil", city_code="CALON")
     table = enforce_tree_schema(
         table, city="Longueuil", data_source="LONGUEUIL_OPENDATA"
