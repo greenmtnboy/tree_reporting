@@ -21,12 +21,14 @@ The layer has eight columns: `OBJECTID`, `SPECIES`, `CAN_DIAM`, the address
 Position comes from the geometry, reprojected server-side from State Plane
 Texas South Central; the attribute pair agrees with it to about a metre.
 
-**`OBJECTID` is the key, as the last resort it is.**  The layer has no
-GlobalID (`globalIdField` is empty) and no asset number of its own: 215,139
-distinct OBJECTIDs, no nulls, 1..215,139 dense.  The ids are only as stable
-as the publisher's republishing -- a truncate-and-append renumbers them -- and
-there is nothing better to key on: never the address, which several trees
-share, and never a positional hash.
+**The id is the rounded coordinate (`hou-{lon:.7f}_{lat:.7f}`)**, the
+runbook's rule for a source with no stable id (EXTENDING.md, step 1).  The
+layer has no GlobalID (`globalIdField` is empty) and no asset number of its
+own, and its OBJECTIDs run 1..215,139 dense -- a truncate-and-append, which
+renumbers them.  Never the address, which several trees share.  Until
+2026-11-20 the id was `hou-{OBJECTID}`; no check-in referenced one.  In
+November 2026, 14 coordinates carried more than one row: 25 rows of
+different trees are dropped and 3 identical repeats collapse to one.
 
 **`SPECIES` is an English common name, not a binomial**, mostly inverted for
 sorting (`Oak, Live`, `Hackberry, Common`).  The field has no coded-value
@@ -78,27 +80,29 @@ carries a selection, so it supplies cultivar `Bradford` (which
 import re
 import sys
 from collections import Counter
-from datetime import date
 from pathlib import Path
 
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from shared.platforms.arcgis import FeatureLayer, esri_point, iter_features
-from shared.species.english import common_name_key, species_from_common_name
 from shared.ingest import (
+    coordinate_key,
+    coordinate_tree_id,
+    drop_stacked_coordinates,
     emit,
     enforce_tree_schema,
     stream_to_table,
     validate_coordinates,
 )
+from shared.platforms.arcgis import FeatureLayer, esri_point, iter_features
+from shared.species.english import common_name_key, species_from_common_name
 
 LAYER = FeatureLayer(
     "https://geohwp.houstontx.gov/arcgis/rest/services/"
     "03_BaseData_External/Land_Base/FeatureServer/0"
 )
 
-OUT_FIELDS = "OBJECTID,SPECIES,CAN_DIAM"
+OUT_FIELDS = "SPECIES,CAN_DIAM"
 
 # `02 - Crape Myrtle`: an old species code left in front of the name.
 CODE_PREFIX = re.compile(r"^\d+\s*-\s*")
@@ -212,6 +216,10 @@ def iter_row_chunks():
     )
 
 
+# Rows with no geometry: the id is the position, so they cannot be keyed.
+NO_LOCATION = [0]
+
+
 def transform(features: list[dict]) -> pa.Table:
     tree_id: list[str | None] = []
     species: list[str | None] = []
@@ -222,12 +230,15 @@ def transform(features: list[dict]) -> pa.Table:
 
     for feature in features:
         rec = feature.get("attributes") or {}
-        oid = rec.get("OBJECTID")
-        tree_id.append(f"hou-{oid}" if oid is not None else None)
+        lat, lon = esri_point(feature.get("geometry"))
+        if lat is None:
+            NO_LOCATION[0] += 1
+            continue
+        lon, lat = coordinate_key(lon, lat)
+        tree_id.append(coordinate_tree_id("hou", lon, lat))
         name = clean_name(rec.get("SPECIES"))
         species.append(species_of(name))
         cultivar.append(CULTIVARS.get(name))
-        lat, lon = esri_point(feature.get("geometry"))
         latitude.append(lat)
         longitude.append(lon)
         dbh.append(parse_dbh(rec.get("CAN_DIAM")))
@@ -273,6 +284,11 @@ def report_unresolved() -> None:
 
 if __name__ == "__main__":
     table = stream_to_table(iter_row_chunks(), transform, label="Houston OpenData")
+    print(f"Houston: dropped {NO_LOCATION[0]} row(s) with no location", file=sys.stderr)
+    table = drop_stacked_coordinates(
+        table, label="Houston OpenData",
+        identical=("species", "cultivar", "diameter_at_breast_height"),
+    )
     check_dbh_parse()
     report_unresolved()
     table = validate_coordinates(table, city="Houston, TX", city_code="USHOU")

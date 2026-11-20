@@ -620,6 +620,42 @@ const CITY_DASHBOARD_CONTEXT: Record<
     biome: 'Temperate Broadleaf & Mixed Forests',
     realm: 'australasia',
   },
+  USMSN: {
+    ecoregionId: 387, // Central US forest-grasslands transition
+    usdaZone: 5,
+    biome: 'Temperate Grasslands, Savannas & Shrublands',
+    realm: 'nearctic',
+  },
+  USRIC: {
+    ecoregionId: 399, // Southeast US conifer savannas
+    usdaZone: 7,
+    biome: 'Temperate Grasslands, Savannas & Shrublands',
+    realm: 'nearctic',
+  },
+  USGEG: {
+    ecoregionId: 361, // Northern Rockies conifer forests
+    usdaZone: 6,
+    biome: 'Temperate Conifer Forests',
+    realm: 'nearctic',
+  },
+  CAWAT: {
+    ecoregionId: 334, // Eastern Great Lakes lowland forests
+    usdaZone: 5,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'nearctic',
+  },
+  FRNTE: {
+    ecoregionId: 664, // European Atlantic mixed forests
+    usdaZone: 8,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'palearctic',
+  },
+  USSMO: {
+    ecoregionId: 422, // California coastal sage and chaparral
+    usdaZone: 10,
+    biome: 'Mediterranean Forests, Woodlands & Scrub',
+    realm: 'nearctic',
+  },
 }
 
 function escapeStringLiteral(value: string) {

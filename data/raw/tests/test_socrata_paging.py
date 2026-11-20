@@ -20,9 +20,9 @@ RAW_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAW_DIR))
 sys.path.insert(0, str(RAW_DIR / "usnyc"))
 
-import shared.platforms.socrata as socrata  # noqa: E402
-from shared.ingest import UpstreamUnavailable  # noqa: E402
-from shared.platforms.socrata import SocrataDataset, iter_rows  # noqa: E402
+from shared.ingest import UpstreamUnavailable
+from shared.platforms import socrata
+from shared.platforms.socrata import SocrataDataset, iter_rows
 
 DATASET = SocrataDataset("data.example.test", "abcd-1234")
 
@@ -85,12 +85,13 @@ def test_a_dataset_that_grows_mid_run_passes(monkeypatch):
     assert rows(iter_rows(DATASET, page_size=2)) == 4
 
 
-CSV_HEADER = "objectid,genusspecies,dbh,planteddate,location\n"
+CSV_HEADER = "globalid,genusspecies,dbh,planteddate,location\n"
 
 
 def nyc_page(start: int, size: int) -> io.BytesIO:
     lines = [
-        f"{i},Acer rubrum,10,,POINT (-73.98 40.75)\n" for i in range(start, start + size)
+        f"{{{i:08d}-0000-0000-0000-000000000000}},Acer rubrum,10,,POINT (-73.98 40.75)\n"
+        for i in range(start, start + size)
     ]
     return io.BytesIO((CSV_HEADER + "".join(lines)).encode())
 

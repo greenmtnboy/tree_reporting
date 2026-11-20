@@ -98,5 +98,11 @@
   "USLOU": { "name": "Louisville", "center": [-85.7585, 38.2527] },
   "FRMPL": { "name": "Montpellier", "center": [3.8767, 43.6108] },
   "FRGNB": { "name": "Grenoble", "center": [5.7245, 45.1885] },
-  "AUSYD": { "name": "Sydney", "center": [151.2093, -33.8688] }
+  "AUSYD": { "name": "Sydney", "center": [151.2093, -33.8688] },
+  "USMSN": { "name": "Madison", "center": [-89.4012, 43.0731] },
+  "USRIC": { "name": "Richmond", "center": [-77.436, 37.5407] },
+  "USGEG": { "name": "Spokane", "center": [-117.426, 47.6588] },
+  "CAWAT": { "name": "Waterloo", "center": [-80.5204, 43.4643] },
+  "FRNTE": { "name": "Nantes", "center": [-1.5536, 47.2184] },
+  "USSMO": { "name": "Santa Monica", "center": [-118.4912, 34.0195] }
 }

@@ -9,26 +9,23 @@ Source: "Tree Inventory" (`OpenData_Environment/MapServer/17`) on
 `opendata.kelowna.ca`, 24,599 rows.  Paging, the freshness watermark and
 Esri's epoch-milliseconds live in `shared.platforms.arcgis`.
 
-**Kelowna publishes no usable tree id, and this ingest keys on `OBJECTID`.**
-That is the last resort in `EXTENDING.md`'s preference order, and it is taken
-deliberately, so here is the measurement behind it.  The layer has exactly two
-candidates.  `SITE_ID` looks like the id and is not: over the whole 24,599
-rows it holds 21,190 distinct values, **3,214 of them null** and 195 rows
-sharing an id with another tree -- one value covers 33 rows.  A null `tree_id`
-silently drops its row from the parquet and a repeat fans out every join built
-on the grain, so `enforce_tree_schema` refuses both; publishing on `SITE_ID`
-would have meant losing 13% of the city and inflating the rest.  There is no
-`GLOBALID` on the layer and no FeatureServer twin that has one (the service
-directory lists `OpenData_Environment` as MapServer only), so `OBJECTID` is
-what remains.
+**Kelowna publishes no usable tree id, so this ingest keys on the rounded
+coordinate (`kel-{lon:.7f}_{lat:.7f}`; EXTENDING.md, step 1).**  The layer has
+exactly two candidates.  `SITE_ID` looks like the id and is not: over the whole
+24,599 rows it holds 21,190 distinct values, **3,214 of them null** and 195
+rows sharing an id with another tree -- one value covers 33 rows.  A null
+`tree_id` silently drops its row from the parquet and a repeat fans out every
+join built on the grain, so `enforce_tree_schema` refuses both; publishing on
+`SITE_ID` would have meant losing 13% of the city and inflating the rest.
+There is no `GLOBALID` on the layer and no FeatureServer twin that has one
+(the service directory lists `OpenData_Environment` as MapServer only).
+`OBJECTID` is a local row number that a rebuild on the publisher's side can
+reassign; it was the id until 2026-11-20, when no check-in referenced one.
 
-What that costs is worth stating plainly, because it is the same exception
-Longueuil's synthesised coordinate id is: `OBJECTID` is a local row number,
-so a rebuild on the publisher's side can reassign it, and a community check-in
-recorded against `kel-1234` would then point at a different tree.  It is
-unique and non-null today, which is more than `SITE_ID` manages.  If Kelowna
-ever publishes a stable per-tree id, switch to it and accept the one-time
-churn.
+The coordinate costs the trees the key cannot tell apart: in November 2026, 75
+coordinates carried more than one row; 174 rows of different trees at them
+are dropped (0.7%) and 12 identical repeats collapse to one.  If Kelowna ever
+publishes a stable per-tree id, switch to it and accept the one-time churn.
 
 **Species comes from `Genus` + `Species`, not a combined column** -- the layer
 splits them, and `CultivarOrVariety` carries the selection separately, which
@@ -42,15 +39,18 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from shared.platforms.arcgis import FeatureLayer, iter_features
 from shared.ingest import (
     cm_to_inches,
+    coordinate_key,
+    coordinate_tree_id,
+    drop_stacked_coordinates,
     emit,
     enforce_tree_schema,
     normalize_species_parts,
     stream_to_table,
     validate_coordinates,
 )
+from shared.platforms.arcgis import FeatureLayer, esri_point, iter_features
 
 LAYER = FeatureLayer(
     "https://geoportal.kelowna.ca/arcgis/rest/services/ArcGISOnline/"
@@ -60,7 +60,7 @@ LAYER = FeatureLayer(
 
 # No lat/lon columns, so the geometry carries the position; `out_sr=4326`
 # reprojects it server-side out of the layer's BC Albers storage.
-OUT_FIELDS = "OBJECTID,Genus,Species,CultivarOrVariety,dbh_cm,Status"
+OUT_FIELDS = "Genus,Species,CultivarOrVariety,dbh_cm,Status"
 
 # The column is named for its unit and is centimetres, like every Canadian
 # portal.  One row records 0, which is an unmeasured tree rather than one of
@@ -105,12 +105,12 @@ def transform(features: list[dict]) -> pa.Table:
 
     for feature in features:
         rec = feature.get("attributes") or {}
-        geom = feature.get("geometry") or {}
-        oid = rec.get("OBJECTID")
-        if oid is None:
+        lat, lon = esri_point(feature.get("geometry"))
+        if lat is None:
             continue
+        lon, lat = coordinate_key(lon, lat)
 
-        tree_id.append(f"kel-{oid}")
+        tree_id.append(coordinate_tree_id("kel", lon, lat))
         species.append(normalize_species_parts(rec.get("Genus"), rec.get("Species")))
         cultivar.append(clean(rec.get("CultivarOrVariety")))
         # `InventoryDate` is when a surveyor visited and `WateringDate` when
@@ -118,8 +118,8 @@ def transform(features: list[dict]) -> pa.Table:
         # publishes none -- still a typed date32 column, because an untyped
         # pa.null() lands in the parquet as INT32 and breaks year().
         plant_date.append(None)
-        latitude.append(geom.get("y"))
-        longitude.append(geom.get("x"))
+        latitude.append(lat)
+        longitude.append(lon)
         dbh.append(parse_dbh(rec.get("dbh_cm")))
 
     return pa.table(
@@ -141,6 +141,10 @@ if __name__ == "__main__":
     # The 16 rows whose species reads "Vacant" are dropped by
     # `enforce_tree_schema` instead -- see `is_not_a_tree`.
     table = stream_to_table(iter_row_chunks(), transform, label="Kelowna OpenData")
+    table = drop_stacked_coordinates(
+        table, label="Kelowna OpenData",
+        identical=("species", "cultivar", "diameter_at_breast_height"),
+    )
     table = validate_coordinates(table, city="Kelowna", city_code="CAKEL")
     table = enforce_tree_schema(
         table, city="Kelowna", data_source="KELOWNA_OPENDATA"
