@@ -7,6 +7,7 @@ import re
 from html import escape
 from urllib.parse import urlencode
 from urban_tree_ml.review_status import inject_review_status_options
+from urban_tree_ml.searchable_models import SEARCHABLE_MODELS
 
 
 def render_studio_shell(html: str, city: str, cities: dict, run_ids: dict) -> str:
@@ -18,7 +19,11 @@ def render_studio_shell(html: str, city: str, cities: dict, run_ids: dict) -> st
              ("/registration", "Registration", "/registration?" + city_query),
              ("/model", "Chip review", "/model?" + model_query),
              ("/runs", "Run history", "/runs?" + city_query),
-             ("/coverage", "Curation coverage", "/coverage?" + city_query)]
+             ("/model-profile", "Model description", "/model-profile?" + model_query),
+             ("/insights", "Curation insights", "/insights?" + city_query),
+             ("/species-debugger", "Species debugger", "/species-debugger?" + city_query),
+             ("/coverage", "Curation coverage", "/coverage?" + city_query),
+             ("/recombinant", "Recombinant tiles", "/recombinant?city=usbos")]
     anchors = "".join(
         f'<a data-page="{path}" href="{escape(url, quote=True)}">{label}</a>'
         for path, label, url in links
@@ -41,6 +46,7 @@ def render_studio_shell(html: str, city: str, cities: dict, run_ids: dict) -> st
 (() => {
  const nav=document.getElementById('studio-navigation');
  const page=location.pathname.replace(/\/$/,'')||'/';
+ if(page==='/recombinant')document.getElementById('studio-city').disabled=true;
  nav.querySelectorAll('[data-page]').forEach(a=>{
    if(a.dataset.page===page)a.setAttribute('aria-current','page');
  });
@@ -54,16 +60,19 @@ def render_studio_shell(html: str, city: str, cities: dict, run_ids: dict) -> st
      if(source.origin===location.origin&&(scope==='all'||Object.hasOwn(runs,scope)))currentCity=scope;
    }catch{}
  }
- if(['/','/runs','/model','/coverage','/registration'].includes(page)){
+ if(['/','/runs','/model','/coverage','/registration','/insights','/model-profile','/species-debugger'].includes(page)){
    const select=document.getElementById('studio-city');
    select.add(new Option('All cities','all'));
    select.value=currentCity;
  }
  if(currentCity==='all')nav.querySelectorAll('[data-page]').forEach(a=>{
+   if(a.dataset.page==='/recombinant')return;
    const target=new URL(a.href,location.origin);target.searchParams.set('city','all');
    target.searchParams.delete('run');if(target.pathname==='/model')target.searchParams.set('split','training-all');
    a.href=target.pathname+target.search;
  });
+ const profileLink=nav.querySelector('[data-page="/model-profile"]');
+ if(profileLink&&params.get('run'))profileLink.href='/model-profile?'+new URLSearchParams({city:currentCity,run:params.get('run')});
  if(page==='/')document.querySelectorAll('main a[href]').forEach(a=>{
    const target=new URL(a.href,location.origin);
    if(target.origin===location.origin&&['/registration','/model','/runs','/coverage'].includes(target.pathname)){
@@ -107,6 +116,7 @@ def render_studio_shell(html: str, city: str, cities: dict, run_ids: dict) -> st
  }
  nav.querySelectorAll('[data-page]').forEach(a=>a.addEventListener('click',event=>{
    if(event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;
+   if(a.dataset.page==='/model-profile'&&params.get('run'))return;
    try{const last=sessionStorage.getItem('studio-last:'+a.dataset.page+':'+currentCity);
    if(last){const target=pageViewUrl(last);
    if(target.origin===location.origin&&target.pathname===a.dataset.page){event.preventDefault();location.href=target.href}}}catch{}
@@ -117,10 +127,15 @@ def render_studio_shell(html: str, city: str, cities: dict, run_ids: dict) -> st
  }catch{}});
  document.getElementById('studio-city').addEventListener('change',event=>{
    const city=event.target.value;
-   if(page==='/model'){
+   if(page==='/model'||page==='/insights'||page==='/model-profile'||page==='/species-debugger'){
      const u=new URL(location.href);u.searchParams.set('city',city);
-     if(city==='all')u.searchParams.set('split','training-all');
-     else {u.searchParams.delete('run');u.searchParams.delete('compare_run');}
+     // A dated acquisition and a saved chip/assignment belong to the previous city.
+     if(u.searchParams.get('acquisition')!=='all')u.searchParams.delete('acquisition');
+     for(const key of ['chip','scene','tree_id','queue','queue_chip','assignment'])u.searchParams.delete(key);
+     if(page==='/model'){
+       if(city==='all')u.searchParams.set('split','training-all');
+       u.searchParams.delete('run');u.searchParams.delete('compare_run');
+     }
      u.searchParams.delete('chip');location.href=u.pathname+u.search;return;
    }
    const route=['/','/registration','/model','/runs','/coverage','/training-queue'].includes(page)?page:'/model';
@@ -141,38 +156,38 @@ def render_studio_shell(html: str, city: str, cities: dict, run_ids: dict) -> st
    try{const response=await fetch('/api/backup?'+new URLSearchParams({city:currentCity==='all'?Object.keys(runs)[0]:currentCity}),
      {method:'POST',headers:{'X-Studio-Backup':'1'}});
      const result=await response.json();if(!response.ok)throw new Error(result.error||'Backup failed');
-     await backupHealth();
+     await backupHealth(true);
    }catch(error){backupBadge.textContent=error.message;backupButton.disabled=false;backupButton.textContent='Back up now';}
  });
- async function backupHealth(){try{
+ __BACKUP_STATUS_JS__
+ const backupHealth=backupStatusPoller(async readStatus=>{
    if(currentCity==='all'){
      const states=await Promise.all(Object.keys(runs).map(async city=>{
-       const response=await fetch('/api/backup-status?'+new URLSearchParams({city}));
-       if(!response.ok)return {city,error:true};return {city,...await response.json()};
+       try{return {city,...await readStatus(city)};}catch{return {city,error:true};}
      }));
-     const busy=states.some(s=>s.job?.running);backupButton.disabled=busy;backupButton.textContent=busy?'Backing up…':'Back up all cities';
+     const busy=states.some(s=>s.job?.running);backupButton.disabled=busy;backupButton.textContent=busy?(states.find(s=>s.job?.running)?.job?.stage||'Backing up…'):'Back up all cities';
      backupBadge.textContent=states.map(s=>s.city.toUpperCase()+': '+(s.error?'status unavailable':
        (s.snapshot?.error?'snapshot failed':s.snapshot?.pending?'snapshot pending':'saved')+' · '+
        (s.git?.current&&s.remote?.current?'backed up':'backup pending')+' · '+(s.published_for_training?'published':'draft')+
        (s.job?.error?' · backup failed':'')+(s.archive_error?' · archive error':''))).join(' | ');
      return;
    }
-   const response=await fetch('/api/backup-status?'+new URLSearchParams({city:currentCity}));
-   if(!response.ok)throw new Error('Backup status unavailable');const s=await response.json();
-   backupButton.disabled=!!s.job?.running;backupButton.textContent=s.job?.running?'Backing up…':'Back up now';
+   const s=await readStatus(currentCity);
+   backupButton.disabled=!!s.job?.running;backupButton.textContent=s.job?.running?(s.job.stage||'Backing up…'):'Back up now';
    backupBadge.textContent='Saved locally'+(s.snapshot?.error?' · Snapshot failed':s.snapshot?.pending?' · Snapshot pending':' · Snapshot ready')+' · Git '+(s.git.current?'backed up':'pending')+
      ' · Images + labels '+(s.remote.current?'backed up':'pending')+
      ' · Training '+(s.published_for_training?'published':'draft')+(s.archive_error?' · ARCHIVE ERROR':'')+(s.job?.error?' · Backup failed: '+s.job.error:'');
    backupBadge.title=s.archive_error||('Last private backup: '+(s.remote.at||'not completed')+
      '; last Git backup: '+(s.git.at||'not completed'));
- }catch{backupBadge.textContent='Backup status unavailable';}}
- backupHealth();setInterval(backupHealth,15000);
+ },()=>{backupBadge.textContent='Backup status unavailable';});
 })();
 </script>""".replace("__RUNS__", json.dumps(run_ids).replace("<", "\\u003c")).replace(
         "__CITY__", json.dumps(city).replace("<", "\\u003c")
     )
+    from urban_tree_ml.backup_status_ui import BACKUP_STATUS_JS
+    script = script.replace('__BACKUP_STATUS_JS__', BACKUP_STATUS_JS)
     return html.replace("</head>", SHARED_STYLE + VIEW_STATE + "</head>", 1).replace(
-        "</body>", script + "</body>", 1
+        "</body>", script + SEARCHABLE_MODELS + "</body>", 1
     )
 
 
@@ -188,8 +203,9 @@ window.studioViewState=(()=>{
  let saved={};try{saved=JSON.parse(localStorage.getItem(key)||'{}')}catch{}
  const orderKey='studio-chip-review-order';
  let savedOrder=null;try{if(path==='/model')savedOrder=localStorage.getItem(orderKey)}catch{}
+ function initialValue(id){return params.has(id)?params.get(id):(id==='sort'&&path==='/model'?savedOrder??saved[id]:saved[id])}
  function restore(){for(const id of ids){const el=document.getElementById(id);
- if(!el)continue;const value=params.has(id)?params.get(id):(id==='sort'&&path==='/model'?savedOrder??saved[id]:saved[id]);if(value==null)continue;
+ if(!el)continue;const value=initialValue(id);if(value==null)continue;
  if(el.type==='checkbox')el.checked=value==='1';
  else if(el.tagName!=='SELECT'||[...el.options].some(o=>o.value===value))el.value=value;
  }
@@ -211,7 +227,7 @@ window.studioViewState=(()=>{
  }
  document.addEventListener('input',changed);
  document.addEventListener('change',changed);
- return {restore,save};
+ return {restore,save,initialValue};
 })();
 </script>"""
 

@@ -20,31 +20,67 @@ def inject_crown_overlay(html):
     script = '<script>window.crownCoefficients=' + payload + ';window.crownCoefficientHash=' + json.dumps(digest) + ';' + CROWN_JS + '</script>'
     style = '<style>.crown-circle{position:absolute;display:block;transform:translate(-50%,-50%);border:1px solid #d9f6b380;border-radius:50%;pointer-events:none;background:none;z-index:2}.crown-circle.predicted{border-color:#ecc0fc70}.tree-marker[data-status="occluded"],.tree-choice[data-status="occluded"]{border-color:#9aa9ba!important}.tree-species-label[data-status="occluded"]{color:#9aa9ba}</style>'
     style += '<style>.crown-circle[hidden]{display:none}.crown-legend{font-size:12px;color:#bfd0c3}</style>'
-    legend='<p class="crown-legend">Thin green circles: inventory crown estimates; pale purple: model-derived estimates. Tallo allometry from DBH and genus, not measured canopy. Dashed halos remain the matching tolerance.</p>'
+    legend='<p class="crown-legend">Thin green circles: inventory crown estimates; pale purple: model-derived estimates. Tallo allometry from DBH and genus, drawn ×' + str(TALLO_REVIEW_SCALE) + ' for street trees, not measured canopy; a genus Tallo has no fit for borrows the nearest model crown. Dashed halos remain the matching tolerance.</p>'
     return html.replace('<head>', '<head>'+script+style, 1).replace('</header>',legend+'</header>',1)
 
 
-CROWN_JS = r"""
+OVERLAY_DOM_JS = r"""
+// Shared DOM overlay primitive: stays sharp independently of the aerial bitmap.
+window.createTreeOverlay=function(tree,x,y,width,height){
+ const crown=document.createElement('i');crown.className='crown-circle';
+ const label=document.createElement('span');label.className='tree-species-label';
+ for(const el of [crown,label]){el.style.left=`${100*x/width}%`;el.style.top=`${100*y/height}%`;if(tree.sample_id)el.dataset.sampleId=tree.sample_id;}
+ label.textContent=tree.species||'Unknown species';
+ return {crown,label};
+};
+"""
+
+# Tallo is mostly forest trees; open-grown street trees spread wider.  Against
+# Boston's LIDAR crowns (height_check 'accepted', measured DBH, ~72k trees) the
+# Tallo width runs a median 1.42x short (Ginkgo 1.56, Gleditsia 1.59, Platanus
+# 1.09), so the review overlay draws Tallo widths half again as wide.  Overlay
+# only: the published crown model and the weak training labels are unscaled.
+TALLO_REVIEW_SCALE = 1.5
+
+# Fit levels that are Tallo's own data for the tree (its genus, or relatives in
+# its family).  A division or global fallback is Tallo having no data for it,
+# so the overlay prefers the model's crown at that spot when one was matched.
+TALLO_OWN_FIT_LEVELS = ('genus', 'family')
+
+CROWN_JS = OVERLAY_DOM_JS + r"""
+window.TALLO_REVIEW_SCALE=__SCALE__;
+// Inventory trees with no Tallo fit of their own borrow the matched model
+// prediction's crown: sample_id -> crown width in metres (set by the page).
+window.predictedCrownBySample=window.predictedCrownBySample||{};
 window.estimateCrown = function(tree){
  const radius=Number(tree.crown_radius_m);
  if(Number.isFinite(radius)&&radius>0)return {width_m:2*radius,level:'image-head',taxon:'direct crown prediction'};
+ const matched=Number(tree.sample_id!=null?window.predictedCrownBySample[tree.sample_id]:NaN);
+ const borrowed=Number.isFinite(matched)&&matched>0?{width_m:matched,level:'matched-prediction',taxon:'nearest model crown'}:null;
  const dbh=Number(tree.dbh_in),species=String(tree.inventory_species||tree.species||'Unknown').trim(),genus=species.split(/\s+/)[0];
- if(!Number.isFinite(dbh)||dbh<=0)return null;
+ if(!Number.isFinite(dbh)||dbh<=0)return borrowed;
  const rows=window.crownCoefficients,row=rows['genus:'+genus];
- if(tree.tree_form==='palm'||species==='Palm'||species==='Cactus'||row?.family==='Arecaceae')return null;
+ if(tree.tree_form==='palm'||species==='Palm'||species==='Cactus'||row?.family==='Arecaceae')return borrowed;
  const fallback=['Unknown','Dead','Shrub',''].includes(species)?'global:all':tree.tree_form==='conifer'?'division:Gymnosperm':'division:Angiosperm';
- const fit=row||rows[fallback]; if(!fit)return null;
+ const fit=row||rows[fallback];
+ if(borrowed&&!(fit&&__OWN_LEVELS__.includes(fit.fit_level)))return borrowed;
+ if(!fit)return null;
  // The fit's own curve up to its largest stem, then its tail fit's exponent
- // up to the tail's largest stem (crown_allometry_fit.crown_width_m).
+ // up to the tail's largest stem (crown_allometry_fit.crown_width_m), scaled
+ // up for street trees (TALLO_REVIEW_SCALE).
  const m=Number(fit.dbh_max_cm),tailB=Number(fit.tail_b||fit.b),top=Math.max(Number(fit.tail_dbh_max_cm||m),m);
  const cm=Math.min(Math.max(dbh*2.54,1),top);
- return {width_m:2*Number(fit.scale)*Math.min(cm,m)**Number(fit.b)*(Math.max(cm,m)/m)**tailB,level:fit.fit_level,taxon:fit.fit_taxon};
+ return {width_m:window.TALLO_REVIEW_SCALE*2*Number(fit.scale)*Math.min(cm,m)**Number(fit.b)*(Math.max(cm,m)/m)**tailB,level:fit.fit_level,taxon:fit.fit_taxon};
 };
-window.crownDescription=function(tree){const c=window.estimateCrown(tree);return c?(c.level==='image-head'?`Image-predicted crown diameter ${c.width_m.toFixed(1)} m`:`Estimated crown width ${c.width_m.toFixed(1)} m · Tallo ${c.level} fit (${c.taxon}); DBH-derived, not image-measured`):'Crown estimate unavailable'};
+window.crownDescription=function(tree){const c=window.estimateCrown(tree);if(!c)return 'Crown estimate unavailable';
+ if(c.level==='image-head')return `Image-predicted crown diameter ${c.width_m.toFixed(1)} m`;
+ if(c.level==='matched-prediction')return `Crown width ${c.width_m.toFixed(1)} m from the nearest model prediction; no Tallo fit for this genus`;
+ return `Estimated crown width ${c.width_m.toFixed(1)} m · Tallo ${c.level} fit (${c.taxon}) ×${window.TALLO_REVIEW_SCALE} for street trees; DBH-derived, not image-measured`};
 const calculateCrown=window.estimateCrown,crownCache=new Map();
 window.estimateCrown=function(tree){
- const key=JSON.stringify([tree.inventory_species||tree.species,tree.dbh_in,tree.tree_form,tree.crown_radius_m]);
+ const key=JSON.stringify([tree.inventory_species||tree.species,tree.dbh_in,tree.tree_form,tree.crown_radius_m,
+   tree.sample_id!=null?window.predictedCrownBySample[tree.sample_id]??null:null]);
  if(crownCache.has(key))return crownCache.get(key);
  const value=calculateCrown(tree);if(crownCache.size>10000)crownCache.clear();crownCache.set(key,value);return value;
 };
-"""
+""".replace('__SCALE__', repr(TALLO_REVIEW_SCALE)).replace('__OWN_LEVELS__', json.dumps(list(TALLO_OWN_FIT_LEVELS)))

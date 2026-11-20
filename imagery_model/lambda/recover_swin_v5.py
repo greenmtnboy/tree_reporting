@@ -1,5 +1,6 @@
 """One-shot result recovery; never starts training; always terminates allocation."""
 import json
+import argparse
 import os
 import runpy
 import shlex
@@ -10,13 +11,22 @@ from pathlib import Path
 
 m = runpy.run_path(str(Path(__file__).with_name('launch_curated.py')))
 api, root, key = m['api'], m['ROOT'], m['KEY']
-run = 'sf-boston-naip-swin-v5-finetune'
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--experiment', default='sf-boston-naip-swin-v5-finetune')
+parser.add_argument('--instance-name', help='Explicit short recovery instance name for long experiment IDs')
+args = parser.parse_args()
+run = args.experiment
+if not run or any(c not in 'abcdefghijklmnopqrstuvwxyz0123456789-' for c in run):
+    parser.error('Invalid experiment name')
+instance_name = args.instance_name or run + '-recovery'
+if not instance_name or len(instance_name) > 64 or any(c not in 'abcdefghijklmnopqrstuvwxyz0123456789-' for c in instance_name):
+    parser.error('Instance name must use lowercase letters/digits/hyphens and fit 64 characters; use --instance-name')
 if api('instances')['data']:
     raise RuntimeError('Existing instance; inspect before recovery allocation')
 ids = api('instance-operations/launch', {
     'region_name': 'us-east-1', 'instance_type_name': 'gpu_1x_a10',
     'ssh_key_names': ['desktop-key'], 'file_system_names': ['tree-reporting-dev'],
-    'quantity': 1, 'name': run + '-recovery',
+    'quantity': 1, 'name': instance_name,
 })['data']['instance_ids']
 assert len(ids) == 1
 instance = ids[0]
@@ -25,6 +35,8 @@ try:
     (root / (run + '-recovery-instance.json')).write_text(json.dumps({'instance_id': instance}))
     for attempt in range(90):
         info = api('instances/' + instance)['data']
+        if info.get('id') != instance or info.get('name') != instance_name:
+            raise RuntimeError('Recovery instance identity mismatch')
         if info.get('status') == 'active' and info.get('ip'):
             options = ['-i', str(key), '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=accept-new', '-o', 'ConnectTimeout=10']
             ssh = ['ssh', *options, 'ubuntu@' + info['ip']]

@@ -34,7 +34,7 @@ let curationComparisonEnabled=true,single=0,compare=0;
 const button={setAttribute(){}},card={dataset:{scene:'s'},classList:{add(){},remove(){}},querySelector:()=>button};
 const document={querySelectorAll:()=>[],querySelector:()=>card,body:{classList:{toggle(){}}}};
 const scenesById={s:{}},curationReturn=null,streetViewEmbedApiKey=null;
-const updateValidationQueueNav=()=>{},loadPredictionOverlay=()=>single++,toggleCurationCompare=()=>compare++;
+const updateValidationQueueNav=()=>{},loadPredictionOverlay=()=>single++,toggleCurationCompare=()=>compare++,loadCrownFallback=()=>{};
 ''' + code + r'''
 setExpanded(card,true);if(single!==0||compare!==1)throw Error('duplicate prediction loads');
 curationComparisonEnabled=false;setExpanded(card,true);

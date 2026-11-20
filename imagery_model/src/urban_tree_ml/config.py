@@ -82,6 +82,8 @@ class SplitConfig(StrictModel):
 
 
 class ImageryConfig(StrictModel):
+    acquisition_id: str | None = Field(default=None, pattern=r'^[a-z0-9][a-z0-9-]*$')
+    boundary_shifts: bool = True
     provider: Literal["planetary_computer", "local"]
     stac_url: str | None = None
     collection: str | None = None
@@ -120,14 +122,14 @@ class TargetsConfig(StrictModel):
     gaussian_sigma_px: float = Field(gt=0)
     positive_supervision_radius_m: float = Field(gt=0)
     collision_policy: Literal["discard"]
-    background_mode: Literal["ndvi_positive_unlabeled", "all"]
+    background_mode: Literal["ndvi_positive_unlabeled", "all", "curated_only"]
     background_ndvi_max: float = Field(ge=-1, le=1)
 
 
 class ModelConfig(StrictModel):
     crown_head: bool = False
     input_channels: int = Field(ge=3)
-    backbone: Literal["resnet34", "convnext_tiny", "swin_tiny"]
+    backbone: Literal["resnet34", "convnext_tiny", "swin_tiny", "swin_small"]
     feature_channels: int = Field(ge=32)
     pretrained: bool
 
@@ -138,15 +140,27 @@ class TrainingConfig(StrictModel):
     workers: int = Field(ge=0)
     epochs: int = Field(ge=1)
     learning_rate: float = Field(gt=0)
+    warmup_source_passes: float = Field(default=0, ge=0)
     weight_decay: float = Field(ge=0)
     precision: str
     accumulate_grad_batches: int = Field(ge=1)
     random_dihedral: bool = False
+    augmentation: Literal["legacy", "fixed_pair_v1"] = "legacy"
+    budget_policy: Literal["source_passes_v1", "legacy_epochs"] = "source_passes_v1"
+    early_stopping_patience_checks: int = Field(default=12, ge=1)
     center_loss_weight: float = Field(ge=0)
+    confirmed_background_loss_weight: float = Field(default=1.0, ge=1, allow_inf_nan=False)
     dbh_loss_weight: float = Field(ge=0)
     crown_loss_weight: float = Field(default=1.0, ge=0)
+    single_tree_loss_weight: float = Field(default=0.1, ge=0)
     genus_loss_weight: float = Field(ge=0)
     species_loss_weight: float = Field(ge=0)
+
+    @model_validator(mode="after")
+    def augmentation_is_unambiguous(self) -> TrainingConfig:
+        if self.augmentation != "legacy" and self.random_dihedral:
+            raise ValueError("fixed_pair_v1 requires random_dihedral=false")
+        return self
 
 
 class EvaluationConfig(StrictModel):

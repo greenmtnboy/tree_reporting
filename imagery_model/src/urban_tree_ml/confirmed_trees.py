@@ -16,8 +16,9 @@ def confirmed_tree_rows(regions: list[dict], config: ProjectConfig, raster_crs) 
     forward = Transformer.from_crs("EPSG:4326", raster_crs, always_xy=True)
     inverse = Transformer.from_crs(raster_crs, "EPSG:4326", always_xy=True)
     rows = []
+    from urban_tree_ml.vegetation_groups import GROUP_CLASSES
     for region in regions:
-        if region["mode"] != "confirmed-tree" or region.get('tree_id'):
+        if region["mode"] not in {'confirmed-tree', *GROUP_CLASSES} or region.get('tree_id'):
             continue
         x, y = forward.transform(region["anchor_longitude"], region["anchor_latitude"])
         longitude, latitude = inverse.transform(x + region["east_m"], y + region["north_m"])
@@ -26,7 +27,8 @@ def confirmed_tree_rows(regions: list[dict], config: ProjectConfig, raster_crs) 
             "longitude": longitude, "latitude": latitude,
             "crown_radius_m": float(region["radius_m"]),
             "crown_source": "human",
-            "species": region.get('species', ''),
+            "species": GROUP_CLASSES.get(region['mode'], region.get('species', '')),
+            "vegetation_type": region['mode'] if region['mode'] in GROUP_CLASSES else '',
             "identification_source": region.get('identification_source', ''),
             "dbh_log1p": None, "genus_id": -1, "species_id": -1,
             "dbh_eligible": False, "genus_eligible": False, "species_eligible": False,

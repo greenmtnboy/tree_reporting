@@ -6,13 +6,12 @@ versions; cached objects must not be mutated. Existing full-state APIs stay vali
 import json
 import math
 from datetime import UTC, datetime
-from functools import lru_cache
 from pathlib import Path
 
 from urban_tree_ml.feedback import (
     ReviewStateConflictError, load_persisted_reviews, normalize_mask_region_payload,
     normalize_review_payload, normalize_scene_review_payload, persist_review_payload,
-    _write_json_atomic, _review_state_sha256,
+    _write_json_atomic, _review_state_sha256, _read_manifest,
 )
 from urban_tree_ml.tree_curation import tree_records, expand_tree_records, transformers, storage_payload
 
@@ -37,20 +36,18 @@ def prime_collection(directory, version, manifest, state, stored=None):
         _primed.pop(next(iter(_primed)))
 
 
-@lru_cache(maxsize=4)
-def _read_version(directory, manifest_version, state_version):
-    manifest = json.loads((Path(directory) / 'manifest.json').read_text(encoding='utf-8'))
-    state = load_persisted_reviews(directory)
-    return manifest, state
-
-
 def read_collection(directory):
     directory = Path(directory)
     version = collection_version(directory)
     cached = _primed.get(str(directory))
     if cached and cached[0] == version:
         return cached[1], cached[2]
-    manifest, state = _read_version(str(directory), *version)
+    # Retain only the latest state per city, not several historical copies of
+    # the large manifest/reviews. A review-only write can reuse the manifest.
+    manifest = cached[1] if cached and cached[0][0] == version[0] else _read_manifest(directory)
+    state = load_persisted_reviews(directory, manifest=manifest)
+    if collection_version(directory) != version:
+        raise ReviewStateConflictError('Annotations changed during load; reload before saving')
     prime_collection(directory, version, manifest, state)
     return manifest, state
 
@@ -64,10 +61,11 @@ def scoped_manifest(manifest, scene_id):
             'scenes': [scene], 'samples': [s for s in manifest['samples'] if s['sample_id'] in ids]}
 
 
-def intersects(region, scoped):
-    if not scoped['samples']:
+def intersects(region, scoped, padding=0):
+    scene = scoped['scenes'][0]
+    sample = scoped['samples'][0] if scoped['samples'] else scene.get('anchor')
+    if sample is None:
         return False
-    sample, scene = scoped['samples'][0], scoped['scenes'][0]
     transformer = transformers(scoped['metadata']['curation_crs'])[0]
     x, y = transformer.transform(sample['longitude'], sample['latitude'])
     if 'longitude' in region:
@@ -81,7 +79,15 @@ def intersects(region, scoped):
     # Conservative bounding rectangle includes circles crossing a chip edge.
     radius_x = region['radius_m'] * math.hypot(e, b) / abs(determinant)
     radius_y = region['radius_m'] * math.hypot(d, a) / abs(determinant)
-    return -radius_x <= px <= scene['image_width']+radius_x and -radius_y <= py <= scene['image_height']+radius_y
+    return -radius_x-padding <= px <= scene['image_width']+radius_x+padding and -radius_y-padding <= py <= scene['image_height']+radius_y+padding
+
+
+def editor_intersects(region, scoped):
+    # UI scope only: world annotations still belong to their spatial training
+    # split, and editing this border never completes a neighboring chip.
+    from urban_tree_ml.review_context import CONTEXT_PIXELS
+    padding = CONTEXT_PIXELS if scoped['metadata'].get('curation_schema_version') == 2 else 0
+    return intersects(region, scoped, padding)
 
 
 def scene_state(manifest, state, scene_id):
@@ -90,11 +96,14 @@ def scene_state(manifest, state, scene_id):
     return {**{k: state[k] for k in ['schema_version', 'state_revision']},
             'reviews': {k:v for k,v in state['reviews'].items() if k in ids},
             'scene_reviews': {k:v for k,v in state['scene_reviews'].items() if k == scene_id},
-            'mask_regions': [r for r in state['mask_regions'] if intersects(r, scoped)]}
+            'mask_regions': [r for r in state['mask_regions'] if editor_intersects(r, scoped)]}
 
 
-def apply_scene_patch(directory, scene_id, patch):
+def apply_scene_patch(directory, scene_id, patch, *, timings=None):
+    from urban_tree_ml.save_timings import PhaseTimer
+    timer = PhaseTimer(timings if timings is not None else {})
     manifest, state = read_collection(directory)
+    timer.mark('load_state')
     version = _primed[str(Path(directory))][0]
     if patch.get('base_revision') != state['state_revision']:
         raise ReviewStateConflictError('Annotations changed in another tab; export unsaved edits and reload before saving')
@@ -103,52 +112,71 @@ def apply_scene_patch(directory, scene_id, patch):
         raise ValueError('Tree patch is outside the loaded chip')
     if not set(patch.get('scene_reviews', {})) <= {scene_id} or not set(patch.get('delete_scene_reviews', [])) <= {scene_id}:
         raise ValueError('Completion patch is outside the loaded chip')
-    changed = normalize_review_payload({'reviews': patch.get('reviews', {})}, manifest)
+    changed = normalize_review_payload({'reviews': patch.get('reviews', {})}, scoped)
+    changed_trees = tree_records(changed, scoped)
     # Copy only containers being changed; nested unmodified records are immutable.
     merged = {**state, 'reviews': dict(state['reviews']), 'scene_reviews': dict(state['scene_reviews'])}
     # Update every projected view of a changed tree using its canonical world position.
-    merged['reviews'].update(expand_tree_records(tree_records(changed, manifest), manifest))
-    merged['scene_reviews'].update(normalize_scene_review_payload({'scene_reviews': patch.get('scene_reviews', {})}, manifest))
+    if changed_trees:
+        merged['reviews'].update(expand_tree_records(changed_trees, manifest))
+    merged['scene_reviews'].update(normalize_scene_review_payload({'scene_reviews': patch.get('scene_reviews', {})}, scoped))
     for key in patch.get('delete_scene_reviews', []):
         merged['scene_reviews'].pop(key, None)
-    visible_masks = {r['region_id'] for r in state['mask_regions'] if intersects(r, scoped)}
     deleted = set(patch.get('delete_mask_regions', []))
+    # Empty deltas are common (tree edits and completion/Tab). Keep immutable,
+    # already validated masks instead of projecting/copying the entire city.
+    masks_changed = bool(deleted or patch.get('mask_regions'))
+    visible_masks = {r['region_id'] for r in state['mask_regions'] if editor_intersects(r, scoped)} if masks_changed else set()
     if not deleted <= visible_masks:
         raise ValueError('Mask deletion is outside the loaded chip')
     regions = normalize_mask_region_payload({'mask_regions': patch.get('mask_regions', [])}, manifest)
-    old_ids = {r['region_id'] for r in state['mask_regions']}
+    old_ids = {r['region_id'] for r in state['mask_regions']} if regions else set()
     for region in regions:
         if region['region_id'] in old_ids and region['region_id'] not in visible_masks:
             raise ValueError('Mask update is outside the loaded chip')
-        if not intersects(region, scoped):
+        if not editor_intersects(region, scoped):
             raise ValueError('Mask does not intersect the loaded chip')
     upserts = {r['region_id']:r for r in regions}
-    merged['mask_regions'] = [r for r in state['mask_regions'] if r['region_id'] not in deleted | set(upserts)] + list(upserts.values())
+    if masks_changed:
+        removed = deleted | set(upserts)
+        merged['mask_regions'] = [r for r in state['mask_regions'] if r['region_id'] not in removed] + list(upserts.values())
+    # A valid delta can still conflict with an unchanged group. Check the merged
+    # footprints before writing, using the same guard as full saves and reloads.
+    from urban_tree_ml.vegetation_groups import validate_group_overlaps
+    if masks_changed:
+        validate_group_overlaps(merged['mask_regions'])
     merged.update(metadata=manifest['metadata'], base_revision=state['state_revision'])
+    timer.mark('validate_and_merge')
     if manifest['metadata'].get('curation_schema_version') == 2:
         cached = _primed[str(Path(directory))][3]
         if cached is None:
             cached = storage_payload(state, manifest)
         # Serialize tree-keyed data directly. Only changed trees are projected;
         # already validated city records never pass through the full normalizer again.
-        region_storage = storage_payload({'reviews': {}, 'mask_regions': merged['mask_regions']}, manifest)
+        region_storage = storage_payload({'reviews': {}, 'mask_regions': merged['mask_regions']}, manifest) if masks_changed else {}
         stored = {**cached, **region_storage,
-                  'tree_reviews': {**cached['tree_reviews'], **tree_records(changed, manifest)},
+                  'tree_reviews': {**cached['tree_reviews'], **changed_trees},
                   'scene_reviews': merged['scene_reviews'], 'metadata': manifest['metadata'],
                   'saved_at': datetime.now(UTC).isoformat()}
         for transient in ['state_revision', 'base_revision']:
             stored.pop(transient, None)
         merged['mask_regions'] = sorted(merged['mask_regions'], key=lambda r: r['region_id'])
+        timer.mark('serialize_state')
         revision = _review_state_sha256(merged['reviews'], merged['scene_reviews'], merged['mask_regions'])
+        timer.mark('hash_state')
         if collection_version(directory) != version:
             raise ReviewStateConflictError('Annotations changed during save; reload before saving')
         path = Path(directory) / 'reviews.json'
         _write_json_atomic(path, stored)
+        timer.mark('durable_write')
         merged['state_revision'] = revision
         prime_collection(directory, collection_version(directory), manifest, merged, stored)
+        timer.mark('cache_commit')
         return dict(path=str(path), reviews=len(merged['reviews']), completed_scenes=len(merged['scene_reviews']),
                     mask_regions=len(merged['mask_regions']), state_revision=revision)
-    return persist_review_payload(directory, merged)
+    result = persist_review_payload(directory, merged)
+    timer.mark('legacy_persist')
+    return result
 
 
 def gallery_page(manifest, state, query, *, paginate=True):
@@ -198,7 +226,8 @@ article{padding:12px;border:1px solid #405747;border-radius:10px}article img{wid
 <script>
 const parameters=new URLSearchParams(location.search),city=parameters.get('city')||'ussfo';
 const split=document.getElementById('split'),status=document.getElementById('status'),message=document.getElementById('message');
-const filterKey='registration-gallery:'+city;
+const acquisition=parameters.get('acquisition')||'';
+const filterKey='registration-gallery:'+city+':'+acquisition;
 const saved=JSON.parse(localStorage.getItem(filterKey)||'{}');
 split.value=parameters.get('split')??saved.split??'';status.value=parameters.get('status')??saved.status??'';
 let page=Number(parameters.get('page')??saved.page??0),generation=0;
@@ -207,6 +236,7 @@ document.getElementById('publish').textContent=city==='all'?'Publish all cities'
 async function load(){
  const ticket=++generation;message.textContent='Loading image summaries…';
  const q=new URLSearchParams({city,split:split.value,status:status.value,page:String(page)});
+ if(acquisition)q.set('acquisition',acquisition);
  if(parameters.get('run'))q.set('run',parameters.get('run'));
  try{const response=await fetch('/api/review-gallery?'+q);const data=await response.json();if(!response.ok)throw Error(data.error);if(ticket!==generation)return;
  page=data.page;q.set('page',String(page));history.replaceState(null,'','/registration?'+q);
@@ -220,9 +250,10 @@ async function load(){
  const gallery=document.getElementById('gallery');gallery.replaceChildren();
  for(const item of data.items){const card=document.createElement('article'),title=document.createElement('h2'),img=document.createElement('img'),details=document.createElement('p'),link=document.createElement('a');
  const owner=item.city||city;
- title.textContent=owner.toUpperCase()+' · '+(item.validation_chip_id||item.scene_id);img.src='/city-assets/'+encodeURIComponent(owner)+'/'+item.image;img.loading='lazy';img.alt='Imagery preview '+title.textContent;
+ title.textContent=owner.toUpperCase()+' · '+(item.validation_chip_id||item.scene_id);img.src='/city-assets/'+encodeURIComponent(acquisition||owner)+'/'+item.image;img.loading='lazy';img.alt='Imagery preview '+title.textContent;
  details.textContent=item.tree_count+' inventory trees · '+item.splits.join(' / ')+' · '+(item.more_done?'More done':item.done?'Done':'To review');
  const target=new URLSearchParams({city:owner,scene:item.scene_id,fullscreen:'1',queue:navigationQueue,queue_chip:item.scene_id,return:'/registration?'+q});
+ if(acquisition)target.set('acquisition',acquisition);
  if(!navigationQueue){target.delete('queue');target.delete('queue_chip')}
  if(parameters.get('run'))target.set('run',parameters.get('run'));link.href='/registration?'+target;link.className='curate';link.textContent='Curate';
  card.append(title,img,details,link);gallery.append(card);}

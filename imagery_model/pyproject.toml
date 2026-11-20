@@ -12,6 +12,7 @@ dependencies = [
   "duckdb>=1.5.3",
   "numpy>=2.0",
   "pandas>=2.2",
+  "polars>=1.30,<2",
   "pyarrow>=19",
   "pydantic>=2.10",
   "pyproj>=3.7",
@@ -30,6 +31,8 @@ imagery = [
   "planetary-computer>=1.0",
   "pystac-client>=0.9",
   "rasterio>=1.4",
+  "shapely>=2.0",
+  "requests>=2.32",
 ]
 train = [
   "lightning>=2.5",
@@ -58,6 +61,8 @@ torchvision = [{ index = "pytorch-cu128", marker = "sys_platform == 'linux'" }]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Tests import the lambda entrypoint scripts (prepare_*.py) directly.
+pythonpath = ["lambda"]
 addopts = "-q"
 
 [tool.ruff]

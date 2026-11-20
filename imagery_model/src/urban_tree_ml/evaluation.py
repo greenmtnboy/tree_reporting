@@ -13,6 +13,7 @@ import pandas as pd
 from urban_tree_ml.config import ProjectConfig, taxonomy_path
 
 _COHORT_NAME = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
+_PEAK_TIE_POLICY = "equal_score_greedy_row_column_v1"
 
 
 def inference_coverage(manifest, split, processed_chip_ids, predictions):
@@ -164,9 +165,14 @@ def _attribute_metrics(
     species_top: list[list[int]] = []
     joint_correct = 0
     joint_matched_eligible = 0
+    vegetation_true, vegetation_predicted = [], []
     for prediction_index, truth_index, _ in matches:
         prediction = predictions.loc[prediction_index]
         truth = ground_truth.loc[truth_index]
+        if truth.get('vegetation_type') in {'copse', 'shrub-mass'}:
+            vegetation_true.append(int(truth['species_id']))
+            vegetation_predicted.append(int(prediction['species_id']))
+            continue  # vegetation category is not species, DBH, or genus accuracy
         true_dbh = truth["dbh_log1p"]
         true_genus = truth["genus_id"]
         true_species = truth["species_id"]
@@ -212,6 +218,7 @@ def _attribute_metrics(
         "species": _classification_metrics(
             species_true, species_predicted, top_ids=species_top
         ),
+        "vegetation_category": _classification_metrics(vegetation_true, vegetation_predicted),
         "joint": {
             "correct": joint_correct,
             "matched_eligible": joint_matched_eligible,
@@ -222,6 +229,39 @@ def _attribute_metrics(
             "recall": joint_correct / all_joint_eligible if all_joint_eligible else None,
         },
     }
+
+
+def _select_peak_indices(
+    locations: np.ndarray,
+    scores: np.ndarray,
+    *,
+    shape: tuple[int, int],
+    nms_kernel: int,
+    limit: int,
+) -> np.ndarray:
+    """Resolve equal local maxima before the detection cap, deterministically.
+
+    Pooling already rejects unequal lower neighbors. Reduced-precision sigmoid
+    can leave several equal maxima; greedily keep the first in row/column order
+    within the existing square NMS neighborhood. Only retained peaks suppress
+    neighbors, so a long plateau does not erase separated potential trees.
+    This small CPU selection avoids a GPU synchronization per candidate.
+    """
+    order = np.lexsort((locations[:, 1], locations[:, 0], -scores))
+    blocked = np.full(shape, -1.0, dtype=scores.dtype)
+    radius = nms_kernel // 2
+    kept: list[int] = []
+    for index in order:
+        y, x = locations[index]
+        score = scores[index]
+        if blocked[y, x] == score:
+            continue
+        kept.append(int(index))
+        if len(kept) == limit:
+            break
+        blocked[max(0, y - radius):y + radius + 1,
+                max(0, x - radius):x + radius + 1] = score
+    return np.asarray(kept, dtype=np.int64)
 
 
 def _decode_batch(
@@ -252,14 +292,16 @@ def _decode_batch(
     for batch_index, chip_id in enumerate(chip_ids):
         locations = torch.nonzero(peaks[batch_index], as_tuple=False)
         scores = center[batch_index, locations[:, 0], locations[:, 1]]
-        if len(scores) > max_detections_per_chip:
-            _, keep = torch.topk(scores, max_detections_per_chip, sorted=True)
-            locations = locations[keep]
-            scores = scores[keep]
-        else:
-            order = torch.argsort(scores, descending=True)
-            locations = locations[order]
-            scores = scores[order]
+        keep = _select_peak_indices(
+            locations.cpu().numpy(),
+            scores.float().cpu().numpy(),
+            shape=tuple(center.shape[-2:]),
+            nms_kernel=nms_kernel,
+            limit=max_detections_per_chip,
+        )
+        keep = torch.as_tensor(keep, device=locations.device)
+        locations = locations[keep]
+        scores = scores[keep]
         top_k = min(5, species_probability.shape[1])
         ys, xs = locations[:, 0], locations[:, 1]
         genus_probs = genus_probability[batch_index, :, ys, xs].transpose(0, 1)
@@ -388,6 +430,7 @@ def run_evaluation(
     device_name: str = "auto",
     allow_test: bool = False,
     cohort: str | None = None,
+    output_run: str | Path | None = None,
 ) -> dict[str, object]:
     if split not in {"train", "validation", "test"}:
         raise ValueError("split must be train, validation, or test")
@@ -415,6 +458,10 @@ def run_evaluation(
     labels_path = chip_root / "labels.parquet"
     if not labels_path.exists():
         raise FileNotFoundError("labels.parquet is missing; rebuild chips with the current code")
+    summary = json.loads((chip_root / 'summary.json').read_text(encoding='utf-8'))
+    prediction_only = summary.get('label_status') == 'unavailable'
+    if prediction_only and not pd.read_parquet(labels_path).empty:
+        raise ValueError('Prediction-only chips must not contain ground-truth labels')
     selected_taxonomy_path = taxonomy_path(config)
     taxonomy = json.loads(selected_taxonomy_path.read_text(encoding="utf-8"))
     device = (
@@ -463,7 +510,7 @@ def run_evaluation(
                     max_detections_per_chip=config.evaluation.max_detections_per_chip,
                     nms_kernel=config.evaluation.nms_kernel,
                     target_center=batch["center"],
-                    detection_mask=batch["detection_mask"],
+                    detection_mask=batch.get('scoring_mask', batch["detection_mask"]),
                 )
             )
             processed_chip_ids.extend(list(batch["chip_id"]))
@@ -499,11 +546,17 @@ def run_evaluation(
     predictions["species"] = predictions["species_id"].map(
         lambda value: taxonomy["species"][int(value)]
     )
+    from urban_tree_ml.vegetation_groups import GROUP_CLASSES
+    predictions['vegetation_type'] = predictions.species.map({v:k for k,v in GROUP_CLASSES.items()}).fillna('tree')
+    predictions['class_name'] = predictions.species
+    grouped = predictions.vegetation_type.ne('tree')
+    predictions.loc[grouped, ['species', 'genus']] = ''
+    predictions.loc[grouped, 'dbh_in'] = np.nan  # never export a fabricated trunk diameter
 
     ground_truth = pd.read_parquet(labels_path)
     ground_truth = ground_truth[ground_truth["split"] == split].reset_index(drop=True)
     checkpoint_run_dir = checkpoint.parent.parent if checkpoint.parent.name == "checkpoints" else None
-    run_dir = checkpoint_run_dir or (config.paths.root / "runs" / config.experiment)
+    run_dir = Path(output_run) if output_run is not None else (checkpoint_run_dir or (config.paths.root / "runs" / config.experiment))
     output_dir = run_dir / "evaluation" / output_cohort
     output_dir.mkdir(parents=True, exist_ok=True)
     predictions_path = output_dir / "predictions.parquet"
@@ -516,6 +569,9 @@ def run_evaluation(
     metrics_by_radius: dict[str, object] = {}
     match_records: list[dict[str, object]] = []
     for radius_m in config.evaluation.match_radii_m:
+        if prediction_only:
+            metrics_by_radius[str(radius_m)] = unscored_metrics()
+            continue
         radius_output_px = radius_m / (
             config.imagery.resolution_m * config.targets.output_stride
         )
@@ -563,7 +619,7 @@ def run_evaluation(
     checkpoint_run_dir = (
         checkpoint.parent.parent if checkpoint.parent.name == "checkpoints" else None
     )
-    run_dir = checkpoint_run_dir or (config.paths.root / "runs" / config.experiment)
+    run_dir = Path(output_run) if output_run is not None else (checkpoint_run_dir or (config.paths.root / "runs" / config.experiment))
     output_dir = run_dir / "evaluation" / output_cohort
     output_dir.mkdir(parents=True, exist_ok=True)
     predictions_path = output_dir / "predictions.parquet"
@@ -578,6 +634,8 @@ def run_evaluation(
         json.dumps(taxonomy, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
     result: dict[str, object] = {
+        "prediction_only": prediction_only,
+        "label_status": "unavailable" if prediction_only else "inventory",
         "checkpoint": str(checkpoint),
         "run_id": run_dir.name,
         "cohort": output_cohort,
@@ -591,6 +649,8 @@ def run_evaluation(
         "predictions_above_threshold": len(above_threshold),
         "confidence_threshold": config.evaluation.confidence_threshold,
         "max_detections_per_chip": config.evaluation.max_detections_per_chip,
+        "peak_tie_policy": _PEAK_TIE_POLICY,
+        "nms_kernel": config.evaluation.nms_kernel,
         "metrics_by_match_radius_m": metrics_by_radius,
         "predictions": str(predictions_path),
         "matches": str(matches_path),
@@ -605,6 +665,8 @@ def run_evaluation(
         json.dumps(
             {
                 "schema_version": 1,
+                "peak_tie_policy": _PEAK_TIE_POLICY,
+                "prediction_only": prediction_only,
                 "created_at": datetime.now(UTC).isoformat(),
                 "run_id": run_dir.name,
                 "cohort": output_cohort,
@@ -633,3 +695,11 @@ def run_evaluation(
     coverage_path.write_text(json.dumps(coverage, indent=2) + "\n", encoding="utf-8")
     result["inference_coverage"] = str(coverage_path)
     return result
+
+
+def unscored_metrics():
+    """Missing labels are not an empty, exhaustively confirmed background."""
+    return {'detection': {key: None for key in (
+        'true_positive', 'false_positive', 'false_negative', 'precision',
+        'recall', 'f1', 'f2', 'average_precision')},
+        'attributes_on_matched_detections': {}}

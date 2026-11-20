@@ -50,6 +50,7 @@ docker run --rm --gpus all "${devices[@]}" --ipc=host \
   -e TREE_ML_PREPARED_IMAGE_CACHE_URI -e TREE_ML_PREPARED_IMAGE_CACHE_DIR \
   -e GOOGLE_CLOUD_PROJECT -e GOOGLE_CLOUD_QUOTA_PROJECT \
   -e TREE_ML_DATA_ROOT -e "TORCH_HOME=$TREE_ML_DATA_ROOT/cache/torch" \
+  -e TREE_ML_TRAIN_UNTIL \
   --entrypoint uv urban-tree-ml:joint run --frozen --no-sync python \
   "${entrypoint[@]}" --experiment "$TREE_ML_EXPERIMENT" \
   "${extra[@]}" \

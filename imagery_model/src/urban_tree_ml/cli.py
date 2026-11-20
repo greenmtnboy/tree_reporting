@@ -100,6 +100,10 @@ def imagery_mosaic(
 @chips_app.command("build")
 def chips_build(
     config_path: ConfigPath,
+    boundary_shift_recipes: Annotated[
+        Path | None, typer.Option('--boundary-shift-recipes', exists=True, dir_okay=False)
+    ] = None,
+    output_dataset: Annotated[str | None, typer.Option('--output-dataset')] = None,
     raster: Annotated[
         Path | None,
         typer.Option("--raster", exists=True, dir_okay=False, help="Aligned multiband GeoTIFF/COG"),
@@ -137,6 +141,8 @@ def chips_build(
             raster_path,
             feedback_path=feedback,
             use_default_feedback=not without_feedback,
+            boundary_shift_recipes=boundary_shift_recipes,
+            output_dataset=output_dataset,
         )
     )
 
