@@ -1,0 +1,95 @@
+import ..tree_common;
+import ..community_tree_info;
+import ..tree_dedup;
+
+auto ussyr_published_data_updated_through <- greatest(ussyr_data_updated_through, ussyr_community_data_updated_through, ussyr_osm_data_updated_through);
+
+key ussyr_source enum<string>['SYRACUSE_OPENDATA', 'COMMUNITY_USSYR', 'OSM_USSYR']; # originating dataset for the row
+
+# Feed the shared cross-source merge (../tree_dedup.preql): it classifies rows
+# by the label's prefix and records provenance from it.
+auto ussyr_source_label <- concat(ussyr_source, '');
+merge ussyr_source_label into source_label;
+
+root datasource syracuse_update_time (
+    data_updated_through: ussyr_data_updated_through
+)
+file `./syracuse_update_time.py`;
+
+# Only this city's column, so an approval elsewhere does not mark USSYR's
+# Parquet stale. Trilogy probes this as MAX over the one column.
+root datasource ussyr_community_update_time (
+    ussyr_community_data_updated_through: ussyr_community_data_updated_through
+)
+file `../community_update_time.py`;
+
+# GCS publication time of the staged OSM parquet; it only moves when an
+# extraction is re-run and uploaded. Not a local mtime -- git does not preserve
+# it, so a committed staging file makes every fresh clone look like new data.
+root datasource ussyr_osm_update_time (
+    data_updated_through: ussyr_osm_data_updated_through
+)
+file `./syracuse_osm_probe.py`;
+
+# Every partition extends ../tree_dedup.preql's `tree_partition`, which maps
+# the shared raw_* columns; a source that names a column differently re-binds
+# it here (`dbh: ?raw_dbh`).
+root partial datasource syracuse_raw_tree_info extends tree_partition (
+    data_source: ussyr_source,
+)
+complete where city = 'USSYR' and ussyr_source = 'SYRACUSE_OPENDATA'
+file `./syracuse_tree_info.py`;
+
+
+# Approved community submissions for this city. The shared ingest script emits
+# every city's rows; the `complete where` clause narrows it to USSYR and makes
+# it a disjoint partition, and the `where` clause is what actually filters --
+# `complete where` asserts, it does not promise a predicate.
+root partial datasource ussyr_community_tree_info extends tree_partition (
+    data_source: ussyr_source,
+)
+complete where city = 'USSYR' and ussyr_source = 'COMMUNITY_USSYR'
+file `../community_tree_info.py`
+where city = 'USSYR';
+
+
+# OpenStreetMap trees, read from the staged parquet in GCS rather than Overpass
+# -- extraction is decoupled from refresh. OSM overlaps the municipal inventory
+# by construction; the overlap is resolved by ../tree_dedup.preql. The `where`
+# is the city's CITY_TERRITORY (tools/sync_osm_territory.py keeps it so): a
+# staged extract keeps the territory it was cut with until its next firing.
+root partial datasource ussyr_osm_tree_info extends tree_partition (
+    data_source: ussyr_source,
+)
+complete where city = 'USSYR' and ussyr_source = 'OSM_USSYR'
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/ussyr_osm_staging.parquet`
+where (raw_latitude >= 42.98 and raw_latitude < 43.09 and raw_longitude >= -76.21 and raw_longitude < -76.07);
+
+
+# --- Cross-source dedup and attribute merge --------------------------------
+#
+# Shared: ../tree_dedup.preql groups the three partitions into one cluster per
+# tree and picks each canonical attribute across the cluster; this city's grid
+# cell size and its calibration live in DEDUP_CELL_METRES in shared/ingest.py.
+# The per-city lines are the dbh merge, because Boston imputes it, and the
+# position policy: a city with an Overture lookup imports ../tree_position.preql
+# instead of the two position merges (see that file).
+merge merged_dbh into diameter_at_breast_height;
+merge merged_latitude into latitude;
+merge merged_longitude into longitude;
+
+
+# The published target extends ../tree_dedup.preql's `published_tree_info`:
+# the canonical columns, the prune, and the guard that refuses a build which
+# lost a quarter of the city.  The two `@source_kept` lines are the same guard
+# per bulk source; add one for every municipal or OSM label in the enum
+# (`test_every_city_refuses_a_collapsed_build`).
+partial datasource syracuse_tree_info extends published_tree_info (
+    data_source: ussyr_source,
+    ussyr_published_data_updated_through,
+)
+complete where city = 'USSYR'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ussyr_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/ussyr_tree_info_v{data_version}.parquet`
+freshness by ussyr_published_data_updated_through
+assert @source_kept(tree_id, ussyr_source, 'SYRACUSE_OPENDATA', 0.75)
+assert @source_kept(tree_id, ussyr_source, 'OSM_USSYR', 0.75);

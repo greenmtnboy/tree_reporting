@@ -105,6 +105,12 @@ import usgeg.spokane_tree_info;
 import cawat.waterloo_tree_info;
 import frnte.nantes_tree_info;
 import ussmo.santa_monica_tree_info;
+import caoak.oakville_tree_info;
+import usroc.rochester_tree_info;
+import ussyr.syracuse_tree_info;
+import uslas.las_vegas_tree_info;
+import frbes.brest_tree_info;
+import nlgrq.groningen_tree_info;
 
 # Each city models its originating dataset as its own enum key so Trilogy can
 # prove per-city partition coverage (see core.preql). Merging them here — and
@@ -217,6 +223,12 @@ merge usgeg_source into data_source;
 merge cawat_source into data_source;
 merge frnte_source into data_source;
 merge ussmo_source into data_source;
+merge caoak_source into data_source;
+merge usroc_source into data_source;
+merge ussyr_source into data_source;
+merge uslas_source into data_source;
+merge frbes_source into data_source;
+merge nlgrq_source into data_source;
 
 # The dedup columns (`merged_sources`, `merged_tree_ids`) are
 # the one shared derivation in tree_dedup.preql, computed inside each city's
@@ -338,7 +350,13 @@ usric_published_data_updated_through,
 usgeg_published_data_updated_through,
 cawat_published_data_updated_through,
 frnte_published_data_updated_through,
-ussmo_published_data_updated_through);
+ussmo_published_data_updated_through,
+caoak_published_data_updated_through,
+usroc_published_data_updated_through,
+ussyr_published_data_updated_through,
+uslas_published_data_updated_through,
+frbes_published_data_updated_through,
+nlgrq_published_data_updated_through);
 # --- Merged union datasource ---
 
 datasource tree_info (

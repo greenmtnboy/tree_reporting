@@ -656,6 +656,42 @@ const CITY_DASHBOARD_CONTEXT: Record<
     biome: 'Mediterranean Forests, Woodlands & Scrub',
     realm: 'nearctic',
   },
+  CAOAK: {
+    ecoregionId: 342, // Southern Great Lakes forests
+    usdaZone: 6,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'nearctic',
+  },
+  USROC: {
+    ecoregionId: 334, // Eastern Great Lakes lowland forests
+    usdaZone: 6,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'nearctic',
+  },
+  USSYR: {
+    ecoregionId: 334, // Eastern Great Lakes lowland forests
+    usdaZone: 5,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'nearctic',
+  },
+  USLAS: {
+    ecoregionId: 433, // Mojave desert
+    usdaZone: 9,
+    biome: 'Deserts & Xeric Shrublands',
+    realm: 'nearctic',
+  },
+  FRBES: {
+    ecoregionId: 664, // European Atlantic mixed forests
+    usdaZone: 9,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'palearctic',
+  },
+  NLGRQ: {
+    ecoregionId: 664, // European Atlantic mixed forests
+    usdaZone: 8,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'palearctic',
+  },
 }
 
 function escapeStringLiteral(value: string) {

@@ -11,6 +11,12 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
+  { city: 'Groningen', label: 'TODO: Groningen tree inventory source', url: 'TODO' },
+  { city: 'Brest', label: 'TODO: Brest tree inventory source', url: 'TODO' },
+  { city: 'Las Vegas', label: 'TODO: Las Vegas tree inventory source', url: 'TODO' },
+  { city: 'Syracuse', label: 'TODO: Syracuse tree inventory source', url: 'TODO' },
+  { city: 'Rochester, NY', label: 'TODO: Rochester, NY tree inventory source', url: 'TODO' },
+  { city: 'Oakville', label: 'TODO: Oakville tree inventory source', url: 'TODO' },
   { city: 'Santa Monica', label: 'City of Santa Monica, Public Landscape Division - Trees (ODC-By 1.0)', url: 'https://www.arcgis.com/home/item.html?id=64f5db2cbb224f6d87387999a300b962' },
   { city: 'Nantes', label: 'Nantes Métropole - Patrimoine arboré de Nantes Métropole et de la Ville de Nantes (Licence Ouverte)', url: 'https://data.nantesmetropole.fr/explore/dataset/244400404_patrimoine-arbore-nantes-metropole/' },
   { city: 'Waterloo', label: 'City of Waterloo - Street Tree Inventory (Waterloo Open Data User Licence)', url: 'https://data.waterloo.ca/datasets/2447415303e74bb9acdf0f43c2236b72' },
@@ -147,6 +153,12 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
+  { city: 'Groningen', label: 'TODO: Groningen landmark source' },
+  { city: 'Brest', label: 'TODO: Brest landmark source' },
+  { city: 'Las Vegas', label: 'TODO: Las Vegas landmark source' },
+  { city: 'Syracuse', label: 'TODO: Syracuse landmark source' },
+  { city: 'Rochester, NY', label: 'TODO: Rochester, NY landmark source' },
+  { city: 'Oakville', label: 'TODO: Oakville landmark source' },
   { city: 'Santa Monica', label: 'City of Santa Monica - Historic Landmarks and Structures of Merit (ODC-By 1.0); National Park Service - National Register of Historic Places', url: 'https://www.arcgis.com/home/item.html?id=abe20ceaf96d4f8bbb5774d6aa230563' },
   { city: 'Nantes', label: 'Ministère de la Culture - Immeubles protégés au titre des Monuments Historiques (Licence Ouverte)', url: 'https://www.data.gouv.fr/datasets/immeubles-proteges-au-titre-des-monuments-historiques-2' },
   { city: 'Waterloo', label: 'City of Waterloo - Heritage Buildings, Municipal Heritage Register (Waterloo Open Data User Licence)', url: 'https://data.waterloo.ca/datasets/3822d7856d034f07a14e67e25c6ced4b' },

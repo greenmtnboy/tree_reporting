@@ -10,6 +10,12 @@
  * gets round to naming it here.
  */
 export const DATA_SOURCE_LABELS: Record<string, string> = {
+  GRONINGEN_OPENDATA: 'Groningen Open Data',
+  BREST_OPENDATA: 'Brest Open Data',
+  LAS_VEGAS_OPENDATA: 'Las Vegas Open Data',
+  SYRACUSE_OPENDATA: 'Syracuse Open Data',
+  ROCHESTER_OPENDATA: 'Rochester, NY Open Data',
+  OAKVILLE_OPENDATA: 'Oakville Open Data',
   SANTA_MONICA_OPENDATA: 'Santa Monica Open Data',
   NANTES_OPENDATA: 'Nantes Open Data',
   WATERLOO_OPENDATA: 'Waterloo Open Data',

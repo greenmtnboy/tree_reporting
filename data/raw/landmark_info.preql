@@ -114,6 +114,12 @@ import usgeg.spokane_landmarks;
 import cawat.waterloo_landmarks;
 import frnte.nantes_landmarks;
 import ussmo.santa_monica_landmarks;
+import caoak.oakville_landmarks;
+import usroc.rochester_landmarks;
+import ussyr.syracuse_landmarks;
+import uslas.las_vegas_landmarks;
+import frbes.brest_landmarks;
+import nlgrq.groningen_landmarks;
 
 # The cross-city union is NOT declared here. It lives in
 # `full_landmark_publish.preql`, which reads the parquets these imports publish

@@ -1914,6 +1914,12 @@ def _sanitize_taxon(value: str | None) -> str | None:
 # Keyed by city code so `community_source_for` can derive the community label
 # and so tests can assert the two lists agree.
 MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
+    "NLGRQ": ("GRONINGEN_OPENDATA",),
+    "FRBES": ("BREST_OPENDATA",),
+    "USLAS": ("LAS_VEGAS_OPENDATA",),
+    "USSYR": ("SYRACUSE_OPENDATA",),
+    "USROC": ("ROCHESTER_OPENDATA",),
+    "CAOAK": ("OAKVILLE_OPENDATA",),
     "USSMO": ("SANTA_MONICA_OPENDATA",),
     "FRNTE": ("NANTES_OPENDATA",),
     "CAWAT": ("WATERLOO_OPENDATA",),
@@ -2052,6 +2058,12 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # overlapping rows under one cluster id and publishes only the survivor — see
 # tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
+    "NLGRQ": "OSM_NLGRQ",
+    "FRBES": "OSM_FRBES",
+    "USLAS": "OSM_USLAS",
+    "USSYR": "OSM_USSYR",
+    "USROC": "OSM_USROC",
+    "CAOAK": "OSM_CAOAK",
     "USSMO": "OSM_USSMO",
     "FRNTE": "OSM_FRNTE",
     "CAWAT": "OSM_CAWAT",
@@ -2769,6 +2781,12 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
+    "NLGRQ": (53.1, 53.3, 6.45, 6.8),
+    "FRBES": (48.33, 48.5, -4.65, -4.33),
+    "USLAS": (36.1, 36.35, -115.42, -115.05),
+    "USSYR": (42.98, 43.09, -76.21, -76.07),
+    "USROC": (43.1, 43.27, -77.7, -77.53),
+    "CAOAK": (43.38, 43.55, -79.8, -79.62),
     "USSMO": (33.99, 34.05, -118.52, -118.44),
     "FRNTE": (47.08, 47.35, -1.83, -1.37),
     "CAWAT": (43.43, 43.54, -80.63, -80.47),
@@ -2932,6 +2950,18 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "NLGRQ": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "FRBES": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "USLAS": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "USSYR": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "USROC": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "CAOAK": 10,
     # Calibrated 2026-11-20: 8 m keeps 4.3 true per false at the margin;
     # 10 m drops below 1 (0.80).
     "USSMO": 8,
@@ -3506,6 +3536,12 @@ DEDUP_CELL_METRES: dict[str, int] = {
 Box = tuple[float, float, float, float]
 
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
+    'NLGRQ': ((53.1, 53.3, 6.45, 6.8),),
+    'FRBES': ((48.33, 48.5, -4.65, -4.33),),
+    'USLAS': ((36.1, 36.35, -115.42, -115.05),),
+    'USSYR': ((42.98, 43.09, -76.21, -76.07),),
+    'USROC': ((43.1, 43.27, -77.7, -77.53),),
+    'CAOAK': ((43.38, 43.55, -79.8, -79.62),),
     # Santa Monica sits inside Los Angeles' box: a 0.01-degree latitude staircase drawn from its own inventory's extent; USLAX is cut around it.
     'USSMO': (
         (33.99, 34.0, -118.49, -118.47),
