@@ -5,23 +5,25 @@ root datasource syracuse_landmarks_update_time (
 )
 file `./syracuse_landmarks_probe.py`;
 
-# STUB. Every city needs a landmarks model even if it yields zero rows -- a
-# missing file fails the landmark lane for every city, and the agent has no
-# geographic context for this one.
-#
-# Point the raw datasource at whichever source this city has, in preference
-# order: an official designation registry, the same portal as the trees, an
-# Overpass extract (STAGE it -- do not fetch at refresh time), or a curated CSV
-# geocoded via Nominatim (then add a `landmarks-ussyr` job with NO cron).
-#
-# Both datasources extend ../landmark_common.preql's templates: add the
-# register's own attributes to both, mapped in one and stored in the other.
+# The National Park Service's National Register listings inside the City of
+# Syracuse's boundary (a US federal work), read live -- no Nominatim
+# geocoding, no committed CSV and no staging object.  The City's Landmark
+# Preservation Board list publishes parcels without names and is not read.
+# `lm_type` names the register and `register_number` the NRIS reference number.
 root partial datasource raw_syracuse_landmark_info extends landmark_partition (
+    address: ?address,
+    lm_type: ?lm_type,
+    register_number: ?register_number,
+    year_designated: ?year_designated,
 )
 complete where city = 'USSYR'
 file `./syracuse_landmarks.py`;
 
 partial datasource syracuse_landmark_info extends published_landmark_info (
+    ?address,
+    ?lm_type,
+    ?register_number,
+    ?year_designated,
     ussyr_landmark_data_updated_through,
 )
 complete where city = 'USSYR'

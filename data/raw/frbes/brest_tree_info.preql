@@ -63,7 +63,7 @@ root partial datasource frbes_osm_tree_info extends tree_partition (
 )
 complete where city = 'FRBES' and frbes_source = 'OSM_FRBES'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/frbes_osm_staging.parquet`
-where (raw_latitude >= 48.33 and raw_latitude < 48.5 and raw_longitude >= -4.65 and raw_longitude < -4.33);
+where (raw_latitude >= 48.32 and raw_latitude < 48.48 and raw_longitude >= -4.65 and raw_longitude < -4.31);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

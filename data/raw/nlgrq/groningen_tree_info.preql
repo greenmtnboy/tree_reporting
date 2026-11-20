@@ -63,7 +63,7 @@ root partial datasource nlgrq_osm_tree_info extends tree_partition (
 )
 complete where city = 'NLGRQ' and nlgrq_source = 'OSM_NLGRQ'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/nlgrq_osm_staging.parquet`
-where (raw_latitude >= 53.1 and raw_latitude < 53.3 and raw_longitude >= 6.45 and raw_longitude < 6.8);
+where (raw_latitude >= 53.1 and raw_latitude < 53.32 and raw_longitude >= 6.45 and raw_longitude < 6.8);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

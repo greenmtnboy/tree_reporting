@@ -5,23 +5,26 @@ root datasource groningen_landmarks_update_time (
 )
 file `./groningen_landmarks_probe.py`;
 
-# STUB. Every city needs a landmarks model even if it yields zero rows -- a
-# missing file fails the landmark lane for every city, and the agent has no
-# geographic context for this one.
-#
-# Point the raw datasource at whichever source this city has, in preference
-# order: an official designation registry, the same portal as the trees, an
-# Overpass extract (STAGE it -- do not fetch at refresh time), or a curated CSV
-# geocoded via Nominatim (then add a `landmarks-nlgrq` job with NO cron).
-#
-# Both datasources extend ../landmark_common.preql's templates: add the
-# register's own attributes to both, mapped in one and stored in the other.
+# Groningen's municipal and national monument registers: the city's
+# gemeentelijke monumenten (maps.groningen.nl WFS `Monumenten_gemeente_Groningen`,
+# CC BY 4.0) and RCE's rijksmonumenten (PDOK Protected Sites, CC BY 4.0)
+# inside the municipality's boundary; only monuments the register names (a
+# church, a gasthuis, a bridge) publish, not those known only by an address.
+# See groningen_landmarks.py.  The register's attributes ride along in
+# existing landmark_common properties: the register (category), its number
+# and the address.
 root partial datasource raw_groningen_landmark_info extends landmark_partition (
+    category: ?category,
+    register_number: ?register_number,
+    address: ?address,
 )
 complete where city = 'NLGRQ'
 file `./groningen_landmarks.py`;
 
 partial datasource groningen_landmark_info extends published_landmark_info (
+    ?category,
+    ?register_number,
+    ?address,
     nlgrq_landmark_data_updated_through,
 )
 complete where city = 'NLGRQ'

@@ -3,26 +3,20 @@
 # requires-python = ">=3.13"
 # dependencies = ["pyarrow", "pytrilogy", "requests"]
 # ///
-"""Freshness probe for Syracuse's tree inventory.  STUB -- point it at the portal.
+"""Freshness probe for Syracuse's TreeKeeper inventory.
 
-Mandatory: without it the pipeline re-downloads the whole dataset on every
-tick.  Hit the lightest metadata endpoint the portal exposes:
+The ingest reads TreeKeeper's GeoServer WFS (`syracuseNY_WFS`), which
+publishes no modified-at stamp, so the watermark is the newest
+`InventoryDate` on any site: Forestry staff stamp it when they add or
+re-inspect a site (2026-11-19 when the city was wired; the inventory is
+edited most working days).  A removal alone does not move it, so a deletion
+waits for the next edit -- Somerville's TreeKeeper probe makes the same trade.
 
-    ArcGIS     `shared.platforms.arcgis.layer_last_edit(LAYER)`, or `field_max` for a
-               layer with no editingInfo
-    OpenDataSoft  GET /api/explore/v2.1/catalog/datasets/{id} -> .metas.default.modified
-    CKAN       GET /api/3/action/resource_show?id={id} -> .result.last_modified
-    Socrata    `shared.platforms.socrata.rows_updated_at(DATASET)` -- reads
-               /api/views/{id}.json .rowsUpdatedAt (unix SECONDS, not
-               Esri's milliseconds)
+`InventoryDate` is a bare date (`2026-11-19Z`), read as midnight UTC: a day's
+granularity, so the zone cannot reorder two edits.
 
-Fetch with `get_json_with_retry`, never a bare `requests.get(...).json()`: a
-portal in maintenance answers every path with an HTML holding page and HTTP
-200, and every probe is a root datasource whose exception ends the whole
-refresh for every city.  `emit_freshness` turns an availability failure into
-the epoch so this city sits out the run; a *parse* failure still raises, because
-that means the portal changed its schema and degrading would freeze this city's
-Parquet silently and for ever.
+One feature, sorted descending on the column (`wfs_max_property`).  An outage
+degrades through `get_json_with_retry`; an empty or unreadable column raises.
 """
 
 import sys
@@ -30,13 +24,14 @@ from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from shared.ingest import emit_freshness, get_json_with_retry
-
-METADATA_URL = "TODO: the portal's metadata endpoint"
+sys.path.insert(0, str(Path(__file__).parent))
+from shared.ingest import emit_freshness  # noqa: E402
+from shared.platforms.wfs import wfs_max_property  # noqa: E402
+from syracuse_tree_info import LAYER  # noqa: E402
 
 
 def fetch_modified_at() -> datetime:
-    raise NotImplementedError("TODO: read Syracuse's published-through timestamp")
+    return wfs_max_property(LAYER, "InventoryDate")
 
 
 if __name__ == "__main__":
