@@ -11,8 +11,10 @@ import {
 } from '@firebase/rules-unit-testing'
 import {
   collection,
+  deleteDoc,
   doc,
   getDoc,
+  getDocs,
   increment,
   serverTimestamp,
   setDoc,
@@ -37,6 +39,22 @@ beforeEach(async () => {
 
 const as = (uid: string) => env.authenticatedContext(uid).firestore() as unknown as Firestore
 const anon = () => env.unauthenticatedContext().firestore() as unknown as Firestore
+
+test('public credit must be explicit and can only be managed by its owner', async () => {
+  const own = doc(as('guest'), 'contributorPreferences', 'guest')
+  const other = doc(as('neighbor'), 'contributorPreferences', 'guest')
+  const credit = { shareName: true, publicName: 'Juniper' }
+  await assertFails(setDoc(own, { publicName: 'Juniper' }))
+  await assertFails(setDoc(own, { ...credit, publicName: '   ' }))
+  await assertFails(setDoc(other, credit))
+  await assertSucceeds(setDoc(own, credit))
+  await assertSucceeds(getDoc(own))
+  await assertFails(getDoc(other))
+  await assertFails(getDoc(doc(anon(), 'contributorPreferences', 'guest')))
+  await assertFails(getDocs(collection(as('guest'), 'contributorPreferences')))
+  await assertFails(deleteDoc(other))
+  await assertSucceeds(deleteDoc(own))
+})
 const seed = (fn: (db: Firestore) => Promise<unknown>) =>
   env.withSecurityRulesDisabled((ctx) => fn(ctx.firestore() as unknown as Firestore).then(() => undefined))
 

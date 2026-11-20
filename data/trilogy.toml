@@ -493,6 +493,17 @@ schedule = "0 0 6 * * *"
 timeout_seconds = 1800
 memory_mb = 2048
 
+# Independent of the city data jobs. Only this job needs the private reader.
+[[cloud.job]]
+key = "publish-website-contributors"
+name = "urban-tree-website-contributors"
+entrypoint = "website_contributors.preql"
+operation = "run"
+schedule = "0 15 6 * * *"
+secret_env = ["GOOGLE_HMAC_KEY", "GOOGLE_HMAC_SECRET", "CONTRIBUTOR_FIRESTORE_READER_JSON"]
+timeout_seconds = 900
+memory_mb = 512
+
 # Kew's World Checklist of Vascular Plants as two reference parquets
 # (raw/wcvp_info.preql, shared/wcvp.py): the names and synonymy the species
 # audit reads now that POWO's API refuses scripted requests, and the TDWG

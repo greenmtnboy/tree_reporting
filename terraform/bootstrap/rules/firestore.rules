@@ -10,6 +10,16 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == uid;
     }
 
+    match /contributorPreferences/{uid} {
+      allow get, delete: if isOwner(uid);
+      allow create, update: if isOwner(uid)
+        && request.resource.data.keys().hasOnly(['shareName', 'publicName'])
+        && request.resource.data.shareName == true
+        && request.resource.data.publicName is string
+        && request.resource.data.publicName.size() <= 60
+        && request.resource.data.publicName.matches('.*[^\\s].*');
+    }
+
     function rateLimitPath(uid) {
       return /databases/$(database)/documents/submissionRateLimits/$(uid);
     }

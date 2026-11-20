@@ -46,6 +46,7 @@
             <dt>Account ID</dt>
             <dd><code>{{ user.uid }}</code></dd>
           </dl>
+          <ContributorCredit v-if="db" :key="user.uid" :uid="user.uid" :firestore="db" />
           <p v-if="contributionsError" role="alert">Could not refresh contributions: {{ contributionsError.message }}</p>
           <button class="btn-secondary" :disabled="contributionsLoading" @click="refreshContributions">Refresh contributions</button>
           <p class="total-points">{{ totalPoints }} points</p>
@@ -146,7 +147,7 @@
 
           <h2>What we don't do</h2>
           <ul>
-            <li>We don't sell or share your data.</li>
+            <li>We don't sell your data. Public contributor totals are anonymous unless you choose to share a name.</li>
             <li>We don't email you unless you explicitly contact us first.</li>
           </ul>
         </div>
@@ -159,7 +160,8 @@
 import { evaluateCityBadges } from '../lib/missions'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useAuth } from '../composables/useAuth'
-import { firebaseAvailable } from '../lib/firebase'
+import { db, firebaseAvailable } from '../lib/firebase'
+import ContributorCredit from '../components/ContributorCredit.vue'
 import { useMyContributions } from '../composables/useSubmissions'
 import {
   BADGES,
