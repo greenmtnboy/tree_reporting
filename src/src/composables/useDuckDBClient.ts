@@ -22,6 +22,7 @@ type WorkerMethodMap = {
   setTileQuery: { params: { sql: string | null }; result: void }
   setPublishedTreeIdFilterSql: { params: { sql: string | null }; result: void }
   setColorOverrideSql: { params: { sql: string | null }; result: void }
+  setTreeRule: { params: { rule: { sql: string; color: boolean } | null }; result: void }
   setSpeciesShadeSql: { params: { sql: string | null }; result: void }
   setDbhColors: { params: { enabled: boolean }; result: void }
   setCityContext: { params: { city: string; window?: WindowPolicy | null }; result: void }
@@ -197,6 +198,12 @@ async function setColorOverrideSql(sql: string | null): Promise<void> {
   await rpc('setColorOverrideSql', { sql })
 }
 
+/** The chat's standing rule: SQL over `trees`, asked of every cell as it loads (cityTables.ts `treeRuleRowsSql`). */
+async function setTreeRule(rule: { sql: string; color: boolean } | null): Promise<void> {
+  await ensureInit()
+  await rpc('setTreeRule', { rule })
+}
+
 async function setSpeciesShadeSql(sql: string | null): Promise<void> {
   await ensureInit()
   await rpc('setSpeciesShadeSql', { sql })
@@ -362,6 +369,7 @@ export function useDuckDB() {
     setTileQuery,
     setPublishedTreeIdFilterSql,
     setColorOverrideSql,
+    setTreeRule,
     setSpeciesShadeSql,
     setDbhColors,
     getWorldDirectory,

@@ -28,6 +28,12 @@ import TREE_ROLLUP_SOURCE_MODEL from '../../data/raw/tree_rollup_source.preql?ra
 // class, dot-map cells); see data/raw/tree_summary_grains.preql.
 import TREE_SUMMARY_GRAINS_MODEL from '../../data/raw/tree_summary_grains.preql?raw'
 
+// The trees the map holds, as one datasource over the worker's `trees` view:
+// what a published per-tree rule compiles against (models/map_trees.preql).
+// A source here is only a file the resolver may import; it is in scope only
+// for the rule's own import list (MAP_RULE_IMPORTS).
+import MAP_TREES_MODEL from './models/map_trees.preql?raw'
+
 // Auto-discover all per-city preql files — no changes needed here when adding a city.
 // Matches data/raw/{city}/{city}_tree_info.preql and data/raw/{city}/{city}_landmarks.preql
 const cityTreeModels = import.meta.glob('../../data/raw/*/*_tree_info.preql', { eager: true, query: '?raw' })
@@ -60,6 +66,7 @@ export const ALL_MODEL_SOURCES = [
   { alias: 'tree_height', contents: TREE_HEIGHT_MODEL },
   { alias: 'tree_rollup_source', contents: TREE_ROLLUP_SOURCE_MODEL },
   { alias: 'tree_summary_grains', contents: TREE_SUMMARY_GRAINS_MODEL },
+  { alias: 'map_trees', contents: MAP_TREES_MODEL },
   ...[...Object.entries(cityTreeModels), ...Object.entries(cityLandmarkModels)].map(
     ([path, mod]) => ({ alias: pathToAlias(path), contents: (mod as { default: string }).default })
   ),

@@ -416,3 +416,71 @@ export function colorSql(alias: string, overrideActive: boolean, scheme: BaseCol
   joins.push(`LEFT JOIN ${COLOR_OVERRIDE_TABLE} __co ON ${treeKeySql(`${alias}.tree_id`)} = __co.tree_key`)
   return { join: joins.join('\n  '), expr: `COALESCE(__co.display_color, ${base})` }
 }
+
+/**
+ * The chat's standing rule (useChat.ts publish_results): SQL over `trees`
+ * returning the tree_id of each tree it matches and, when it colours,
+ * an override_color. It is compiled against models/map_trees.preql, whose one
+ * tree datasource is the `trees` view, so it reads no city's file.
+ *
+ * The worker asks it of each cell as the cell loads and keeps the answers in
+ * the two tables the readers already join (the filter's ids and
+ * COLOR_OVERRIDE_TABLE), keyed by tree id. So the rule follows the camera:
+ * a cell loaded in the next city is filtered and coloured like the first,
+ * and a tile or a chunk read costs what a published id list always did.
+ *
+ * `trees` inside the rule is the CTE here, not the view over every cell
+ * held: the rule runs over `scope` alone.
+ */
+export const TREE_RULE_STAGE_TABLE = '__tree_rule_stage'
+
+/** One row per tree of `scope` the rule matches: its key and, with `color`, its colour. */
+export function treeRuleRowsSql(ruleSql: string, scope: string, color: boolean): string {
+  return `WITH ${TREES_VIEW} AS (${treesSelectSql(scope)}
+)
+SELECT ${treeKeySql('tree_id')} AS tree_key,
+  ${color ? 'any_value(CAST(override_color AS VARCHAR))' : 'CAST(NULL AS VARCHAR)'} AS display_color
+FROM (
+${ruleSql.trim().replace(/;+$/, '')}
+) __rule
+WHERE tree_id IS NOT NULL
+GROUP BY 1`
+}
+
+/** The rule's two tables, empty. Replacing them is one statement each, so a reader never finds one missing. */
+export function treeRuleTablesSql(filterTable: string): string[] {
+  return [
+    `CREATE OR REPLACE TEMP TABLE ${filterTable} (tree_key UBIGINT)`,
+    `CREATE OR REPLACE TEMP TABLE ${COLOR_OVERRIDE_TABLE} (tree_key UBIGINT, display_color VARCHAR)`,
+  ]
+}
+
+/**
+ * Ask the rule of `scope` and add its answers: `stage` first, then the rows
+ * the tables do not already hold (a cell dropped and loaded again must not
+ * list a tree twice: the readers join on the key), then `drop`. The stage
+ * is left for the caller to read the colours it met (`colors`).
+ */
+export function treeRuleApplySql(ruleSql: string, scope: string, color: boolean, filterTable: string): { stage: string; add: string[]; colors: string; drop: string } {
+  const fresh = (table: string) => `FROM ${TREE_RULE_STAGE_TABLE} s ANTI JOIN ${table} held USING (tree_key)`
+  return {
+    stage: `CREATE OR REPLACE TEMP TABLE ${TREE_RULE_STAGE_TABLE} AS ${treeRuleRowsSql(ruleSql, scope, color)}`,
+    add: [
+      `INSERT INTO ${filterTable} SELECT s.tree_key ${fresh(filterTable)}`,
+      ...(color ? [`INSERT INTO ${COLOR_OVERRIDE_TABLE} SELECT s.tree_key, s.display_color ${fresh(COLOR_OVERRIDE_TABLE)} WHERE s.display_color IS NOT NULL`] : []),
+    ],
+    colors: `SELECT DISTINCT display_color FROM ${TREE_RULE_STAGE_TABLE} WHERE display_color IS NOT NULL`,
+    drop: `DROP TABLE IF EXISTS ${TREE_RULE_STAGE_TABLE}`,
+  }
+}
+
+/** Drop the answers for the trees of `scope`: its cells are about to be dropped. */
+export function treeRuleForgetSql(scope: string, filterTable: string): string[] {
+  return [filterTable, COLOR_OVERRIDE_TABLE].map((table) =>
+    `DELETE FROM ${table} WHERE tree_key IN (SELECT ${treeKeySql('tree_id')} FROM ${scope} gone)`)
+}
+
+/** The `#rrggbb` literals in a rule's text: the colours a CASE can answer with, known before any row is read. */
+export function hexLiterals(sql: string): string[] {
+  return [...new Set([...sql.matchAll(/'(#[0-9a-fA-F]{6})'/g)].map((match) => match[1]))]
+}

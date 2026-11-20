@@ -1,0 +1,32 @@
+# The trees the map holds, as the map-screen chat's publish_results resolves
+# them: one datasource over the worker's `trees` view (workers/cityTables.ts
+# `treesSelectSql`), which is the world's geo blocks under the camera, every
+# inventory's rows in one shape.
+#
+# A query compiled against this file is a rule over a tree row, not a read of
+# a city's parquet: the worker runs it over each cell of trees as the cell
+# loads, pointing `trees` at that cell, so a published filter or colouring
+# follows the camera into the next city (docs/SEAMLESS_WORLD.md). That is why
+# this file lives with the app and not under data/raw: nothing builds it, and
+# it must never be in scope beside `tree_info`, whose per-city parquets are a
+# second source for the same concepts (AGENTS.md: the frontend's model bundle).
+#
+# The columns are the ones the view has. A concept a block does not carry
+# (tree_name, significance, borough) has no source here and fails to compile,
+# which is the right answer: the map cannot evaluate it per cell.
+import tree_common;
+
+datasource map_trees (
+    tree_id,
+    city,
+    species,
+    ?cultivar,
+    ?plant_date,
+    ?crown_width_m,
+    ?latitude,
+    ?longitude,
+    ?diameter_at_breast_height,
+    ?submission_photo_url,
+)
+grain (tree_id)
+address trees;

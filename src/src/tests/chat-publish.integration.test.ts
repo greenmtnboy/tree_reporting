@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   duckQuery: vi.fn(),
   publishMapTreeIdFilterSql: vi.fn(),
+  publishMapTreeRule: vi.fn(),
   clearMapTreeIdFilter: vi.fn(),
   publishColorOverride: vi.fn(),
   resolveQuery: vi.fn(),
@@ -57,6 +58,7 @@ vi.mock('../composables/useMapData', async () => {
       selectedCity: ref('USBOS'),
       userLocation: ref(null),
       publishMapTreeIdFilterSql: mocks.publishMapTreeIdFilterSql,
+      publishMapTreeRule: mocks.publishMapTreeRule,
       clearMapTreeIdFilter: mocks.clearMapTreeIdFilter,
       publishColorOverride: mocks.publishColorOverride,
     }),
@@ -145,106 +147,165 @@ describe('chat publish_results integration', () => {
     Object.keys(mocks.connections).forEach((key) => delete mocks.connections[key])
   })
 
-  it('applies resolver output parameters before probing and publishing map SQL', async () => {
+  /** One turn in which the model calls `name` with `input`, then returns. */
+  async function callTool(name: string, input: Record<string, unknown>) {
     let completionCalls = 0
-
     mocks.generateCompletion.mockImplementation(async () => {
-      if (completionCalls === 0) {
-        completionCalls += 1
-        return {
-          text: 'Publishing highlighted trees.',
-          usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
-          toolCalls: [
-            {
-              id: 'publish_1',
-              name: 'publish_results',
-              input: {
-                query: `WHERE city = 'USBOS' AND species LIKE 'Gleditsia triacanthos%'
-SELECT
-  tree_id,
-  :override_color AS override_color;`,
-                color_labels: [
-                  {
-                    label: 'Honey Locust (Gleditsia triacanthos)',
-                    color: '#DAA520',
-                  },
-                ],
-              },
-            },
-          ],
-        }
-      }
-
-      return {
-        text: 'Done.',
-        usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
-        toolCalls: [
-          {
-            id: 'return_1',
-            name: 'return_to_user',
-            input: { message: 'Published the highlighted trees.' },
-          },
-        ],
-      }
+      completionCalls += 1
+      return completionCalls === 1
+        ? {
+            text: 'Working.',
+            usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+            toolCalls: [{ id: 'tool_1', name, input }],
+          }
+        : {
+            text: 'Done.',
+            usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+            toolCalls: [{ id: 'return_1', name: 'return_to_user', input: { message: 'Finished.' } }],
+          }
     })
+    const { useChat } = await import('../composables/useChat')
+    const chat = useChat()
+    await chat.sendMessage('Do it')
+    // What the model was shown after the tool ran: its result is in there.
+    return { chat, afterTool: JSON.stringify(mocks.generateCompletion.mock.calls[1] ?? []) }
+  }
 
-    mocks.resolveQuery.mockResolvedValue({
-      data: {
-        generated_sql: `SELECT
-  tree_id,
+  const HONEY_LOCUST_SQL = `SELECT
+  "map_trees"."tree_id" as "tree_id",
   :override_color AS override_color
-FROM trees
-WHERE city = 'USBOS' AND species LIKE 'Gleditsia triacanthos%'`,
-        parameters: {
-          override_color: '#DAA520',
-        },
-        error: null,
-      },
-    })
+FROM "trees" as "map_trees"
+WHERE "map_trees"."species" LIKE 'Gleditsia triacanthos%'`
 
+  it('publishes a per-tree query as a rule over the map\'s own rows, with its parameters applied', async () => {
+    mocks.resolveQuery.mockResolvedValue({
+      data: { generated_sql: `${HONEY_LOCUST_SQL};`, parameters: { override_color: '#DAA520' }, error: null },
+    })
     mocks.duckQuery.mockImplementation(async (sql: string) => {
-      if (sql.includes('__probe')) {
-        return { columns: ['tree_id', 'override_color'], rows: [] }
-      }
-      if (sql.includes('__count_ids')) {
-        return { columns: ['cnt', 'colored'], rows: [{ cnt: 1, colored: 1 }] }
-      }
+      if (sql.includes('__probe')) return { columns: ['tree_id', 'override_color'], rows: [] }
+      if (sql.includes('__rule_count')) return { columns: ['cnt', 'colored', 'held'], rows: [{ cnt: 12, colored: 12, held: 4000 }] }
       throw new Error(`Unexpected SQL: ${sql}`)
     })
 
-    const { useChat } = await import('../composables/useChat')
-    const chat = useChat()
+    const { chat, afterTool } = await callTool('publish_results', {
+      query: `WHERE species LIKE 'Gleditsia triacanthos%'
+SELECT
+  tree_id,
+  :override_color AS override_color;`,
+      color_labels: [{ label: 'Honey Locust (Gleditsia triacanthos)', color: '#DAA520' }],
+    })
 
-    await chat.sendMessage('Highlight honey locusts in Boston')
-
+    // The rule compiles against the map's `trees`, not a city's parquet:
+    // that is what lets the worker ask it of each cell it loads. That the
+    // import list resolves is `dashboard-pushdown.test.ts`, against the
+    // live service; this pins the call site to it.
+    const { MAP_RULE_IMPORTS } = await import('../composables/chatModelImports')
     expect(mocks.resolveQuery).toHaveBeenCalledTimes(1)
-    // A probe for the columns and one counting pass, which also evaluates
-    // every colour. No result rows come back to this thread: the map's
-    // worker builds the ids and colours into its own tables.
-    expect(mocks.duckQuery).toHaveBeenCalledTimes(2)
-    expect(mocks.duckQuery.mock.calls[1][0]).toContain('COUNT(CAST(override_color AS VARCHAR))')
+    const [, , , , imports] = mocks.resolveQuery.mock.calls[0] as unknown[]
+    expect(imports).toEqual(MAP_RULE_IMPORTS)
 
-    // The resolver is mocked here, so this pins the call site to the shared
-    // import list and nothing more; that the list itself resolves a tree query
-    // is `dashboard-pushdown.test.ts`, which compiles against the live service.
-    // Between the two: the map chat once sent `[tree_enrichment]` alone, which
-    // reaches no tree datasource at all and 422s on every query.
+    // A probe for the columns and one count over the trees held now, which
+    // also evaluates every colour. No rows come back to this thread.
+    expect(mocks.duckQuery).toHaveBeenCalledTimes(2)
+    for (const [sql] of mocks.duckQuery.mock.calls as Array<[string]>) {
+      expect(sql).not.toContain(':override_color')
+      expect(sql).not.toContain(';')
+    }
+
+    expect(mocks.publishMapTreeRule).toHaveBeenCalledWith(
+      expect.stringContaining("'#DAA520' AS override_color"),
+      true,
+      { '#DAA520': 'Honey Locust (Gleditsia triacanthos)' },
+    )
+    expect(mocks.publishMapTreeIdFilterSql).not.toHaveBeenCalled()
+    expect(mocks.publishColorOverride).not.toHaveBeenCalled()
+    expect(mocks.clearMapTreeIdFilter).not.toHaveBeenCalled()
+    expect(afterTool).toContain('12 of the 4000 trees loaded around the camera match')
+    expect(chat.messages.value.some((message) => message.content === 'Finished.')).toBe(true)
+  })
+
+  it('keeps a rule that matches nothing here: the next city may have matches', async () => {
+    mocks.resolveQuery.mockResolvedValue({
+      data: { generated_sql: `SELECT "map_trees"."tree_id" as "tree_id" FROM "trees" as "map_trees" WHERE "map_trees"."species" = 'Adansonia digitata'`, parameters: null, error: null },
+    })
+    mocks.duckQuery.mockImplementation(async (sql: string) => sql.includes('__probe')
+      ? { columns: ['tree_id'], rows: [] }
+      : { columns: ['cnt', 'held'], rows: [{ cnt: 0, held: 4000 }] })
+
+    const { afterTool } = await callTool('publish_results', { query: "select tree_id where species = 'Adansonia digitata';" })
+
+    expect(mocks.publishMapTreeRule).toHaveBeenCalledWith(expect.stringContaining('Adansonia'), false, null)
+    expect(mocks.clearMapTreeIdFilter).not.toHaveBeenCalled()
+    expect(afterTool).toContain('None of the trees loaded here match')
+  })
+
+  it('names what a rule may use when it asks for a column the tiles do not carry', async () => {
+    mocks.resolveQuery.mockResolvedValue({
+      data: { generated_sql: '', parameters: null, error: 'Discovery error: {tree_id}; {tree_name}' },
+    })
+
+    const { afterTool } = await callTool('publish_results', { query: 'select tree_id where tree_name is not null;' })
+
+    expect(mocks.duckQuery).not.toHaveBeenCalled()
+    expect(mocks.publishMapTreeRule).not.toHaveBeenCalled()
+    expect(afterTool).toContain('Discovery error')
+    expect(afterTool).toContain('diameter_at_breast_height')
+  })
+
+  it('runs a ranked query once, against the published files, when it says where', async () => {
+    mocks.resolveQuery.mockResolvedValue({
+      data: { generated_sql: `SELECT tree_id FROM read_parquet('https://example.test/usbos.parquet') ORDER BY dbh DESC LIMIT 50`, parameters: null, error: null },
+    })
+    mocks.duckQuery.mockImplementation(async (sql: string) => sql.includes('__probe')
+      ? { columns: ['tree_id'], rows: [] }
+      : { columns: ['cnt'], rows: [{ cnt: 50 }] })
+
+    const { afterTool } = await callTool('publish_results', {
+      query: "select tree_id, --diameter_at_breast_height where city = 'USBOS' order by diameter_at_breast_height desc limit 50;",
+    })
+
     const { MAP_CHAT_IMPORTS } = await import('../composables/chatModelImports')
     const [, , , , imports] = mocks.resolveQuery.mock.calls[0] as unknown[]
     expect(imports).toEqual(MAP_CHAT_IMPORTS)
+    expect(mocks.publishMapTreeIdFilterSql).toHaveBeenCalledWith(expect.stringContaining('usbos.parquet'))
+    expect(mocks.publishColorOverride).toHaveBeenCalledWith(null, null)
+    expect(mocks.publishMapTreeRule).not.toHaveBeenCalled()
+    expect(afterTool).toContain('Published 50 tree_ids')
+  })
 
-    for (const [sql] of mocks.duckQuery.mock.calls as Array<[string]>) {
-      expect(sql).not.toContain(':override_color')
-    }
+  it('refuses a ranked query with no bounds, and says how to bound it', async () => {
+    const { afterTool } = await callTool('publish_results', {
+      query: 'select tree_id, --diameter_at_breast_height order by diameter_at_breast_height desc limit 50;',
+    })
 
-    expect(mocks.publishColorOverride).toHaveBeenCalledWith(
-      expect.stringContaining("'#DAA520' AS override_color"),
-      { '#DAA520': 'Honey Locust (Gleditsia triacanthos)' },
-    )
-    expect(mocks.publishMapTreeIdFilterSql).toHaveBeenCalledWith(
-      expect.stringContaining("'#DAA520' AS override_color"),
-    )
-    expect(mocks.clearMapTreeIdFilter).not.toHaveBeenCalled()
-    expect(chat.messages.value.some((message) => message.content === 'Published the highlighted trees.')).toBe(true)
+    expect(mocks.resolveQuery).not.toHaveBeenCalled()
+    expect(mocks.duckQuery).not.toHaveBeenCalled()
+    expect(mocks.publishMapTreeIdFilterSql).not.toHaveBeenCalled()
+    expect(mocks.publishMapTreeRule).not.toHaveBeenCalled()
+    expect(afterTool).toContain('publish_results was not run: it has a LIMIT')
+    expect(afterTool).toContain('lookup_landmark')
+  })
+
+  it('refuses an unbounded run_query on the map, and runs a bounded one', async () => {
+    const unbounded = await callTool('run_query', { query: 'select species, count(tree_id) as n order by n desc limit 10;' })
+    expect(mocks.resolveQuery).not.toHaveBeenCalled()
+    expect(mocks.duckQuery).not.toHaveBeenCalled()
+    expect(unbounded.afterTool).toContain('run_query was not run')
+
+    vi.resetModules()
+    mocks.generateCompletion.mockReset()
+    mocks.resolveQuery.mockResolvedValue({ data: { generated_sql: 'SELECT 1 AS n', parameters: null, error: null } })
+    mocks.duckQuery.mockResolvedValue({ columns: ['n'], rows: [{ n: 1 }], totalRows: 1 })
+    const bounded = await callTool('run_query', {
+      query: 'select count(tree_id) as n where latitude between 42.3 and 42.4 and longitude between -71.1 and -71.0;',
+    })
+    expect(mocks.resolveQuery).toHaveBeenCalledTimes(1)
+    expect(bounded.afterTool).toContain('totalRows')
+  })
+
+  it('clears whatever was published', async () => {
+    const { afterTool } = await callTool('clear_published_results', {})
+    expect(mocks.clearMapTreeIdFilter).toHaveBeenCalledTimes(1)
+    expect(afterTool).toContain('The map shows every tree')
   })
 })

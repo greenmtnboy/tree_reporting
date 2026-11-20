@@ -5,7 +5,6 @@ import { attachToolOutputs, toToolCallRecords } from '../lib/chatToolRecords'
 import {
   buildCustomTrilogyPrompt,
   runToolLoop,
-  RETURN_TO_USER_TOOL,
 } from '@trilogy-data/trilogy-studio-components/llm'
 import type {
   LLMAdapter,
@@ -19,7 +18,7 @@ import { useLandmarkData } from './useLandmarkData'
 import { useMapData, CITY_CONFIG } from './useMapData'
 import type { CityCode } from './useMapData'
 import { ALL_MODEL_SOURCES } from '../trilogyModels'
-import { MAP_CHAT_IMPORTS } from './chatModelImports'
+import { MAP_CHAT_IMPORTS, MAP_RULE_IMPORTS, MAP_RULE_TREE_CONCEPTS } from './chatModelImports'
 import { useTrilogyRuntime } from './useTrilogyRuntime'
 import { router } from '../router'
 import {
@@ -29,10 +28,12 @@ import {
 } from './chatToolConfig'
 import {
   createSafeToolExecutor as wrapSafeToolExecutor,
+  describeToolError as describeToolErrorHelper,
   safeJsonStringify as safeJsonStringifyHelper,
   toJsonSafeRows as toJsonSafeRowsHelper,
 } from './chatToolExecution'
 import { applySqlParameters, type SqlParameterMap } from './sqlParameters'
+import { BOUNDS_HELP, queryBounds, ruleBlocker, unboundedQueryError } from '../lib/chatQueryScope'
 import { useSummaryFilters, SUMMARY_FILTER_FIELDS, type SummaryFilterField } from './useSummaryFilters'
 import { useSummaryDashboardExecution } from './useSummaryDashboardExecution'
 import {
@@ -53,101 +54,6 @@ const API_KEY_STORAGE = 'sf_trees_api_key'
 const API_TYPE_STORAGE = 'sf_trees_provider_type'
 const MAX_LOOPS = 10
 const LLM_CONNECTION = 'sf-trees'
-
-// Default models per provider — used when first creating the connection so
-// generateCompletion works immediately without waiting for reset() to finish.
-const _TOOLS = [
-  {
-    name: 'run_query',
-    description:
-      'Execute a Trilogy against the trees dataset. Write a SELECT statement using the available concepts — no FROM clause needed; Trilogy resolves the source automatically. Returns up to 100 JSON rows and total count. Use this to filter, aggregate, or explore the dataset. Limit results to 500 rows max unless the user specifically needs more.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        query: { type: 'string', description: 'The Trilogy SELECT statement to execute' },
-      },
-      required: ['query'],
-    },
-  },
-  {
-    name: 'publish_results',
-    description:
-      'Takes a Trilogy SELECT query that returns tree_id values for the trees to display on the map. Compiles and executes the query, persists those IDs as the active map filter, and applies DB-side filtering across map tiles. Use this after the user asks to show/highlight a subset of trees. To color trees, also SELECT an override_color column in the query (a hex color string computed with a CASE/IF expression — all coloring logic must be expressed in Trilogy so it is materialized before reaching the map). Provide color_labels to add a legend. Example: SELECT tree_id, case when diameter_at_breast_height >= 20 then \'#FF69B4\' else \'#4169E1\' end as override_color WHERE ...',
-    input_schema: {
-      type: 'object',
-      properties: {
-        query: {
-          type: 'string',
-          description: 'Trilogy SELECT returning tree_id. Optionally include override_color (hex string) for per-tree coloring — compute it inline with a CASE/IF expression.',
-        },
-        color_labels: {
-          type: 'array',
-          description: 'List of {color, label} pairs mapping each hex color used in override_color to a legend label shown on the map. Example: [{"color": "#FF69B4", "label": "DBH ≥ 20\\""}, {"color": "#4169E1", "label": "DBH < 20\\""}]',
-          items: {
-            type: 'object',
-            properties: {
-              color: { type: 'string', description: 'Hex color string, e.g. "#FF69B4"' },
-              label: { type: 'string', description: 'Legend label for this color' },
-            },
-            required: ['color', 'label'],
-          },
-        },
-      },
-      required: ['query'],
-    },
-  },
-  {
-    name: 'navigate',
-    description:
-      'Fly the map camera to one or more locations. For a single location, provide latitude and longitude. For a tour of multiple locations, provide a "locations" array — the camera will visit each in sequence with a brief pause between stops.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        latitude: { type: 'number', description: 'Latitude for a single location' },
-        longitude: { type: 'number', description: 'Longitude for a single location' },
-        zoom: { type: 'number', description: 'Zoom level (default 16)' },
-        locations: {
-          type: 'array',
-          description: 'Array of locations to tour in sequence',
-          items: {
-            type: 'object',
-            properties: {
-              latitude: { type: 'number' },
-              longitude: { type: 'number' },
-              zoom: { type: 'number' },
-            },
-            required: ['latitude', 'longitude'],
-          },
-        },
-      },
-    },
-  },
-  {
-    name: 'lookup_landmark',
-    description:
-      'Search the landmarks dataset for the active city by name (fuzzy match). Returns the landmark name, latitude, and longitude. Use this when the user mentions a place name to find its coordinates.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        name: { type: 'string', description: 'Landmark name to search for (partial match)' },
-      },
-      required: ['name'],
-    },
-  },
-  {
-    name: 'send_user_message',
-    description:
-      'Send a message to the user immediately, while continuing to work. Use this to share partial results, progress updates, or context before your final answer. After calling this, keep using other tools as needed, then call return_to_user when fully done.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        message: { type: 'string', description: 'The message to display to the user right now' },
-      },
-      required: ['message'],
-    },
-  },
-  RETURN_TO_USER_TOOL,
-]
 
 const SUMMARY_INSPECTABLE_CHARTS = [...SUMMARY_KPI_CHARTS, ...SUMMARY_CHARTS]
 
@@ -199,11 +105,17 @@ function buildSystemPromptForCity(city: CityCode, userLoc?: { lat: number; lng: 
   return buildCustomTrilogyPrompt(
     ({ rulesInput, aggFunctions, functions, datatypes }) => `You are an assistant for the Tree Explorer map application. You help users explore cities' urban forest datasets of 100k+ trees and visualize the results. A default map is loaded with coloring by tree form. Cities supported include ${_cityNames}.${userLocStr}
 
-ACTIVE CITY: ${cityName} (city code: ${city}). All queries must filter with WHERE city = '${city}' unless the user explicitly asks about another city.
+ACTIVE CITY: ${cityName} (city code: ${city}): the city under the map's camera. The map is one world of trees and the user can pan or fly into any other city, so "here" means ${cityName} unless they say otherwise.
 
 You have access to tools for querying the tree dataset, displaying query results on the map, navigating the map camera, and looking up landmarks for the active city.
 
 When users ask about trees, write Trilogy SELECT queries using the available concepts. When they want to visualize results on the map, use publish_results with a query that returns tree_id values and optional color map. The website and map are dark themed, so color appropriately. When they mention locations, use lookup_landmark to find coordinates, then navigate there.
+
+SCOPING QUERIES:
+- run_query reads the published inventories, so it must be bounded or it is rejected. ${BOUNDS_HELP} Use city = '${city}' unless the user asks about another city or a place.
+- publish_results takes a per-tree rule: SELECT tree_id WHERE <conditions on the tree and its species>, with no ORDER BY, LIMIT or aggregate. The map applies the rule to every tile of trees it loads, so "show only oaks" keeps showing only oaks when the user moves to another city. Do not add a city filter to a rule unless the user wants only that city's trees. A rule can use: tree_id, city, species, cultivar, plant_date, crown_width_m, latitude, longitude, diameter_at_breast_height and the species-level enrichment concepts.
+- A publish_results query that ranks, limits or aggregates ("the 50 largest trees") cannot be applied tile by tile. It is run once and must be bounded the same way as run_query, or it is rejected.
+- clear_published_results removes the published filter and colours.
 
 AVAILABLE CONCEPTS:
 - tree_id (string) — unique identifier
@@ -226,7 +138,7 @@ COMMON FUNCTIONS: ${functions.join(', ')}
 VALID DATA TYPES: ${datatypes.join(', ')}
 
 IMPORTANT GUIDELINES:
-1. Use a reasonable LIMIT (e.g., 100–500) for exploratory run_query calls. For publish_results tree_id filters, do not add restrictive LIMIT unless the user explicitly asks for a capped subset.
+1. Use a reasonable LIMIT (e.g., 100–500) for exploratory run_query calls. For publish_results, do not add a LIMIT unless the user explicitly asks for a capped subset: a LIMIT turns a rule that follows the map into a one-off bounded answer.
 2. For publish_results, include tree_id in the SELECT. To color trees, also SELECT override_color (a hex string) computed inline: SELECT tree_id, case when diameter_at_breast_height >= 20 then '#FF69B4' else '#4169E1' end as override_color WHERE ... All color logic must live in Trilogy — do not use color_field or color_mapping. Provide color_labels to label the legend: {"#FF69B4": "DBH ≥ 20", "#4169E1": "DBH < 20"}.
 3. If a query fails, explain the error and try a corrected version.
 4. Always finish by calling return_to_user with your complete response. Never return a plain text reply — use return_to_user to signal you are done.
@@ -561,7 +473,7 @@ export function useChat() {
   const { query: duckQuery } = useDuckDB()
   const { flyTo } = useFlyTo()
   const { landmarks } = useLandmarkData()
-  const { selectedCity, userLocation, publishMapTreeIdFilterSql, clearMapTreeIdFilter, publishColorOverride } = useMapData()
+  const { selectedCity, userLocation, publishMapTreeIdFilterSql, publishMapTreeRule, clearMapTreeIdFilter, publishColorOverride } = useMapData()
   const { crossFilters, applyValuesForField, clearFields, summaryFilterPromptState } = useSummaryFilters()
   const {
     initialize: initializeSummaryDashboard,
@@ -622,13 +534,16 @@ export function useChat() {
     }
   }
 
-  async function compilePreQL(query: string): Promise<{ sql: string; parameters: SqlParameterMap | null }> {
+  async function compilePreQL(
+    query: string,
+    imports: Array<{ name: string; alias: string }> = MAP_CHAT_IMPORTS,
+  ): Promise<{ sql: string; parameters: SqlParameterMap | null }> {
     const response = await trilogy.resolver.resolve_query(
       query,
       'duckdb',
       'preql',
       ALL_MODEL_SOURCES,
-      MAP_CHAT_IMPORTS,
+      imports,
     )
     if (response.data.error) {
       throw new Error(`Trilogy compile error: ${response.data.error}`)
@@ -667,6 +582,56 @@ export function useChat() {
     cancelPendingNavigationTimers()
   }
 
+  /**
+   * Publish a per-tree rule: compiled against the map's own rows
+   * (MAP_RULE_IMPORTS), counted over the trees held now so a runtime error
+   * comes back for the agent to fix, then handed to the map, whose worker
+   * asks it of every cell it loads from here on.
+   */
+  async function publishTreeRule(
+    query: string,
+    colorLabels: Record<string, string> | null,
+  ): Promise<{ success: boolean; message?: string; error?: string }> {
+    let compiled: { sql: string; parameters: SqlParameterMap | null }
+    try {
+      compiled = await compilePreQL(query, MAP_RULE_IMPORTS)
+    } catch (error) {
+      return {
+        success: false,
+        error: `${describeToolErrorHelper(error)} A per-tree rule can use only the columns the map's tiles carry (${MAP_RULE_TREE_CONCEPTS.join(', ')}) and the species-level enrichment concepts.`,
+      }
+    }
+    const sql = applySqlParameters(compiled.sql, compiled.parameters).trim().replace(/;+$/, '')
+    const { columns } = await duckQuery(`SELECT * FROM (${sql}) AS __probe LIMIT 0`)
+    if (!columns.includes('tree_id')) {
+      return { success: false, error: 'publish_results was not run: the query must SELECT tree_id.' }
+    }
+    const hasColor = columns.includes('override_color')
+    const { rows } = await duckQuery(`
+SELECT
+  COUNT(tree_id) AS cnt${hasColor ? `,
+  COUNT(CAST(override_color AS VARCHAR)) AS colored` : ''},
+  (SELECT COUNT(*) FROM trees) AS held
+FROM (
+${sql}
+) AS __rule_count`)
+    const count = Number(rows[0]?.cnt ?? 0)
+    const held = Number(rows[0]?.held ?? 0)
+
+    publishMapTreeRule(sql, hasColor, hasColor ? colorLabels : null)
+    const colorNote = hasColor ? ' with per-tree coloring' : ''
+    const legendNote =
+      hasColor && !colorLabels ? ' Warning: no color_labels provided so the legend will be empty.' : ''
+    const emptyNote =
+      count > 0
+        ? ''
+        : ' None of the trees loaded here match, so the map is empty until the user moves somewhere that has matches; if that is not what was asked for, fix the query or call clear_published_results.'
+    return {
+      success: true,
+      message: `Published as a rule${colorNote}: the map applies it to every tile of trees it loads, so it follows the user to other places and cities. ${count} of the ${held} trees loaded around the camera match.${emptyNote}${legendNote}`,
+    }
+  }
+
   async function executeTool(
     name: string,
     input: Record<string, any>,
@@ -695,6 +660,9 @@ export function useChat() {
               summaryQueryExecutionService,
             )
           }
+          // The map holds the ground under the camera, not a city: a read of
+          // the published files has to say which ground it is about.
+          if (!queryBounds(query)) return { success: false, error: unboundedQueryError('run_query') }
           const compiled = await compilePreQL(query)
           const sql = applySqlParameters(compiled.sql, compiled.parameters)
           // The query reads the whole city's file, not the phone's window;
@@ -758,6 +726,18 @@ export function useChat() {
             console.log('[publish_results] no color_labels provided')
           }
           // --- end validation ---
+
+          // A per-tree rule is asked of every cell the map loads, so it needs
+          // no bounds and follows the camera. Anything else is one answer,
+          // read once from the published files, and has to say where.
+          const blocker = ruleBlocker(query)
+          if (!blocker) return publishTreeRule(query, normalizedColorLabels)
+          if (!queryBounds(query)) {
+            return {
+              success: false,
+              error: `publish_results was not run: ${blocker}, so the map cannot apply the query to each tile of trees as it loads, and the query has no bounds to run it once over. Either make it a per-tree rule (SELECT tree_id WHERE ..., with no ORDER BY, LIMIT or aggregate), which then follows the map everywhere, or bound it. ${BOUNDS_HELP}`,
+            }
+          }
 
           const compiled = await compilePreQL(query)
           const sql = applySqlParameters(compiled.sql, compiled.parameters)
@@ -823,8 +803,12 @@ WHERE tree_id IS NOT NULL AND override_color IS NOT NULL
               : ''
           return {
             success: true,
-            message: `Published ${count} tree_ids to the map filter${colorNote}.${legendNote}`,
+            message: `Published ${count} tree_ids to the map filter${colorNote}, as one answer for the bounds in the query: it does not extend to trees elsewhere.${legendNote}`,
           }
+        }
+        case 'clear_published_results': {
+          clearMapTreeIdFilter()
+          return { success: true, message: 'Cleared the published filter and colours. The map shows every tree.' }
         }
         case 'navigate': {
           cancelPendingNavigationTimers()

@@ -28,3 +28,22 @@ export const MAP_CHAT_IMPORTS: Array<{ name: string; alias: string }> = [
   { name: 'tree_enrichment', alias: '' },
   { name: 'tree_info', alias: '' },
 ]
+
+/**
+ * What a published per-tree rule resolves against: the species dimension and
+ * `map_trees`, whose one tree datasource is the worker's `trees` view
+ * (models/map_trees.preql). Not `tree_info`: a rule must compile to SQL over
+ * the rows the map holds, so the worker can ask it of each cell as it loads,
+ * and with a city's parquet also in scope the planner would be free to read
+ * that instead.
+ */
+export const MAP_RULE_IMPORTS: Array<{ name: string; alias: string }> = [
+  { name: 'tree_enrichment', alias: '' },
+  { name: 'map_trees', alias: '' },
+]
+
+/** The concepts `map_trees` has a column for, for the error that names what a rule may use. */
+export const MAP_RULE_TREE_CONCEPTS = [
+  'tree_id', 'city', 'species', 'cultivar', 'plant_date', 'crown_width_m',
+  'latitude', 'longitude', 'diameter_at_breast_height', 'submission_photo_url',
+]

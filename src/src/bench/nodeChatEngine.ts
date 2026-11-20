@@ -34,7 +34,7 @@ import {
 } from '@trilogy-data/trilogy-studio-components/llm'
 import { applySqlParameters } from '../composables/sqlParameters'
 import { normalizeValue } from '../workers/normalizeValue'
-import { cityLandmarkParquetUrl } from '../workers/parquetUrls'
+import { cityLandmarkParquetUrl, cityTreeParquetUrl } from '../workers/parquetUrls'
 import type { Landmark } from '../types'
 
 // Node tries IPv6 before IPv4 by default; prefer IPv4 so an unroutable IPv6
@@ -94,6 +94,20 @@ export class NodeTreeDatabase {
       data,
       toJSON: () => ({ headers: Object.fromEntries(headers), data }),
     }
+  }
+
+  /**
+   * The worker's `trees` view, which a published per-tree rule is compiled
+   * to read (models/map_trees.preql). The worker holds the ground under the
+   * camera; here it is one city's published trees, in the view's columns.
+   */
+  async holdCity(city: string): Promise<void> {
+    const url = cityTreeParquetUrl(city)
+    if (!url) return
+    await this.connection.run(`CREATE OR REPLACE VIEW trees AS
+      SELECT tree_id, city, data_source, plant_date, species, cultivar, crown_width_m,
+        latitude, longitude, diameter_at_breast_height, submission_photo_url
+      FROM read_parquet('${url}')`)
   }
 
   /** The worker's `landmarks` table for one city, shaped as `useLandmarkData` shapes it. */

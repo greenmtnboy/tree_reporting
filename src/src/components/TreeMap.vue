@@ -56,17 +56,22 @@
       <span v-else>Only matching trees are shown.</span>
       <button type="button" class="legend-clear" @click="clearUrlFilters">Show all trees</button>
     </div>
+    <div v-if="chatScope" class="legend-scope" data-testid="chat-scope" aria-live="polite">
+      <strong>Chat filter</strong>
+      <span>{{ chatScope === 'rule' ? 'Only matching trees are shown, wherever the map goes.' : 'Only the trees the chat picked are shown.' }}</span>
+      <button type="button" class="legend-clear" @click="clearMapTreeIdFilter">Show all trees</button>
+    </div>
     <label class="legend-color-control">
       Color by
-      <select aria-label="Color trees by" :value="colorOverrideSql ? 'custom' : mapColorBy" @change="changeMapColor">
-        <option v-if="colorOverrideSql" value="custom" disabled>Custom colors</option>
+      <select aria-label="Color trees by" :value="customColors ? 'custom' : mapColorBy" @change="changeMapColor">
+        <option v-if="customColors" value="custom" disabled>Custom colors</option>
         <option value="dbh">Trunk diameter (DBH)</option>
         <option value="tree_form">Tree form</option>
         <option value="foliage">Leaf shade (seasonal)</option>
       </select>
     </label>
-    <strong v-if="mapColorBy === 'dbh' && !colorOverrideSql" class="legend-heading">Trunk diameter · inches (approx. cm)</strong>
-    <strong v-if="mapColorBy === 'foliage' && !colorOverrideSql" class="legend-heading" data-testid="foliage-legend-heading">{{ FOLIAGE_PHASE_LABEL[foliagePhaseNow] }}</strong>
+    <strong v-if="mapColorBy === 'dbh' && !customColors" class="legend-heading">Trunk diameter · inches (approx. cm)</strong>
+    <strong v-if="mapColorBy === 'foliage' && !customColors" class="legend-heading" data-testid="foliage-legend-heading">{{ FOLIAGE_PHASE_LABEL[foliagePhaseNow] }}</strong>
     <div v-for="entry in legendEntries" :key="entry.color" class="legend-entry">
       <span class="legend-swatch" :style="{ background: entry.color }"></span>
       <span class="legend-label">{{ entry.label }}</span>
@@ -536,6 +541,7 @@ const {
   setTileQuery,
   setPublishedTreeIdFilterSql,
   setColorOverrideSql,
+  setTreeRule,
   setSpeciesShadeSql,
   setDbhColors,
   getWorldDirectory,
@@ -596,6 +602,7 @@ const {
   currentMapQuery,
   publishedTreeIdFilterSql,
   colorOverrideSql,
+  publishedTreeRule,
   colorLabelMap,
   mapQueryRevision,
   userLocation,
@@ -604,6 +611,7 @@ const {
   commitResolvedCity,
   markInitialUserCityDetectionDone,
   clearColorOverride,
+  clearMapTreeIdFilter,
 } = useMapData()
 
 const urlFilters = computed(() => readMapUrlFilters(route.query))
@@ -636,13 +644,17 @@ function chooseMapDate(value: string | null) {
 // hemisphere (cityConfig centres are [lng, lat]).
 const foliagePhaseNow = computed(() => foliagePhase(parseMapDate(mapDateParam.value) ?? new Date(), CITY_CONFIG[mapDisplayCity.value].center[1]))
 // The trunk scheme is a rule over the row, so it colours trees paged in later; a chat override wins outright.
-const dbhColors = computed(() => !colorOverrideSql.value && mapColorBy.value === 'dbh')
+// The chat's colours, from a published list or a standing rule.
+const customColors = computed(() => !!colorOverrideSql.value || !!publishedTreeRule.value?.color)
+// What the chat has narrowed the map to: a rule that follows the camera, one bounded answer, or nothing.
+const chatScope = computed(() => publishedTreeRule.value ? 'rule' : publishedTreeIdFilterSql.value ? 'answer' : null)
+const dbhColors = computed(() => !customColors.value && mapColorBy.value === 'dbh')
 // The leaf-shade scheme is a per-species table under any override, not a per-tree one.
 const speciesShadeQuery = computed(() => mapColorBy.value === 'foliage' ? speciesShadeSql(foliagePhaseNow.value) : null)
 
 /** Everything the worker is configured with: what a change in must redraw the trees. */
 function mapConfigSignature(): string {
-  return JSON.stringify([effectiveMapQuery.value, publishedTreeIdFilterSql.value, colorOverrideSql.value, dbhColors.value, speciesShadeQuery.value])
+  return JSON.stringify([effectiveMapQuery.value, publishedTreeIdFilterSql.value, colorOverrideSql.value, publishedTreeRule.value, dbhColors.value, speciesShadeQuery.value])
 }
 let configuredSignature: string | null = null
 
@@ -658,6 +670,7 @@ function configureMapQuery(): Promise<boolean> {
     const query = effectiveMapQuery.value
     const filterSql = publishedTreeIdFilterSql.value
     const colorSql = colorOverrideSql.value
+    const rule = publishedTreeRule.value
     const dbh = dbhColors.value
     configuredSignature = mapConfigSignature()
     await setSpeciesShadeSql(speciesShadeQuery.value)
@@ -669,6 +682,9 @@ function configureMapQuery(): Promise<boolean> {
     await setTileQuery(query)
     if (!current()) return false
     await setPublishedTreeIdFilterSql(filterSql)
+    if (!current()) return false
+    // Last: a rule takes the filter and colour tables over from a published list.
+    await setTreeRule(rule ? { sql: rule.sql, color: rule.color } : null)
     return current()
   })
   workerConfiguration = next
@@ -683,7 +699,7 @@ function clearUrlFilters() {
 }
 
 function changeMapColor(event: Event) {
-  if (colorOverrideSql.value) clearColorOverride()
+  if (customColors.value) clearColorOverride()
   void router.push({ query: { ...route.query, colorBy: (event.target as HTMLSelectElement).value } })
 }
 
@@ -724,7 +740,7 @@ const activeHeatmapColors = computed(() => {
 // Normalize by extracting the trailing 6 hex digits; drop entries with no valid hex tail.
 const legendEntries = computed(() => {
   // Leaf shades are one hex per species, not categories: only the grey gets a swatch.
-  const labelMap = colorOverrideSql.value
+  const labelMap = customColors.value
     ? colorLabelMap.value ?? workerColorLabelMap.value
     : mapColorBy.value === 'dbh' ? DBH_LEGEND
       : mapColorBy.value === 'foliage' ? { [UNKNOWN_SHADE_COLOR]: FOLIAGE_LEGEND_NOTE } : workerColorLabelMap.value
@@ -2043,7 +2059,8 @@ function bookmarkUnderCamera(world: NonNullable<typeof worldDirectoryIndex>): Ci
 
 async function followBookmark() {
   // Not mid-load, mid-intro or mid-flight to a city someone picked; not while a
-  // chat answer about this city is painted on the map; not in the nearby picker.
+  // chat answer about this city is painted on the map (a standing rule is about
+  // every city, and follows); not in the nearby picker.
   if (bookmarkFollowing || disposed || !mapActive || !mapRef.value) return
   if (lifecyclePhase.value !== 'ready' || introActive.value || props.nearbyLocation) return
   if (publishedTreeIdFilterSql.value || colorOverrideSql.value) return
@@ -2266,7 +2283,7 @@ watch(flyToTarget, (t) => {
 // --- Watchers ---
 
 // Reload tiles when query, filter, or revision changes
-watch([effectiveMapQuery, publishedTreeIdFilterSql, mapQueryRevision, dbhColors, colorOverrideSql, speciesShadeQuery], async () => {
+watch([effectiveMapQuery, publishedTreeIdFilterSql, mapQueryRevision, dbhColors, colorOverrideSql, publishedTreeRule, speciesShadeQuery], async () => {
   if (!mapRef.value) return
   // The bookmark moved and nothing the map draws did (the trees follow the
   // camera): no refetch, no message, and the trees on screen stay as they are.

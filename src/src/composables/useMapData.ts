@@ -109,6 +109,15 @@ const selectedCity = ref<CityCode>('USSFO')
 const currentMapQuery = ref<string>(DEFAULT_MAP_QUERY)
 const publishedTreeIdFilterSql = ref<string | null>(null)
 const colorOverrideSql = ref<string | null>(null)
+/**
+ * The chat's standing rule: SQL over `trees` returning the tree_id of each
+ * tree it matches (and an override_color when `color`). Unlike the id list
+ * and colours above, which are one city's answer and go when the bookmark
+ * moves, the worker asks a rule of every cell it loads, so it stays as the
+ * camera crosses into the next city.
+ */
+export type PublishedTreeRule = { sql: string; color: boolean }
+const publishedTreeRule = ref<PublishedTreeRule | null>(null)
 const colorLabelMap = ref<ColorLabelMap | null>(null)
 const mapQueryRevision = ref(0)
 const initialUserCityDetectionDone = ref(false)
@@ -125,7 +134,8 @@ function applyCommittedCity(city: CityCode) {
   currentMapQuery.value = buildDefaultQueryForCity(city)
   publishedTreeIdFilterSql.value = null
   colorOverrideSql.value = null
-  colorLabelMap.value = null
+  // A rule is about every tree, not this bookmark's: it and its legend stay.
+  if (!publishedTreeRule.value?.color) colorLabelMap.value = null
   mapQueryRevision.value += 1
 }
 
@@ -165,14 +175,26 @@ export function useMapData() {
     mapQueryRevision.value += 1
   }
 
+  /** Publish one bounded answer: the ids of a query run once over the published files. Replaces any rule. */
   function publishMapTreeIdFilterSql(sql: string) {
+    publishedTreeRule.value = null
     publishedTreeIdFilterSql.value = sql.trim()
+    mapQueryRevision.value += 1
+  }
+
+  /** Publish a standing rule, asked of every cell the map loads. Replaces any published id list and colours. */
+  function publishMapTreeRule(sql: string, color: boolean, labels: ColorLabelMap | null) {
+    publishedTreeIdFilterSql.value = null
+    colorOverrideSql.value = null
+    publishedTreeRule.value = { sql: sql.trim(), color }
+    colorLabelMap.value = color ? labels : null
     mapQueryRevision.value += 1
   }
 
   function clearMapTreeIdFilter() {
     publishedTreeIdFilterSql.value = null
     colorOverrideSql.value = null
+    publishedTreeRule.value = null
     colorLabelMap.value = null
     mapQueryRevision.value += 1
   }
@@ -186,6 +208,8 @@ export function useMapData() {
 
   function clearColorOverride() {
     colorOverrideSql.value = null
+    // A rule keeps filtering; only its colours go.
+    if (publishedTreeRule.value?.color) publishedTreeRule.value = { ...publishedTreeRule.value, color: false }
     colorLabelMap.value = null
     mapQueryRevision.value += 1
   }
@@ -214,6 +238,7 @@ export function useMapData() {
     currentMapQuery,
     publishedTreeIdFilterSql,
     colorOverrideSql,
+    publishedTreeRule,
     colorLabelMap,
     mapQueryRevision,
     userLocation,
@@ -225,6 +250,7 @@ export function useMapData() {
     markInitialUserCityDetectionDone,
     publishMapQuery,
     publishMapTreeIdFilterSql,
+    publishMapTreeRule,
     clearMapTreeIdFilter,
     publishColorOverride,
     clearColorOverride,

@@ -218,6 +218,60 @@ describe('a phone holds the city in windows', () => {
     await worker.call('setColorOverrideSql', { sql: null })
   })
 
+  // The chat's standing rule (cityTables.ts `treeRuleRowsSql`): SQL over
+  // `trees` as the resolver writes it, asked of each cell as it loads.
+  it("asks the chat's rule of every cell as it loads, so a filter follows the camera", async () => {
+    const MATCH = 'hash(tree_id) % 10 = 0'
+    const RULE = `SELECT "map_trees"."tree_id" as "tree_id" FROM "trees" as "map_trees" WHERE hash("map_trees"."tree_id") % 10 = 0`
+    const tileBytes = async (at: [number, number]) =>
+      (await worker.call<TileResult>('getTile', { z: 16, ...lngLatToTile(at[0], at[1], 16) })).tileBuffer.byteLength
+    // The rule's answers are exactly the matching trees held, however the cells came and went.
+    const inStep = async () => expect(await count('SELECT count(*) AS n FROM published_tree_filter_ids'))
+      .toBe(await count(`SELECT count(*) AS n FROM trees_fast WHERE ${MATCH}`))
+
+    await lookAt(CENTER, 16.5)
+    const all = await tileBytes(CENTER)
+    await worker.call('setTreeRule', { rule: { sql: RULE, color: false } })
+    expect(await tileBytes(CENTER)).toBeLessThan(all / 3)
+    await inStep()
+
+    // Somewhere no test has looked: its cells load under the rule, and the far ones are dropped for them.
+    const beyond: [number, number] = [-71.13, 42.31]
+    const cell = cellAt(beyond[0], beyond[1])
+    const inCell = `(xtile_z20 >> ${20 - CELL_ZOOM}) = ${cell.x} AND (ytile_z20 >> ${20 - CELL_ZOOM}) = ${cell.y}`
+    expect(await count(`SELECT count(*) AS n FROM trees_fast WHERE ${inCell}`)).toBe(0)
+    await lookAt(beyond, 16.5)
+    const filtered = await tileBytes(beyond)
+    expect(await count(`SELECT count(*) AS n FROM trees_fast WHERE ${inCell}`)).toBeGreaterThan(1000)
+    expect(filtered).toBeGreaterThan(0)
+    await inStep()
+    for (const at of [FAR, CENTER, beyond] as [number, number][]) {
+      await lookAt(at, 16.5)
+      await tileBytes(at)
+    }
+    await inStep()
+
+    await worker.call('setTreeRule', { rule: null })
+    await lookAt(beyond, 16.5)
+    expect(await tileBytes(beyond)).toBeGreaterThan(filtered * 3)
+  })
+
+  it("lists the colours a rule names before any tree has them, and colours the trees it matches", async () => {
+    const before = worker.messages.length
+    await worker.call('setTreeRule', { rule: { color: true, sql: `SELECT "map_trees"."tree_id" as "tree_id",
+      CASE WHEN ${UNSEEN.replace(/(longitude|latitude)/g, '"map_trees"."$1"')} THEN '#123456' ELSE '#654321' END as "override_color"
+      FROM "trees" as "map_trees"` } })
+    const update = worker.messages.slice(before).filter((m) => m.type === 'colorMapUpdate').pop()
+    expect(update?.distinctColors).toEqual(expect.arrayContaining(['#123456', '#654321']))
+    expect(await count(`SELECT count(*) AS n FROM __tree_color_override WHERE display_color = '#654321'`))
+      .toBe(await count('SELECT count(*) AS n FROM trees_fast'))
+    // A published list's "no colours" is not about a rule's; clearing the rule is.
+    await worker.call('setColorOverrideSql', { sql: null })
+    expect(await count('SELECT count(*) AS n FROM __tree_color_override')).toBeGreaterThan(0)
+    await worker.call('setTreeRule', { rule: null })
+    expect(await count(`SELECT count(*) AS n FROM duckdb_tables() WHERE table_name = '__tree_color_override'`)).toBe(0)
+  })
+
   // Two ways a partial read can go wrong, each in a large block beside the
   // centre's that nothing has read yet: the requests fail, or the engine is
   // handed bytes it cannot read. Either way the cell must hold exactly its

@@ -26,6 +26,11 @@ import {
   publishedTreesViewSql,
   scopeSql,
   tileIndexSql,
+  hexLiterals,
+  treeRuleApplySql,
+  treeRuleForgetSql,
+  treeRuleRowsSql,
+  treeRuleTablesSql,
   treesSelectSql,
   windowCellSplitSql,
   windowCellSql,
@@ -274,6 +279,83 @@ describe('world tables', () => {
       SELECT tf.tree_id FROM base INNER JOIN ${boston} tf ON base.tree_id = tf.tree_id ORDER BY 1`)
     // sf-5 is an Acer rubrum too, and is not read.
     expect(filtered.map((r) => r.tree_id)).toEqual(['bos-1'])
+  })
+
+  // The SQL is the shape the resolver returns for a rule compiled against
+  // models/map_trees.preql: its own WITH, quoted identifiers, `"trees"` as
+  // the one tree source, the species dimension joined by name.
+  describe('the chat\'s standing rule', () => {
+    const FILTER = 'rule_filter_test'
+    const rule = (where: string, color = '') => `
+WITH
+highfalutin as (
+SELECT "dim"."species" as "species", "dim"."genus" as "genus" FROM rule_species as "dim"
+)
+SELECT
+    "map_trees"."tree_id" as "tree_id"${color}
+FROM
+    "highfalutin"
+    INNER JOIN "trees" as "map_trees" on "highfalutin"."species" = "map_trees"."species"
+WHERE ${where};`
+    const OAKS_AND_MAPLES = rule(`"highfalutin"."genus" in ('Quercus', 'Acer')`,
+      `,\n    CASE WHEN "highfalutin"."genus" = 'Quercus' THEN '#aa5500' ELSE '#cc0000' END as "override_color"`)
+    const ask = async (sql: string, table: string, color: boolean) => {
+      const apply = treeRuleApplySql(sql, scopeSql([table]), color, FILTER)
+      await conn.run(apply.stage)
+      for (const statement of apply.add) await conn.run(statement)
+      const met = (await rows(apply.colors)).map((r) => String(r.display_color)).sort()
+      await conn.run(apply.drop)
+      return met
+    }
+    const matched = async () => (await rows(`
+      SELECT tf.tree_id FROM ${TREES_TABLE} tf JOIN ${FILTER} f ON ${treeKeySql('tf.tree_id')} = f.tree_key ORDER BY 1`)).map((r) => r.tree_id)
+
+    beforeAll(async () => {
+      await conn.run(`CREATE OR REPLACE TABLE rule_species AS SELECT * FROM (VALUES
+        ('Quercus agrifolia', 'Quercus'), ('Acer rubrum', 'Acer'), ('Washingtonia robusta', 'Washingtonia')) v(species, genus)`)
+    })
+
+    test('is asked of one cell at a time, and the next city\'s cell answers the same rule', async () => {
+      for (const statement of treeRuleTablesSql(FILTER)) await conn.run(statement)
+      // San Francisco is held first: its oak and its maple, not Boston's.
+      expect(await ask(OAKS_AND_MAPLES, windowCellTable(key(SF)), true)).toEqual(['#aa5500', '#cc0000'])
+      expect(await matched()).toEqual(['sf-1', 'sf-5'])
+      // The camera reaches Boston: its cell is asked on its own and adds its maple.
+      expect(await ask(OAKS_AND_MAPLES, windowCellTable(key(BOS)), true)).toEqual(['#cc0000'])
+      expect(await matched()).toEqual(['bos-1', 'sf-1', 'sf-5'])
+      const colours = await rows(`
+        SELECT tf.tree_id, ${colorSql('tf', true).expr} AS color FROM ${TREES_TABLE} tf ${colorSql('tf', true).join} ORDER BY 1`)
+      expect(Object.fromEntries(colours.map((r) => [r.tree_id, r.color]))).toMatchObject({
+        'sf-1': '#aa5500', 'sf-5': '#cc0000', 'bos-1': '#cc0000', 'sf-2': CATEGORY_COLORS.palm,
+      })
+    })
+
+    test('a cell asked twice lists each tree once, and a dropped cell takes its answers with it', async () => {
+      await ask(OAKS_AND_MAPLES, windowCellTable(key(SF)), true)
+      expect(await matched()).toEqual(['bos-1', 'sf-1', 'sf-5'])
+      expect(Number((await rows(`SELECT count(*) AS n FROM ${COLOR_OVERRIDE_TABLE}`))[0].n)).toBe(3)
+      for (const statement of treeRuleForgetSql(scopeSql([windowCellTable(key(SF))]), FILTER)) await conn.run(statement)
+      expect(await matched()).toEqual(['bos-1'])
+      expect(Number((await rows(`SELECT count(*) AS n FROM ${COLOR_OVERRIDE_TABLE}`))[0].n)).toBe(1)
+    })
+
+    test('a rule over the tree\'s own columns reads the published schema, and a filter alone keeps no colours', async () => {
+      for (const statement of treeRuleTablesSql(FILTER)) await conn.run(statement)
+      const big = `SELECT "map_trees"."tree_id" as "tree_id" FROM "trees" as "map_trees" WHERE "map_trees"."city" = 'USSFO' and "map_trees"."diameter_at_breast_height" > 10`
+      expect(await ask(big, windowCellTable(key(SF)), false)).toEqual([])
+      expect(await ask(big, windowCellTable(key(BOS)), false)).toEqual([])
+      expect(await matched()).toEqual(['sf-1', 'sf-3'])
+      expect(Number((await rows(`SELECT count(*) AS n FROM ${COLOR_OVERRIDE_TABLE}`))[0].n)).toBe(0)
+      // The rows it is asked of are the scope's alone, whatever else is held.
+      expect((await rows(treeRuleRowsSql(`SELECT tree_id FROM trees`, windowCellTable(key(BOS)), false))).length).toBe(2)
+      await conn.run(`DROP TABLE ${FILTER}`)
+      await conn.run(`DROP TABLE ${COLOR_OVERRIDE_TABLE}`)
+    })
+
+    test('the colours a rule names are known before a row is read', () => {
+      expect(hexLiterals(OAKS_AND_MAPLES)).toEqual(['#aa5500', '#cc0000'])
+      expect(hexLiterals(`SELECT tree_id, "dim"."foliage_colors"[1] AS override_color FROM trees`)).toEqual([])
+    })
   })
 
   test('a phone cuts its finer cells out of a block in one scan, each into its own table', async () => {
