@@ -57,6 +57,11 @@ import {
   publishedTreesViewSql,
   scopeSql,
   tileIndexSql,
+  hexLiterals,
+  treeRuleApplySql,
+  treeRuleForgetSql,
+  treeRuleRowsSql,
+  treeRuleTablesSql,
   treesSelectSql,
   windowCellSplitSql,
   windowCellTable,
@@ -200,6 +205,14 @@ let publishedTreeIdFilterSignature = 'all'
 let colorMapSignature = 'default'
 /** True while `__tree_color_override` exists; every colour read joins it then. */
 let colorOverrideActive = false
+/**
+ * The chat's standing rule (cityTables.ts `treeRuleRowsSql`): asked of every
+ * cell as it loads, its answers in the filter and colour tables. `colors` is
+ * every colour it has answered with or names as a literal, the palette's head.
+ */
+let treeRule: { sql: string; color: boolean; signature: string; colors: Set<string> } | null = null
+/** One rule statement at a time: they share a staging table, and a publish must not interleave with a load's. */
+let treeRuleQueue: Promise<unknown> = Promise.resolve()
 /** True while the species shade tables exist (SHADE_TABLES): the leaf-shade scheme is the base colour. */
 let speciesShadeActive = false
 let speciesShadeSignature = 'none'
@@ -532,7 +545,7 @@ function treeFilterSignature(): string {
 }
 
 function applyTreeFilterToBaseQuery(baseQuery: string): string {
-  if (!publishedTreeIdFilterSql?.trim()) return baseQuery
+  if (!publishedTreeIdFilterSql?.trim() && !treeRule) return baseQuery
   return `
 WITH __base AS (
   ${baseQuery}
@@ -963,6 +976,8 @@ function resetWorld(reason: string): Promise<void> {
         colorOverrideActive = false
       }
       await loadWorld()
+      // The rule's answers went with the cells they were about; it is asked again of each cell that loads.
+      if (treeRule) await onTreeRuleQueue(() => resetTreeRuleTables())
       // The view went with the world's tables; a standing query that reads it gets it back now.
       publishedViewCity = undefined
       await publishedView(tileQuerySql)
@@ -1152,6 +1167,12 @@ async function loadWindowCells(win: World, cells: number[]): Promise<void> {
         for (const name of registered) await db.dropFile(name).catch(() => {})
       }
     }
+    // The chat's standing rule is asked of these rows before anything can
+    // read them: a tile drawn from a cell the rule had not reached would be
+    // cached without its matches. Nothing may await between this and the
+    // cells becoming readable just below, or a rule published in the gap
+    // would miss them (setTreeRule lists the held cells after its own awaits).
+    await applyTreeRule(added.map((chunk) => chunk.table))
     if (!live()) return
     for (const key of cells) win.cellTable.set(key, counts.get(key) ? windowCellTable(key) : '')
     for (const chunk of added) win.chunks.set(chunk.table, chunk)
@@ -1173,6 +1194,7 @@ async function loadWindowCells(win: World, cells: number[]): Promise<void> {
       // a desktop loading a metro's blocks in twenty batches would otherwise
       // replan a several-hundred-table union after each one.
       win.viewCurrent = false
+      await forgetTreeRule(evict)
       for (const name of evict) await conn.query(`DROP TABLE IF EXISTS ${name}`)
     }
 
@@ -1506,6 +1528,13 @@ async function setDistinctColors(overrides: string[] = []) {
   pointDistinctColors = [...new Set([...overrides, ...await baseDistinctColors('fine')])]
 }
 
+/** The colours the active override may draw: a rule's (met or named), or every colour in a published list. */
+async function overrideColors(): Promise<string[]> {
+  if (treeRule) return [...treeRule.colors]
+  const result = await conn!.query(`SELECT DISTINCT display_color FROM ${COLOR_OVERRIDE_TABLE}`)
+  return result.toArray().map((r: Record<string, unknown>) => String(r.display_color))
+}
+
 /** Drop any chat colour override; every colour read falls back to the base scheme. */
 async function clearColorOverride() {
   if (!conn) return
@@ -1564,8 +1593,7 @@ GROUP BY species`)
   speciesShadeActive = normalized !== null
   speciesShadeSignature = signature
   if (colorOverrideActive) {
-    const result = await conn.query(`SELECT DISTINCT display_color FROM ${COLOR_OVERRIDE_TABLE}`)
-    await setDistinctColors(result.toArray().map((r: Record<string, unknown>) => String(r.display_color)))
+    await setDistinctColors(await overrideColors())
   } else {
     await setDistinctColors()
     activeColorLabelMap = baseScheme() === 'form' ? { ...DEFAULT_CATEGORY_LABELS } : {}
@@ -1863,6 +1891,8 @@ async function setPublishedTreeIdFilterSql(sql: string | null) {
   // often: none, as before). Rebuilding the table would invalidate every
   // tile for the same rows.
   if ((normalized ?? '') === (publishedTreeIdFilterSql ?? '')) return
+  // A published id list replaces a standing rule; they share the table.
+  if (treeRule) await onTreeRuleQueue(() => dropTreeRule())
 
   await conn.query(`DROP TABLE IF EXISTS ${PUBLISHED_TREE_FILTER_TABLE}`)
 
@@ -1902,6 +1932,11 @@ async function setColorOverrideSql(sql: string | null) {
   const normalized = sql?.trim() || null
   // No override before and none now: nothing to rebuild, no colours to push.
   if (!normalized && colorMapSignature === 'default') return
+  // A standing rule owns the colour table; "no published colours" is not about it.
+  if (treeRule) {
+    if (!normalized) return
+    await onTreeRuleQueue(() => dropTreeRule())
+  }
 
   if (normalized) {
     // Agent provided a color override SQL returning (tree_id, override_color).
@@ -1942,6 +1977,129 @@ WHERE tree_id IS NOT NULL AND override_color IS NOT NULL
   postColorMapUpdate()
 }
 
+function onTreeRuleQueue<T>(work: () => Promise<T>): Promise<T> {
+  const run = treeRuleQueue.then(work, work)
+  treeRuleQueue = run.catch(() => {})
+  return run
+}
+
+/** The rule's two tables, empty, and the colour reads joined to them if it colours. */
+async function resetTreeRuleTables() {
+  if (!conn || !treeRule) return
+  for (const sql of treeRuleTablesSql(PUBLISHED_TREE_FILTER_TABLE)) await conn.query(sql)
+  colorOverrideActive = treeRule.color
+}
+
+/** Stop applying the rule and drop its answers. Runs on the rule queue. */
+async function dropTreeRule() {
+  if (!conn || !treeRule) return
+  treeRule = null
+  publishedTreeIdFilterSignature = 'all'
+  await conn.query(`DROP TABLE IF EXISTS ${PUBLISHED_TREE_FILTER_TABLE}`)
+  await clearColorOverride()
+}
+
+/** Ask the rule of `tables` and keep its answers. Runs on the rule queue. */
+async function askTreeRule(tables: string[]) {
+  const rule = treeRule
+  if (!conn || !rule || tables.length === 0) return
+  const apply = treeRuleApplySql(rule.sql, scopeSql(tables), rule.color, PUBLISHED_TREE_FILTER_TABLE)
+  try {
+    await conn.query(apply.stage)
+    for (const sql of apply.add) await conn.query(sql)
+    if (!rule.color) return
+    const met = (await conn.query(apply.colors)).toArray().map((r: Record<string, unknown>) => String(r.display_color))
+    const fresh = met.filter((color) => !rule.colors.has(color))
+    if (fresh.length === 0) return
+    // A colour the rule computes rather than names (a species' own leaf
+    // shade), first met here: every renderer's palette grows by it.
+    for (const color of fresh) rule.colors.add(color)
+    await setDistinctColors([...rule.colors])
+    invalidateTileCaches('color-override')
+    postColorMapUpdate()
+  } finally {
+    await conn.query(apply.drop).catch(() => {})
+  }
+}
+
+/**
+ * The standing rule, asked of cells that have just loaded and are not yet
+ * readable. A rule that fails on these rows (a cast its first cells never
+ * exercised) leaves them unmatched; the load is not the place to fail.
+ */
+function applyTreeRule(tables: string[]): Promise<void> {
+  if (!treeRule || tables.length === 0) return Promise.resolve()
+  return onTreeRuleQueue(() => askTreeRule(tables)).catch((error) => {
+    console.warn('[duckdb-worker] the chat rule failed on newly loaded cells', error)
+  })
+}
+
+/** Drop the rule's answers for cells about to be dropped, so its tables stay the size of what is held. */
+function forgetTreeRule(tables: string[]): Promise<void> {
+  if (!treeRule || tables.length === 0) return Promise.resolve()
+  return onTreeRuleQueue(async () => {
+    if (!conn || !treeRule) return
+    for (const sql of treeRuleForgetSql(scopeSql(tables), PUBLISHED_TREE_FILTER_TABLE)) await conn.query(sql)
+  }).catch((error) => {
+    console.warn('[duckdb-worker] could not drop the chat rule answers for evicted cells', error)
+  })
+}
+
+/**
+ * The species dimension a rule joins is the file `species_enrichment` was
+ * loaded from: read from the table where the rule's columns are in it, so a
+ * cell's load does not wait on a fetch. A column only the file has (family,
+ * soil preferences) keeps the remote read.
+ */
+async function localTreeRuleSql(sql: string): Promise<string> {
+  const remote = `read_parquet('${REMOTE_SPECIES_PARQUET_URL}')`
+  if (!conn || !sql.includes(remote)) return sql
+  const local = sql.split(remote).join('species_enrichment')
+  try {
+    await conn.query(`SELECT * FROM (${treeRuleRowsSql(local, WINDOW_SHAPE_TABLE, false)}) __probe LIMIT 0`)
+    return local
+  } catch {
+    return sql
+  }
+}
+
+/**
+ * Publish the chat's standing rule, or with null return to every tree. The
+ * rule is asked of the cells held now and of each cell that loads after, so
+ * what it filters and colours follows the camera.
+ */
+async function setTreeRule(rule: { sql: string; color: boolean } | null) {
+  await ensureInit()
+  if (!conn) return
+  const text = rule?.sql.trim() || null
+  const signature = text ? `rule-${hashText(normalizeSql(text))}-${rule!.color ? 'c' : 'f'}` : null
+  // Every configuration pass republishes it, usually unchanged.
+  if (signature === (treeRule?.signature ?? null)) return
+  await onTreeRuleQueue(async () => {
+    if (!text || !signature) return dropTreeRule()
+    const color = !!rule!.color
+    const sql = await localTreeRuleSql(text)
+    // A rule replaces a published id list: the tables are the same two.
+    publishedTreeIdFilterSql = null
+    treeRule = { sql, color, signature, colors: new Set(color ? hexLiterals(text) : []) }
+    try {
+      await resetTreeRuleTables()
+      publishedTreeIdFilterSignature = signature
+      colorMapSignature = color ? `color-${signature}` : 'default'
+      await setDistinctColors([...treeRule.colors])
+      if (!color) activeColorLabelMap = baseScheme() === 'form' ? { ...DEFAULT_CATEGORY_LABELS } : {}
+      // Listed after the awaits above: a load that asked the old rule (or
+      // none) of its cells has made them readable by now, and is in here.
+      await askTreeRule(world ? [...world.chunks.keys()] : [])
+    } catch (error) {
+      await dropTreeRule()
+      throw error
+    }
+  })
+  invalidateTileCaches('tree-rule')
+  postColorMapUpdate()
+}
+
 /**
  * The trunk-diameter scheme on or off. An expression over the row, so it
  * colours a tree paged in later by the same rule (cityTables.ts `dbhColorSql`).
@@ -1951,8 +2109,7 @@ async function setDbhColors(enabled: boolean) {
   if (dbhColorsActive === enabled) return
   dbhColorsActive = enabled
   if (colorOverrideActive && conn) {
-    const result = await conn.query(`SELECT DISTINCT display_color FROM ${COLOR_OVERRIDE_TABLE}`)
-    await setDistinctColors(result.toArray().map((r: Record<string, unknown>) => String(r.display_color)))
+    await setDistinctColors(await overrideColors())
   } else {
     await setDistinctColors()
     activeColorLabelMap = baseScheme() === 'form' ? { ...DEFAULT_CATEGORY_LABELS } : {}
@@ -2457,6 +2614,7 @@ type WorkerMethodMap = {
   setTileQuery: { params: { sql: string | null }; result: void }
   setPublishedTreeIdFilterSql: { params: { sql: string | null }; result: void }
   setColorOverrideSql: { params: { sql: string | null }; result: void }
+  setTreeRule: { params: { rule: { sql: string; color: boolean } | null }; result: void }
   setSpeciesShadeSql: { params: { sql: string | null }; result: void }
   setDbhColors: { params: { enabled: boolean }; result: void }
   setCityContext: { params: { city: string; window?: WindowPolicy | null }; result: void }
@@ -2576,6 +2734,12 @@ ctx.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         const { sql } = msg.params as WorkerMethodMap['setPublishedTreeIdFilterSql']['params']
         await publishedView(sql)
         await setPublishedTreeIdFilterSql(sql)
+        send({ type: 'response', requestId: msg.requestId, ok: true, result: undefined })
+        break
+      }
+      case 'setTreeRule': {
+        const { rule } = msg.params as WorkerMethodMap['setTreeRule']['params']
+        await setTreeRule(rule)
         send({ type: 'response', requestId: msg.requestId, ok: true, result: undefined })
         break
       }

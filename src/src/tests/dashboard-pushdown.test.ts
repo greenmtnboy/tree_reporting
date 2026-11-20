@@ -41,7 +41,7 @@ import {
   buildDashboardContextParameters,
   buildDashboardContextSource,
 } from '../composables/dashboardContextSource'
-import { MAP_CHAT_IMPORTS } from '../composables/chatModelImports'
+import { MAP_CHAT_IMPORTS, MAP_RULE_IMPORTS } from '../composables/chatModelImports'
 import {
   cityQueryCases,
   summaryQueryCases,
@@ -78,7 +78,7 @@ type PushdownGroup = {
 }
 
 /** Tree parquets named by one query's SQL, without the version suffix. */
-type CompiledCase = { parquets?: string[]; error?: string }
+type CompiledCase = { parquets?: string[]; sql?: string; error?: string }
 
 /**
  * The count summaries `dashboard_context` imports: (city, species) and the
@@ -144,7 +144,7 @@ async function compileBatch(
       entry.error
         ? { error: entry.error.slice(0, 600) }
         : entry.generated_sql
-          ? { parquets: treeParquetsIn(entry.generated_sql) }
+          ? { parquets: treeParquetsIn(entry.generated_sql), sql: entry.generated_sql }
           : { error: 'resolver returned no SQL and no error' },
     )
   }
@@ -342,6 +342,28 @@ const CHAT_GROUP: PushdownGroup = {
   ],
 }
 
+// A published per-tree rule compiles against MAP_RULE_IMPORTS instead: the
+// species dimension and `map_trees`, whose one tree datasource is the worker's
+// `trees` view (models/map_trees.preql). The worker asks the compiled SQL of
+// each cell of trees as it loads, so what matters here is the opposite of the
+// cases above: the SQL must read `trees` and no inventory's parquet, with or
+// without a city in the predicate.
+const MAP_RULE_CASES = [
+  ['map-rule:species', `SELECT tree_id WHERE genus = 'Quercus'`],
+  [
+    'map-rule:coloured',
+    `SELECT tree_id, case when diameter_at_breast_height >= 20 then '#FF69B4' ` +
+      `else '#4169E1' end -> override_color WHERE is_evergreen = true`,
+  ],
+  ['map-rule:city', `SELECT tree_id WHERE city = '${MAP_CHAT_CITY}' and diameter_at_breast_height > 30`],
+  [
+    'map-rule:place',
+    `SELECT tree_id WHERE latitude between 42.35 and 42.37 and longitude between -71.08 and -71.05`,
+  ],
+].map(([id, query]): DashboardQueryCase => ({ ...mapChatCase(id, query), imports: MAP_RULE_IMPORTS }))
+
+const MAP_RULE_GROUP: PushdownGroup = { key: 'map-rule', city: null, cases: MAP_RULE_CASES }
+
 // One batch: every case here declares MAP_CHAT_IMPORTS, and imports are a
 // property of the whole request rather than of a query in it.
 const MAP_CHAT_GROUP: PushdownGroup = {
@@ -381,6 +403,7 @@ const GROUPS: PushdownGroup[] = [
   ...CITY_GROUPS,
   CHAT_GROUP,
   MAP_CHAT_GROUP,
+  MAP_RULE_GROUP,
   ALL_GROUP,
   CITY_VIEW_GROUP,
 ]
@@ -444,6 +467,15 @@ describe('dashboard parquet pushdown', () => {
         parquets,
         `a chat query filtered to ${city} scanned the cross-city rollup`,
       ).not.toContain('full_tree_info')
+    })
+  }
+
+  for (const queryCase of MAP_RULE_CASES) {
+    it(`compiles the published rule ${queryCase.id} over the map's own trees and no inventory's file`, () => {
+      const result = compiled.get(MAP_RULE_GROUP.key)?.get(queryCase.id)
+      expect(result?.error, `${queryCase.id} failed to compile`).toBeUndefined()
+      expect(result?.sql).toMatch(/"trees" as "map_trees"/)
+      expect((result?.parquets ?? []).filter((parquet) => parquet !== 'tree_enrichment')).toEqual([])
     })
   }
 

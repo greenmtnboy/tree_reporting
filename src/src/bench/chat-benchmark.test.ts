@@ -100,6 +100,8 @@ vi.mock('../composables/useMapData', async (importOriginal) => {
       selectedCity: ref(state.selectedCity),
       userLocation: ref(null),
       publishMapTreeIdFilterSql: (sql: string) => state.mapCalls.push({ call: 'publishMapTreeIdFilterSql', sql }),
+      publishMapTreeRule: (sql: string, color: boolean, labels: unknown) =>
+        state.mapCalls.push({ call: 'publishMapTreeRule', sql, color, labels }),
       clearMapTreeIdFilter: () => state.mapCalls.push({ call: 'clearMapTreeIdFilter' }),
       publishColorOverride: (sql: string | null, labels: unknown) =>
         state.mapCalls.push({ call: 'publishColorOverride', sql, labels }),
@@ -485,6 +487,7 @@ describe('agent chat benchmark', () => {
       state.llmCalls.push(record as unknown as Record<string, unknown>)
     })
     state.landmarks = await (state.db as unknown as NodeTreeDatabase).loadLandmarks(CITY)
+    await (state.db as unknown as NodeTreeDatabase).holdCity(CITY)
     console.log(
       `chat benchmark: ${cases.length} prompts x ${ROUNDS} rounds, provider=${PROVIDER} model=${MODEL} city=${CITY}, ${state.landmarks.length} landmarks loaded`,
     )

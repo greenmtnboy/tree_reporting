@@ -19,7 +19,7 @@ export const MAP_CHAT_TOOLS = [
   {
     name: 'run_query',
     description:
-      'Execute a Trilogy against the trees dataset. Write a SELECT statement using the available concepts — no FROM clause needed; Trilogy resolves the source automatically. Returns up to 100 JSON rows and total count. Use this to filter, aggregate, or explore the dataset. Limit results to 500 rows max unless the user specifically needs more.',
+      'Execute a Trilogy against the trees dataset. Write a SELECT statement using the available concepts — no FROM clause needed; Trilogy resolves the source automatically. Returns up to 100 JSON rows and total count. Use this to filter, aggregate, or explore the dataset. Limit results to 500 rows max unless the user specifically needs more. On the map the query must be bounded, or it is rejected: filter by city (WHERE city = \'USSFO\') or by a latitude and longitude range around a place.',
     input_schema: {
       type: 'object',
       properties: {
@@ -31,14 +31,14 @@ export const MAP_CHAT_TOOLS = [
   {
     name: 'publish_results',
     description:
-      `Takes a Trilogy SELECT query that returns tree_id values for the trees to display on the map. Compiles and executes the query, persists those IDs as the active map filter, and applies DB-side filtering across map tiles. Use this after the user asks to show/highlight a subset of trees. To color trees, also SELECT an override_color column in the query (a hex color string computed with a CASE/IF expression — all coloring logic must be expressed in Trilogy so it is materialized before reaching the map). Provide color_labels to add a legend. Example: SELECT tree_id, case when diameter_at_breast_height >= 20 then '#FF69B4' else '#4169E1' end as override_color WHERE ...`,
+      `Show a subset of trees on the map, optionally recoloured. Takes a Trilogy SELECT returning tree_id. Write it as a per-tree rule: a WHERE over one tree's own attributes and its species' (SELECT tree_id WHERE genus = 'Quercus'). The map applies a rule to every tile of trees it loads, so it keeps working as the user pans or flies to another city; do not add a city filter unless the user wants only that city. A query that ranks, limits or aggregates (ORDER BY, LIMIT, count, rank) cannot be applied per tile: it is run once instead and must be bounded by a city filter or a latitude and longitude range, or it is rejected. To color trees, also SELECT an override_color column (a hex color string computed with a CASE/IF expression — all coloring logic must be expressed in Trilogy). Provide color_labels to add a legend. Example: SELECT tree_id, case when diameter_at_breast_height >= 20 then '#FF69B4' else '#4169E1' end as override_color WHERE is_evergreen = true`,
     input_schema: {
       type: 'object',
       properties: {
         query: {
           type: 'string',
           description:
-            'Trilogy SELECT returning tree_id. Optionally include override_color (hex string) for per-tree coloring — compute it inline with a CASE/IF expression.',
+            'Trilogy SELECT returning tree_id: a per-tree rule (no ORDER BY, LIMIT or aggregates), or a bounded query. Optionally include override_color (hex string) for per-tree coloring — compute it inline with a CASE/IF expression.',
         },
         color_labels: {
           type: 'array',
@@ -55,6 +55,15 @@ export const MAP_CHAT_TOOLS = [
         },
       },
       required: ['query'],
+    },
+  },
+  {
+    name: 'clear_published_results',
+    description:
+      'Remove whatever publish_results put on the map (the filter and any colours) so every tree shows again. Use it when the user asks to reset or show all trees.',
+    input_schema: {
+      type: 'object',
+      properties: {},
     },
   },
   {
@@ -110,8 +119,12 @@ export const MAP_CHAT_TOOLS = [
   RETURN_TO_USER_TOOL,
 ]
 
+const toolNamed = (name: string) => MAP_CHAT_TOOLS.find((tool) => tool.name === name)!
+const RUN_QUERY_TOOL = toolNamed('run_query')
+const SEND_USER_MESSAGE_TOOL = toolNamed('send_user_message')
+
 export const SUMMARY_CHAT_TOOLS = [
-  MAP_CHAT_TOOLS[0],
+  RUN_QUERY_TOOL,
   {
     name: 'set_summary_filters',
     description:
@@ -180,12 +193,12 @@ export const SUMMARY_CHAT_TOOLS = [
       },
     },
   },
-  MAP_CHAT_TOOLS[4],
+  SEND_USER_MESSAGE_TOOL,
   RETURN_TO_USER_TOOL,
 ]
 
 export const SPECIES_CHAT_TOOLS = [
-  MAP_CHAT_TOOLS[0],
+  RUN_QUERY_TOOL,
   {
     name: 'set_species_filters',
     description:
@@ -219,7 +232,7 @@ export const SPECIES_CHAT_TOOLS = [
       properties: {},
     },
   },
-  MAP_CHAT_TOOLS[4],
+  SEND_USER_MESSAGE_TOOL,
   RETURN_TO_USER_TOOL,
 ]
 

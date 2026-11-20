@@ -197,7 +197,8 @@ So the reads that run on every pan do not go through `trees_fast`:
 - **A filter** written against the published schema (`FROM trees`) follows
   the scope: the scoped read defines a CTE named `trees` over the same
   cells, which shadows the view. Every query the map publishes is row-local
-  (a URL species filter, a chat's id list), which is what makes that sound.
+  (a URL species filter, a chat's rule or id list), which is what makes that
+  sound.
 
 Tiles (the phone, and a desktop without WebGL2) still read the view, as the
 phone's window did; a phone holds at most a hundred or so cells.
@@ -241,9 +242,41 @@ Nothing is redrawn. The map's default query is the world's
 the query watcher returns early when nothing the map draws has changed.
 
 The bookmark does not follow while a chat answer about the city is painted
-on the map (a published id filter or colour override), or in the nearby
-picker. Picking a city from the selector or a globe marker still flies there
+on the map (a bounded answer's id filter or colour override), or in the
+nearby picker. A chat rule is about every tree, so the bookmark follows
+under it and the rule stays when the bookmark moves. Picking a city from the selector or a globe marker still flies there
 with the swoop; it now ends on trees that load for the view, not a city load.
+
+### What the chat publishes
+
+The chat used to publish one city's answer: a query run once over the
+bookmark's file, its ids hashed into a table the tile reads joined, dropped
+when the bookmark moved. Under a world of blocks that is a filter that ends
+at the city limit. `publish_results` now has two shapes
+(`lib/chatQueryScope.ts` tells them apart from the Trilogy text):
+
+- **A per-tree rule**: `select tree_id where genus = 'Quercus'`, optionally
+  with an `override_color`. It compiles against `models/map_trees.preql`,
+  whose one tree datasource is the worker's `trees` view, so the SQL reads
+  the rows the map holds and no inventory's file. The worker asks it of each
+  cell as the cell loads (`applyTreeRule` in `loadWindowCells`, before the
+  cell is readable, so no tile is cached from a cell the rule has not
+  reached) and keeps the answers in the same two id-keyed tables, dropping
+  a cell's answers when the cell is evicted. A filter to oaks is still a
+  filter to oaks in the next city, and a tile or chunk read costs what an
+  id list always did. The species dimension is read from the worker's
+  `species_enrichment` table when the rule's columns are in it. A rule's
+  palette is the hex literals in its SQL, known before a row is read, and
+  grows only if the rule computes a colour it does not name.
+- **A bounded answer**: anything that ranks, limits or aggregates ("the 50
+  largest trees") depends on which rows it is asked over, so it still runs
+  once against the published files, as before, and must name its ground: a
+  city filter, or a latitude and longitude range around a landmark. An
+  unbounded one is refused with an error that says how to bound it. The
+  same check guards the map's `run_query`, which would otherwise read every
+  inventory's rollup.
+
+`clear_published_results` and the legend's "Show all trees" drop either.
 
 ### What is still a city
 
@@ -255,7 +288,8 @@ with the swoop; it now ends on trees that load for the view, not a city load.
   used to read these from its loaded table, and now reads the file's
   `tree_id` column (Boston: 33 of its 75 MB, less than the 75 MB the old
   city load fetched before it could answer).
-- Landmarks, the chat's scope, the dashboards, the species page.
+- Landmarks, the dashboards, the species page, and the chat's bounded
+  reads (`run_query`, a ranked publish). A chat rule is not.
 - The colour of the season: the leaf-shade scheme takes its phase from the
   bookmark's hemisphere, for the whole map.
 
