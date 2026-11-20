@@ -159,6 +159,29 @@ publication to activate the website's live species consumer. The matching site
 change preserves its static fallback until the feed exists. No website deploy
 is required for subsequent species updates or new shared-detail links.
 
+## The contributor feed
+
+`publish-website-contributors` runs daily at 06:15 UTC. It reads the private
+`checkins` and published `treeModifications` in Firestore. An account that
+has chosen a public name gets its own row: the name, distinct trees checked
+in at, distinct trees updated, and the size of their union. Every other
+account only adds to one `anonymous` object, the number of such accounts and
+the same three counts as distinct trees across the group. A per-account
+anonymous row would not be anonymous: counts are unique near the top, move by
+one alongside each tree's public check-in count, and keep yesterday's numbers
+when a name is withdrawn. Only the owner can save or remove a name in
+`contributorPreferences/{uid}`, and the publisher uses it only with explicit
+consent (`shareName == true`). The website fetches the current
+`arborary/website/v1/contributors.json` directly so an opt-out takes effect
+at the next successful publication without a website rebuild.
+
+For rollout, apply the Firestore rules in `terraform/bootstrap` and configure
+the Trilogy Cloud secret `CONTRIBUTOR_FIRESTORE_READER_JSON` with a dedicated
+service account's JSON credentials with Firestore read access (Datastore Viewer
+on `sf-tree-reporting-prod`). The website upload uses the existing GCS HMAC
+secrets. The normal main-branch cloud sync registers the job. A failed read
+or concurrent publish leaves the previous complete report in place.
+
 ## The homepage feed (`website/publish_homepage.py`)
 
 arborary.world's homepage bundles a snapshot of its statistics and swaps in

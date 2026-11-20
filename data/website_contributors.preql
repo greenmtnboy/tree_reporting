@@ -1,0 +1,2 @@
+# Publish the daily contributor leaderboard from private Firestore records.
+call `./website/publish_contributors.py`;

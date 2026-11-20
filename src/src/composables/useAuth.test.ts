@@ -6,7 +6,7 @@ const state = vi.hoisted(() => ({
   popup: vi.fn(), redirectResult: vi.fn(), redirect: vi.fn(),
   signInPopup: vi.fn(), signInRedirect: vi.fn(), signOut: vi.fn(),
 }))
-vi.mock('../lib/firebase', () => ({ auth: state.auth, firebaseAvailable: true }))
+vi.mock('../lib/firebase', () => ({ auth: state.auth, db: undefined, firebaseAvailable: true }))
 vi.mock('../lib/e2eFixtures', () => ({ e2eEnabled: false, e2eUser: () => undefined }))
 vi.mock('./useSubmissions', async () => {
   const { ref } = await import('vue')
