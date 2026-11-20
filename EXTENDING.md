@@ -103,12 +103,34 @@ You need a stable unique id, a scientific-name species field, WGS84
 coordinates, and a diameter or a proxy (circumference in cm converts as
 `dbh_in = circ_cm / (pi * 2.54)`). Missing fields are fine as null.
 
-**The id is the grain; verify it before committing to it.** Preference: a
-publisher-guaranteed per-feature id (`GLOBALID` on ArcGIS); then the source's
-own asset id once checked unique and non-null over the whole layer; then
-`OBJECTID` as a last resort. Never a field that merely sounds like an id, and
-never a positional hash. `enforce_tree_schema` refuses a repeated or null
-`tree_id`; drop unidentified rows in the ingest with a logged count.
+**The id is the grain; verify it before committing to it.** It is also the key
+a community check-in is recorded against, so what matters most is that it
+survives the publisher's next reload. Preference:
+
+1. A publisher-guaranteed per-feature id (`GLOBALID` on ArcGIS).
+2. The source's own asset id, once checked unique and non-null over the whole
+   layer. Never a field that merely sounds like an id.
+3. **No stable id: the rounded coordinate**, rendered rather than hashed so a
+   row traces back to its source feature by eye:
+   `{prefix}-{lon:.7f}_{lat:.7f}` (7 dp, ~1 cm, below any real re-survey and
+   insensitive to a float writer's last digit). Position alone, never folded
+   with an attribute: a re-survey re-measures DBH, which would re-key every
+   re-measured tree. Where several rows share a coordinate the id cannot tell
+   them apart, so every row at that point is dropped with a logged count;
+   only where they are identical (same species and size: one tree recorded
+   twice) is one kept. Used by Philadelphia (`objectid` is a row number
+   within one year's layer), Tokyo and Longueuil (no id column at all), and
+   Spokane (`OBJECTID` 1..N with one `UpdatedDT` on every row: a wholesale
+   reload).
+
+`OBJECTID` is a row number, not an id: an ArcGIS layer reassigns it whenever
+it is truncated and reloaded. Use it only alongside a real id, to tell apart
+the rows that id repeats (Baltimore, Charlotte, Columbus). Kelowna, Houston,
+Naples, NYC and Portland's street layer still key on it alone; they predate
+this rule, and moving them re-keys every tree and its check-ins once.
+
+`enforce_tree_schema` refuses a repeated or null `tree_id`; drop unidentified
+rows in the ingest with a logged count.
 
 **Read a coded field's domain before deciding what a column holds**
 (`coded_value_domain(layer, field)`). A column that looks like common names

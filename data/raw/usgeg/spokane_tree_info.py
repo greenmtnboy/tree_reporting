@@ -18,12 +18,19 @@ server-side.  112,444 rows on 2026-11-19.  It holds street trees (93,368 rows
 with a blank `park`) and park trees (the rest, `park` naming the park, golf
 course or facility) in one layer; there is no separate park or street layer.
 
-**The id is `OBJECTID`, and it is a weak one.**  The layer has no GlobalID and
-no asset id of its own: its fields are `park`, `species`, `diameter`,
-`height`, `spread`, `trunks`, three genus/common-name helper columns and
-`UpdatedDT`.  OBJECTID runs 1..112,444 without a gap and every row carries the
-same `UpdatedDT` (2026-11-11), which is what a wholesale reload looks like, so
-a future reload may renumber every tree.  Nothing better exists.
+**The id is the rounded coordinate (`spokane-{lon:.7f}_{lat:.7f}`), as for
+Philadelphia, Tokyo and Longueuil** (EXTENDING.md, step 1).  The layer has no
+GlobalID and no asset id of its own: its fields are `park`, `species`,
+`diameter`, `height`, `spread`, `trunks`, three genus/common-name helper
+columns and `UpdatedDT`.  OBJECTID runs 1..112,444 without a gap and every row
+carries the same `UpdatedDT` (2026-11-11), which is what a wholesale reload
+looks like, so a reload may renumber every tree; a position survives it.
+7 decimal places (~1 cm) is below any real re-survey and keeps the key
+insensitive to the server's reprojection writing a different last digit.  No
+two kept trees shared a 7 dp coordinate in November 2026; should some, every
+row at the point is dropped with a logged count (Longueuil's rule), because
+the id cannot tell them apart.  A row with no geometry has no id and is
+dropped in `keep`.
 
 **`species` is a contraction of the inverted English common name**, cut to 17
 characters -- `mapl,nwy` (Norway maple), `pine,ponderosa`, `hawth spp`,
@@ -67,6 +74,7 @@ planting date.
 """
 
 import sys
+from collections import Counter
 from pathlib import Path
 
 import pyarrow as pa
@@ -87,9 +95,12 @@ LAYER = FeatureLayer(
     timeout=300,
 )
 
-OUT_FIELDS = "OBJECTID,species,diameter,spread,height,trunks"
+OUT_FIELDS = "species,diameter,spread,height,trunks"
 
 FEET_TO_M = 0.3048
+
+# The coordinate the id is rendered from (see the module docstring).
+COORD_DP = 7
 
 # Refuse a run where more than this share of rows carries a code nobody has
 # decoded (a new contraction would otherwise publish as unknown trees).
@@ -606,7 +617,7 @@ def is_empty_site(rec: dict) -> bool:
     )
 
 
-DROPPED = {"planting site class": 0, "unknown with no trunk or size": 0}
+DROPPED = {"planting site class": 0, "unknown with no trunk or size": 0, "no location": 0}
 UNDECODED: dict[str, int] = {}
 
 
@@ -617,6 +628,9 @@ def keep(feature: dict) -> bool:
         return False
     if is_empty_site(rec):
         DROPPED["unknown with no trunk or size"] += 1
+        return False
+    if esri_point(feature.get("geometry")) == (None, None):
+        DROPPED["no location"] += 1
         return False
     return True
 
@@ -637,13 +651,15 @@ def transform(features: list[dict]) -> pa.Table:
     for feature in features:
         rec = feature.get("attributes") or {}
         lat, lon = esri_point(feature.get("geometry"))
+        lat, lon = round(lat, COORD_DP), round(lon, COORD_DP)
         code = rec.get("species")
         name = decode_species(code)
         if name is None:
             key = str(code)
             UNDECODED[key] = UNDECODED.get(key, 0) + 1
 
-        tree_id.append(f"spokane-{int(rec['OBJECTID'])}")
+        # The coordinate is the id; see the module docstring.
+        tree_id.append(f"spokane-{lon:.7f}_{lat:.7f}")
         species.append(name)
         latitude.append(lat)
         longitude.append(lon)
@@ -680,9 +696,27 @@ def check_decoding(table: pa.Table) -> None:
         )
 
 
+def drop_stacked(table: pa.Table) -> pa.Table:
+    """Drop every row at a coordinate more than one row carries (the id is the coordinate)."""
+    ids = table["tree_id"].to_pylist()
+    counts = Counter(ids)
+    stacked = {k for k, n in counts.items() if n > 1}
+    if not stacked:
+        return table
+    mask = pa.array([i not in stacked for i in ids])
+    kept = table.filter(mask)
+    print(
+        f"Spokane: dropped {table.num_rows - kept.num_rows} row(s) at "
+        f"{len(stacked)} shared coordinate(s), leaving {kept.num_rows}",
+        file=sys.stderr,
+    )
+    return kept
+
+
 if __name__ == "__main__":
     table = stream_to_table(iter_row_chunks(), transform, keep=keep, label="Spokane OpenData")
     print(f"Spokane: dropped non-tree rows {DROPPED}", file=sys.stderr)
+    table = drop_stacked(table)
     check_decoding(table)
     table = validate_coordinates(table, city="Spokane", city_code="USGEG")
     table = enforce_tree_schema(table, city="Spokane", data_source="SPOKANE_OPENDATA")
