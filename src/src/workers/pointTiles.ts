@@ -13,7 +13,18 @@
  * filter against every feature of the tile. With a source layer per colour
  * each style layer reads its own features only, and the colour is the layer's
  * name rather than a property on each feature.
+ *
+ * That is for the heatmaps, whose colour is a ramp over density and cannot
+ * come from the feature. A tile drawn by circles alone (the tree tiles, z15
+ * up, past the heatmaps) is one source layer, TREE_SOURCE_LAYER, with each
+ * feature's colour in COLOR_PROPERTY: one circle layer paints any number of
+ * colours, and no filter runs.
  */
+
+/** The one source layer of a tile encoded with `singleLayer`. A colour's layer is named `#rrggbb`, so the names never meet. */
+export const TREE_SOURCE_LAYER = 'trees'
+/** Where a `singleLayer` tile carries each feature's colour; absent where the row had none. */
+export const COLOR_PROPERTY = 'color'
 
 /** The tile's side in tile units, and how far past it a point is still written. */
 export const TILE_EXTENT = 4096
@@ -142,6 +153,17 @@ class Layer {
     return this.add((v) => v.field(1, utf8.encode(text)))
   }
 
+  /** A string many features share, a colour: written once per distinct value. */
+  sharedString(text: string): number {
+    const key = `s${text}`
+    let index = this.numbers.get(key)
+    if (index === undefined) {
+      index = this.string(text)
+      this.numbers.set(key, index)
+    }
+    return index
+  }
+
   /** A double, an integer or a flag, written once per distinct value. */
   number(kind: 'double' | 'int' | 'flag', value: number): number {
     const key = `${kind}${value}`
@@ -164,9 +186,13 @@ class Layer {
  * source layer per value of `layer`. Reads `xtile`, `ytile`, `layer` and the
  * point's Web Mercator `x` and `y` in metres, then `properties`. A point
  * farther than the buffer outside its row's tile is dropped, which only an
- * aggregate cell's centre can be.
+ * aggregate cell's centre can be. With `singleLayer`, every row goes into
+ * TREE_SOURCE_LAYER and its `layer` value is written as COLOR_PROPERTY.
  */
-export function encodePointTiles(rows: TileRowColumns, z: number, properties: PointProperty[], fallbackLayer: string): Map<string, EncodedTile> {
+export function encodePointTiles(
+  rows: TileRowColumns, z: number, properties: PointProperty[], fallbackLayer: string,
+  { singleLayer = false } = {},
+): Map<string, EncodedTile> {
   const column = (name: string) => {
     const found = rows.getChild(name)
     if (!found) throw new Error(`tile rows have no ${name} column`)
@@ -193,7 +219,7 @@ export function encodePointTiles(rows: TileRowColumns, z: number, properties: Po
     let tile = tiles.get(key)
     if (!tile) tiles.set(key, tile = { xtile, ytile, layers: new Map() })
     const name = layers(i)
-    const layerName = name == null ? fallbackLayer : String(name)
+    const layerName = singleLayer ? TREE_SOURCE_LAYER : name == null ? fallbackLayer : String(name)
     let layer = tile.layers.get(layerName)
     if (!layer) tile.layers.set(layerName, layer = new Layer())
 
@@ -217,6 +243,10 @@ export function encodePointTiles(rows: TileRowColumns, z: number, properties: Po
       tags.varint(index)
       tags.varint(layer.number(property.kind === 'int' ? 'int' : 'double', property.kind === 'int' ? Math.round(value) : value))
     }
+    if (singleLayer && name != null) {
+      tags.varint(properties.length)
+      tags.varint(layer.sharedString(String(name)))
+    }
     geometry.reset()
     geometry.varint(9) // MoveTo, one point
     geometry.varint(zigzag(px))
@@ -231,6 +261,7 @@ export function encodePointTiles(rows: TileRowColumns, z: number, properties: Po
 
   const keys = new Bytes()
   for (const property of properties) keys.field(3, utf8.encode(property.name))
+  if (singleLayer) keys.field(3, utf8.encode(COLOR_PROPERTY))
   const out = new Map<string, EncodedTile>()
   const body = new Bytes()
   for (const [key, tile] of tiles) {

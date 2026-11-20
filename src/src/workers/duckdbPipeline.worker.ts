@@ -40,8 +40,8 @@ import {
   CITY_ENUM_TYPES,
   COLOR_OVERRIDE_TABLE,
   DBH_COLORS,
-  SPECIES_SHADE_FINE_TABLE,
-  SPECIES_SHADE_TABLE,
+  SHADE_TABLES,
+  type ShadeTier,
   NOTABLE_TOKEN_PATTERN,
   TREES_AT_TOKEN,
   UNKNOWN_SHADE_COLOR,
@@ -90,7 +90,7 @@ const DETAIL_TILE_ZOOM = 15
 const PUBLISHED_TREE_FILTER_TABLE = 'published_tree_filter_ids'
 
 import { CATEGORY_COLORS as DEFAULT_CATEGORY_COLORS } from '../treeFormColors'
-import { FoliageLookup, fineShadeMap, foliageDefaultsSql, foliageSpeciesSql, snapShade } from '../lib/foliageSeason'
+import { FoliageLookup, fineShadeMap, fittedShadeMap, foliageDefaultsSql, foliageSpeciesSql, OVERVIEW_SHADE_COUNT } from '../lib/foliageSeason'
 import type { InitStage } from '../lib/loadProgress'
 import { encodePointTiles, type PointProperty } from './pointTiles'
 import { SparseBlock, type Box } from './sparseBlocks'
@@ -106,6 +106,21 @@ let foliage = FoliageLookup.none()
 
 /** The source layer a tree with no colour lands in: the style's own fallback colour. */
 const MVT_FALLBACK_LAYER = '#66BB6A'
+/**
+ * The palette a tile at `z` paints leaf shades from. Below DETAIL_TILE_ZOOM a
+ * tile is drawn by a heatmap and a circle layer per colour, so a few merged
+ * colours; from it a tile is one source layer with the colour on each feature
+ * (pointTiles.ts `singleLayer`), drawn by one circle layer, so the fine
+ * palette the desktop's dots paint.
+ */
+function tileShadeTier(z: number): ShadeTier {
+  return z >= DETAIL_TILE_ZOOM ? 'fine' : 'overview'
+}
+
+/** How a tile at `z` is laid out: one source layer with a colour on each feature from DETAIL_TILE_ZOOM up. */
+function tileLayout(z: number): { singleLayer: boolean } {
+  return { singleLayer: z >= DETAIL_TILE_ZOOM }
+}
 
 /**
  * The lowest tile zoom whose features the circle layer draws (useMapLayers'
@@ -185,12 +200,16 @@ let publishedTreeIdFilterSignature = 'all'
 let colorMapSignature = 'default'
 /** True while `__tree_color_override` exists; every colour read joins it then. */
 let colorOverrideActive = false
-/** True while `__species_shade` and `__species_shade_fine` exist: the leaf-shade scheme is the base colour. */
+/** True while the species shade tables exist (SHADE_TABLES): the leaf-shade scheme is the base colour. */
 let speciesShadeActive = false
 let speciesShadeSignature = 'none'
 /** True while the base colour is the trunk diameter's band (`dbhColorSql`). */
 let dbhColorsActive = false
-/** Every colour the vector tiles may draw: one set of layers each (useMapLayers). */
+/**
+ * Every colour the overview tiles (below DETAIL_TILE_ZOOM) may draw: a heatmap
+ * and a circle layer each (useMapLayers). The tree tiles carry their colour
+ * on each feature and need no list.
+ */
 let activeDistinctColors: string[] = Object.values(DEFAULT_CATEGORY_COLORS)
 /** Every colour the desktop's dots may draw: their one-byte palette (cityPoints pointPalette). Differs only for leaf shades. */
 let pointDistinctColors: string[] = activeDistinctColors
@@ -1471,10 +1490,10 @@ function postColorMapUpdate() {
 }
 
 /** The colours the base scheme can draw: the trunk bands, every species shade and grey, or the tree-form categories. */
-async function baseDistinctColors(fine = false): Promise<string[]> {
+async function baseDistinctColors(tier: ShadeTier = 'overview'): Promise<string[]> {
   if (dbhColorsActive) return Object.values(DBH_COLORS)
   if (!conn || !speciesShadeActive) return Object.values(DEFAULT_CATEGORY_COLORS)
-  const result = await conn.query(`SELECT DISTINCT unnest(shades) AS display_color FROM ${fine ? SPECIES_SHADE_FINE_TABLE : SPECIES_SHADE_TABLE}`)
+  const result = await conn.query(`SELECT DISTINCT unnest(shades) AS display_color FROM ${SHADE_TABLES[tier]}`)
   return [...new Set([...result.toArray().map((r: Record<string, unknown>) => String(r.display_color)), UNKNOWN_SHADE_COLOR])]
 }
 
@@ -1483,8 +1502,8 @@ async function baseDistinctColors(fine = false): Promise<string[]> {
  * one-byte palette never drops one, then the base scheme's.
  */
 async function setDistinctColors(overrides: string[] = []) {
-  activeDistinctColors = [...new Set([...overrides, ...await baseDistinctColors()])]
-  pointDistinctColors = [...new Set([...overrides, ...await baseDistinctColors(true)])]
+  activeDistinctColors = [...new Set([...overrides, ...await baseDistinctColors('overview')])]
+  pointDistinctColors = [...new Set([...overrides, ...await baseDistinctColors('fine')])]
 }
 
 /** Drop any chat colour override; every colour read falls back to the base scheme. */
@@ -1509,29 +1528,31 @@ async function setSpeciesShadeSql(sql: string | null) {
   const signature = normalized ? `shade-${hashText(normalizeSql(normalized))}` : 'none'
   if (signature === speciesShadeSignature) return
   const t0 = nowMs()
-  await conn.query(`DROP TABLE IF EXISTS ${SPECIES_SHADE_TABLE}`)
-  await conn.query(`DROP TABLE IF EXISTS ${SPECIES_SHADE_FINE_TABLE}`)
+  for (const table of Object.values(SHADE_TABLES)) await conn.query(`DROP TABLE IF EXISTS ${table}`)
   if (normalized) {
-    // Exact hexes first, then each painted two ways: snapped to the short
-    // palette (snapShade) for the vector tiles, where a few thousand distinct
-    // shades would be as many sets of layers, and binned to the finer one
-    // (fineShadeMap) for the dots and crowns, which draw from one layer.
+    // Exact hexes first, then each painted two ways (lib/foliageSeason): a
+    // few merged colours, fitted to the shades, for the overview tiles, where
+    // each colour is a heatmap and a circle layer; and the fine palette for
+    // everything that draws any colour from one layer: the tree tiles, the
+    // desktop's dots and the crowns.
     await conn.query(`CREATE OR REPLACE TEMP TABLE __species_shade_exact AS SELECT species, shades FROM (
 ${normalized}
 ) __shades`)
     const exact = (await conn.query(`SELECT DISTINCT unnest(shades) AS shade FROM __species_shade_exact`))
       .toArray().map((r: Record<string, unknown>) => String(r.shade))
-    const fine = fineShadeMap(exact)
-    const pairs = exact.flatMap((shade) => {
-      const snapped = snapShade(shade)
-      // Both answer only for a bare #rrggbb, so the literals need no escaping.
-      return snapped ? [`('${shade}', '${snapped}', '${fine.get(shade) ?? snapped}')`] : []
-    })
-    await conn.query(`CREATE OR REPLACE TEMP TABLE __shade_snap (shade VARCHAR, snapped VARCHAR, fine VARCHAR)`)
+    const tiers: Record<ShadeTier, Map<string, string>> = {
+      overview: fittedShadeMap(exact, OVERVIEW_SHADE_COUNT),
+      fine: fineShadeMap(exact),
+    }
+    // Each map answers only for a bare #rrggbb, so the literals need no escaping.
+    const pairs = exact.flatMap((shade) => tiers.overview.has(shade)
+      ? [`('${shade}', '${tiers.overview.get(shade)}', '${tiers.fine.get(shade)}')`]
+      : [])
+    await conn.query(`CREATE OR REPLACE TEMP TABLE __shade_snap (shade VARCHAR, overview VARCHAR, fine VARCHAR)`)
     if (pairs.length) await conn.query(`INSERT INTO __shade_snap VALUES ${pairs.join(', ')}`)
-    for (const [table, column] of [[SPECIES_SHADE_TABLE, 'snapped'], [SPECIES_SHADE_FINE_TABLE, 'fine']]) {
+    for (const [tier, table] of Object.entries(SHADE_TABLES)) {
       await conn.query(`CREATE TEMP TABLE ${table} AS
-SELECT species, list(${column} ORDER BY i) AS shades
+SELECT species, list(${tier} ORDER BY i) AS shades
 FROM (
   SELECT species, unnest(shades) AS shade, generate_subscripts(shades, 1) AS i FROM __species_shade_exact
 ) JOIN __shade_snap USING (shade)
@@ -1589,10 +1610,11 @@ async function ensureNeighborhoodBatchTiles(z: number, x: number, y: number, bas
     }
   }
 
-  const color = colorSql('tf', colorOverrideActive, baseScheme())
+  const shades = tileShadeTier(z)
+  const color = colorSql('tf', colorOverrideActive, baseScheme(), { shades })
   const src = tileRowSource(baseQuery, color)
   // Overview cells group by colour only (see aggCacheSql in cityTables.ts).
-  const aggColor = colorSql('tf', colorOverrideActive, baseScheme(), { aggregated: true })
+  const aggColor = colorSql('tf', colorOverrideActive, baseScheme(), { aggregated: true, shades })
   const aggSrc = tileRowSource(baseQuery, aggColor)
   const aggDbh = aggregatedDbhSql(z)
   const tileCount = Math.pow(2, z)
@@ -1682,7 +1704,7 @@ SELECT * FROM pts
     const result = await conn.query(sql)
     const queried = nowMs()
     // One tile per (xtile, ytile); each colour is its own source layer.
-    const tiles = encodePointTiles(result, z, simplifyGridMeters > 0 ? aggregateProperties(z, simplifyGridMeters) : POINT_PROPERTIES, MVT_FALLBACK_LAYER)
+    const tiles = encodePointTiles(result, z, simplifyGridMeters > 0 ? aggregateProperties(z, simplifyGridMeters) : POINT_PROPERTIES, MVT_FALLBACK_LAYER, tileLayout(z))
     console.info('[Perf] duckdb-worker:neighborhood-batch', {
       z,
       mode: simplifyGridMeters > 0 ? `agg${simplifyGridMeters}` : 'points',
@@ -1735,9 +1757,10 @@ async function generatePointTileMvt(z: number, x: number, y: number): Promise<Ui
   const baseQuery = effectiveBaseQuery(tileQuerySql)
   const { simplifyGridMeters } = adaptiveLodForTile(z, x, y)
   const bounds = tileBounds3857(z, x, y)
-  const color = colorSql('tf', colorOverrideActive, baseScheme())
+  const shades = tileShadeTier(z)
+  const color = colorSql('tf', colorOverrideActive, baseScheme(), { shades })
   const src = tileRowSource(baseQuery, color)
-  const aggColor = colorSql('tf', colorOverrideActive, baseScheme(), { aggregated: true })
+  const aggColor = colorSql('tf', colorOverrideActive, baseScheme(), { aggregated: true, shades })
   const aggSrc = tileRowSource(baseQuery, aggColor)
   const aggDbh = aggregatedDbhSql(z)
 
@@ -1794,7 +1817,7 @@ SELECT * FROM points
 
     const result = await conn.query(sql)
     const properties = simplifyGridMeters > 0 ? aggregateProperties(z, simplifyGridMeters) : POINT_PROPERTIES
-    const tile = encodePointTiles(result, z, properties, MVT_FALLBACK_LAYER).get(`${x}/${y}`)?.mvt ?? new Uint8Array()
+    const tile = encodePointTiles(result, z, properties, MVT_FALLBACK_LAYER, tileLayout(z)).get(`${x}/${y}`)?.mvt ?? new Uint8Array()
     if (windowCoversTile(z, x, y)) setCachedTile(key, tile)
     return new Uint8Array(tile)
   })()
@@ -2233,9 +2256,9 @@ async function getMapTrees(camera: TreeRenderView): Promise<TreeCrownColumns> {
   if (!current()) return empty
   const baseQuery = effectiveBaseQuery(tileQuerySql)
   const filter = isDefaultBaseQuery(baseQuery) ? null : baseQuery
-  // A crown takes the colour of the circle it sits over: the dots' finer
-  // shades on a desktop, the tiles' short palette on a phone.
-  const color = colorSql('tf', colorOverrideActive, baseScheme(), { fine: windowPolicy === DESKTOP_POLICY })
+  // A crown is painted per vertex, so it takes the fine shades on either
+  // renderer, as do the desktop's dots and a phone's tree tiles (tileShadeTier).
+  const color = colorSql('tf', colorOverrideActive, baseScheme(), { shades: 'fine' })
   // The cells under the view: the ones near the camera are loaded for the
   // read, the rest are read if they happen to be held. A view too wide to
   // list (a pitched horizon) reads the whole view of what is held.
@@ -2307,7 +2330,7 @@ function columnArray<T extends Float32Array | Uint8Array | Uint16Array | Uint32A
 
 /** The rows source and colour a point read over `tables` uses. */
 function pointSource(tables: string[]) {
-  const color = colorSql('tf', colorOverrideActive, baseScheme(), { fine: true })
+  const color = colorSql('tf', colorOverrideActive, baseScheme(), { shades: 'fine' })
   return { src: tileRowSource(effectiveBaseQuery(tileQuerySql), color, scopeSql(tables)), color, palette: pointPalette(pointDistinctColors) }
 }
 

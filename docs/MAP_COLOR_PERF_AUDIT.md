@@ -539,6 +539,45 @@ The dots' palette index is now a hash join on the palette, not a
 `list_position` scan, which at 200 entries cost four times as much per tree
 (native DuckDB, 200k rows: 32 ms against 8; 6 against 7 at the forms' 18).
 
+## Seventh round: the phone's tiles, merged above z15 and fine below
+
+The vector tiles drew a heatmap, a circle and a halo layer for each of the
+seventeen snapped colours: 54 layers at every zoom. Only the heatmaps need a
+layer per colour, since `heatmap-color` is a ramp over density and cannot
+come from the feature, and the heatmaps end at z15, where the tree tiles
+begin. So:
+
+- **The overview tiles (z11 to z14)** paint eight colours fitted to the
+  recorded shades (`fittedShadeMap`, k-means under the redmean distance), a
+  heatmap and a circle layer each. Eight fitted colours err as little as the
+  seventeen fixed ones did (mean 42 against 44 over the growing-season
+  shades).
+- **The tree tiles (z15 up)** are one source layer, `trees`, with each
+  feature's colour in a `color` property (`encodePointTiles` `singleLayer`),
+  drawn by one data-driven circle layer. The palette is free there, so they
+  paint the fine palette the desktop's dots and the crowns paint (mean
+  error 14).
+- **The halo** is one layer over `trees`, filtered on `notable`; an overview
+  cell is never notable.
+- The per-colour circle layers stay at every zoom, so a z14 tile still on
+  screen while the z15 tiles load keeps its trees.
+
+A phone draws 8 + 8 + 1 + 1 = 18 tree layers, against 54. `bench:tiles`,
+phone layout, leaf shades, three interleaved runs each against the live
+bucket (window loads move by seconds between runs; read the map's idle
+times, not the loads):
+
+| | main | this round |
+|---|---|---|
+| map idle after a z13 pan (median) | 760-790 ms | 500-535 ms |
+| total settle over the 14 steps | 27.0-31.2 s | 22.7-27.4 s |
+| species shade tables built | 346-403 ms | 207-346 ms |
+| z15 to z18 settle | within noise | within noise |
+
+The species shade tables are two now (`__species_shade` for the overview,
+`__species_shade_fine` for everything else); the fixed `SHADE_PALETTE` and
+`snapShade` are gone.
+
 ## Is this the right stack?
 
 The data layer is right and is the product: DuckDB-WASM over published
