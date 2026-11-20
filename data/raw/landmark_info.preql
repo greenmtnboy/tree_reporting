@@ -108,6 +108,12 @@ import uslou.louisville_landmarks;
 import frmpl.montpellier_landmarks;
 import frgnb.grenoble_landmarks;
 import ausyd.sydney_landmarks;
+import usmsn.madison_landmarks;
+import usric.richmond_landmarks;
+import usgeg.spokane_landmarks;
+import cawat.waterloo_landmarks;
+import frnte.nantes_landmarks;
+import gbshf.sheffield_landmarks;
 
 # The cross-city union is NOT declared here. It lives in
 # `full_landmark_publish.preql`, which reads the parquets these imports publish

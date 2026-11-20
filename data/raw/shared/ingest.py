@@ -1876,6 +1876,12 @@ def _sanitize_taxon(value: str | None) -> str | None:
 # Keyed by city code so `community_source_for` can derive the community label
 # and so tests can assert the two lists agree.
 MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
+    "GBSHF": ("SHEFFIELD_OPENDATA",),
+    "FRNTE": ("NANTES_OPENDATA",),
+    "CAWAT": ("WATERLOO_OPENDATA",),
+    "USGEG": ("SPOKANE_OPENDATA",),
+    "USRIC": ("RICHMOND_OPENDATA",),
+    "USMSN": ("MADISON_OPENDATA",),
     "AUSYD": ("SYDNEY_OPENDATA",),
     "FRGNB": ("GRENOBLE_OPENDATA",),
     "FRMPL": ("MONTPELLIER_OPENDATA",),
@@ -2008,6 +2014,12 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # overlapping rows under one cluster id and publishes only the survivor — see
 # tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
+    "GBSHF": "OSM_GBSHF",
+    "FRNTE": "OSM_FRNTE",
+    "CAWAT": "OSM_CAWAT",
+    "USGEG": "OSM_USGEG",
+    "USRIC": "OSM_USRIC",
+    "USMSN": "OSM_USMSN",
     "AUSYD": "OSM_AUSYD",
     "FRGNB": "OSM_FRGNB",
     "FRMPL": "OSM_FRMPL",
@@ -2719,6 +2731,12 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
+    "GBSHF": (53.3, 53.5, -1.81, -1.32),
+    "FRNTE": (47.08, 47.32, -1.83, -1.38),
+    "CAWAT": (43.42, 43.53, -80.62, -80.47),
+    "USGEG": (47.58, 47.76, -117.57, -117.3),
+    "USRIC": (37.44, 37.61, -77.61, -77.38),
+    "USMSN": (42.98, 43.2, -89.58, -89.24),
     "AUSYD": (-33.93, -33.85, 151.17, 151.24),
     "FRGNB": (44.95, 45.3, 5.6, 5.9),
     "FRMPL": (43.56, 43.66, 3.8, 3.95),
@@ -2876,6 +2894,18 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "GBSHF": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "FRNTE": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "CAWAT": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "USGEG": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "USRIC": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "USMSN": 10,
     # Calibrated 2026-11-18: 8 m keeps 2.1 true per false at the margin (88.8% recall);
     # 10 m drops below 1.
     "AUSYD": 8,
@@ -3432,6 +3462,12 @@ DEDUP_CELL_METRES: dict[str, int] = {
 Box = tuple[float, float, float, float]
 
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
+    'GBSHF': ((53.3, 53.5, -1.81, -1.32),),
+    'FRNTE': ((47.08, 47.32, -1.83, -1.38),),
+    'CAWAT': ((43.42, 43.53, -80.62, -80.47),),
+    'USGEG': ((47.58, 47.76, -117.57, -117.3),),
+    'USRIC': ((37.44, 37.61, -77.61, -77.38),),
+    'USMSN': ((42.98, 43.2, -89.58, -89.24),),
     'AUSYD': ((-33.93, -33.85, 151.17, 151.24),),
     'FRGNB': ((44.95, 45.3, 5.6, 5.9),),
     'FRMPL': ((43.56, 43.66, 3.8, 3.95),),

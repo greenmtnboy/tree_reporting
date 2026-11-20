@@ -11,6 +11,12 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
+  { city: 'Sheffield', label: 'TODO: Sheffield tree inventory source', url: 'TODO' },
+  { city: 'Nantes', label: 'TODO: Nantes tree inventory source', url: 'TODO' },
+  { city: 'Waterloo', label: 'TODO: Waterloo tree inventory source', url: 'TODO' },
+  { city: 'Spokane', label: 'TODO: Spokane tree inventory source', url: 'TODO' },
+  { city: 'Richmond', label: 'TODO: Richmond tree inventory source', url: 'TODO' },
+  { city: 'Madison', label: 'TODO: Madison tree inventory source', url: 'TODO' },
   { city: 'Sydney', label: 'City of Sydney - Trees (CC BY 4.0)', url: 'https://data.cityofsydney.nsw.gov.au/datasets/cityofsydney::trees' },
   { city: 'Grenoble', label: 'Ville de Grenoble and Grenoble-Alpes Métropole - Arbres and Patrimoine arboré du territoire métropolitain (ODbL 1.0)', url: 'https://data.metropolegrenoble.fr/visualisation/information/?id=arbres-grenoble' },
   { city: 'Montpellier', label: 'Montpellier Méditerranée Métropole - Arbres de Montpellier (ODbL)', url: 'https://data.montpellier3m.fr/dataset/arbres-de-montpellier' },
@@ -141,6 +147,12 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
+  { city: 'Sheffield', label: 'TODO: Sheffield landmark source' },
+  { city: 'Nantes', label: 'TODO: Nantes landmark source' },
+  { city: 'Waterloo', label: 'TODO: Waterloo landmark source' },
+  { city: 'Spokane', label: 'TODO: Spokane landmark source' },
+  { city: 'Richmond', label: 'TODO: Richmond landmark source' },
+  { city: 'Madison', label: 'TODO: Madison landmark source' },
   { city: 'Sydney', label: 'NSW State Heritage Register curtilages (DCCEEW, CC BY)', url: 'https://data.nsw.gov.au/data/dataset/state-heritage-register-curtilages1c5ee' },
   { city: 'Sydney', label: 'Sydney LEP 2012 heritage items (NSW DPHI, CC BY)', url: 'https://data.nsw.gov.au/data/dataset/environmental-planning-instrument-heritage-her' },
   { city: 'Grenoble', label: 'Ministère de la Culture - Immeubles protégés au titre des Monuments Historiques (Licence Ouverte)', url: 'https://www.data.gouv.fr/datasets/immeubles-proteges-au-titre-des-monuments-historiques-2' },
