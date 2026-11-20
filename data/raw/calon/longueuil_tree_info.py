@@ -57,7 +57,6 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from shared.platforms.ckan import CkanResource, read_geojson_features
 from shared.ingest import (
     cm_to_inches,
     coordinate_key,
@@ -68,6 +67,7 @@ from shared.ingest import (
     normalize_species,
     validate_coordinates,
 )
+from shared.platforms.ckan import CkanResource, read_geojson_features
 
 RESOURCE = CkanResource(
     "www.donneesquebec.ca/recherche",

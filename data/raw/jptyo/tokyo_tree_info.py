@@ -107,7 +107,6 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from shared.platforms.ckan import CkanResource, read_csv_rows
 from shared.ingest import (
     coordinate_key,
     coordinate_tree_id,
@@ -116,6 +115,7 @@ from shared.ingest import (
     enforce_tree_schema,
     validate_coordinates,
 )
+from shared.platforms.ckan import CkanResource, read_csv_rows
 from shared.species.japanese import species_from_japanese_name
 
 # Both resources of package `t000014d2000000029`, "都道の街路樹".

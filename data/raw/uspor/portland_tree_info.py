@@ -26,8 +26,11 @@ street layer is ~1,260 requests (about 25 minutes, sequential).
 **Ids.**  The street layer has no GlobalID and no asset number: its only
 identifier is `OBJECTID`, which is the OID (unique and non-null by
 construction) and runs 1..252,205 with no gaps -- the table is reloaded whole
-when it is republished, so a future reload may renumber it.  It is
-`pdx-st-{OBJECTID}`.  The park layer carries a `GlobalID` (unique over the
+when it is republished, so a future reload may renumber it.  So a street tree
+is keyed on its rounded coordinate, `pdx-st-{lon:.7f}_{lat:.7f}` (EXTENDING.md,
+step 1); until 2026-11-20 it was `pdx-st-{OBJECTID}`, which no check-in
+referenced.  Two coordinates carried two different trees in November 2026
+(dropped) and one an identical repeat (collapsed).  The park layer carries a `GlobalID` (unique over the
 layer; its OBJECTIDs have gaps, so it is edited in place), published as
 `pdx-pk-{GlobalID}` without the braces, lower-cased.
 
@@ -64,21 +67,24 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from shared.platforms.arcgis import FeatureLayer, esri_point, iter_features
 from shared.ingest import (
     DEAD_SPECIES,
     UNKNOWN_SPECIES,
+    coordinate_key,
+    coordinate_tree_id,
+    drop_stacked_coordinates,
     emit,
     enforce_tree_schema,
     stream_to_table,
     validate_coordinates,
 )
+from shared.platforms.arcgis import FeatureLayer, esri_point, iter_features
 
 SERVICE = "https://www.portlandmaps.com/od/rest/services/COP_OpenData_Environment/MapServer"
 STREET = FeatureLayer(f"{SERVICE}/1415", timeout=180)
 PARKS = FeatureLayer(f"{SERVICE}/220", timeout=180)
 
-STREET_FIELDS = "OBJECTID,SPECIES,DIAMETER,Condition"
+STREET_FIELDS = "SPECIES,DIAMETER,Condition"
 PARK_FIELDS = "OBJECTID,GlobalID,Genus_species,DBH,Condition,CrownWidthNS,CrownWidthEW"
 
 FEET_TO_M = 0.3048
@@ -144,8 +150,12 @@ class Portland:
         for feature in features:
             rec = feature.get("attributes") or {}
             lat, lon = esri_point(feature.get("geometry"))
+            if lat is None:
+                self.dropped["street row with no location"] += 1
+                continue
+            lon, lat = coordinate_key(lon, lat)
             raw_dbh = rec.get("DIAMETER")
-            cols["tree_id"].append(f"pdx-st-{rec['OBJECTID']}")
+            cols["tree_id"].append(coordinate_tree_id("pdx-st", lon, lat))
             cols["species"].append(self.street_species(rec.get("SPECIES"), rec.get("Condition")))
             cols["latitude"].append(lat)
             cols["longitude"].append(lon)
@@ -254,6 +264,9 @@ if __name__ == "__main__":
         iter_park_chunks(), portland.parks, keep=portland.park_keep, label="Portland parks"
     )
     street = stream_to_table(iter_street_chunks(), portland.street, label="Portland streets")
+    street = drop_stacked_coordinates(
+        street, label="Portland streets", identical=("species", "diameter_at_breast_height")
+    )
     portland.report()
     table = pa.concat_tables([street, parks])
     table = validate_coordinates(table, city="Portland", city_code="USPOR")

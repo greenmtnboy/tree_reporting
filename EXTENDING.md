@@ -125,14 +125,19 @@ survives the publisher's next reload. Preference:
    transformed table; `tests/test_coordinate_ids.py` lists the cities on
    them. Used by Philadelphia (`objectid` is a row number
    within one year's layer), Tokyo and Longueuil (no id column at all), and
-   Spokane (`OBJECTID` 1..N with one `UpdatedDT` on every row: a wholesale
-   reload).
+   Spokane, Houston, Kelowna and Portland's street layer (`OBJECTID` 1..N
+   with no gaps: a layer reloaded whole).
 
 `OBJECTID` is a row number, not an id: an ArcGIS layer reassigns it whenever
-it is truncated and reloaded. Use it only alongside a real id, to tell apart
-the rows that id repeats (Baltimore, Charlotte, Columbus). Kelowna, Houston,
-Naples, NYC and Portland's street layer still key on it alone; they predate
-this rule, and moving them re-keys every tree and its check-ins once.
+it is truncated and reloaded, and dense 1..N values are the sign of a layer
+that is. Use it to tell apart the rows a real id repeats (Baltimore,
+Charlotte, Columbus), or alone only where the layer is shown to be edited in
+place -- gaps left by deletions, a versioned geodatabase -- since there a
+moved tree keeps its OBJECTID but would change a coordinate id. Naples is
+the one city keyed that way. Before moving an existing city's id, check
+Firestore `checkins`/`treeCheckinStats` and the published community,
+satellite and modification feeds for ids under its prefix: a new id
+orphans them.
 
 `enforce_tree_schema` refuses a repeated or null `tree_id`; drop unidentified
 rows in the ingest with a logged count.

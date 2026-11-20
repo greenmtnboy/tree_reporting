@@ -1,8 +1,8 @@
 """The coordinate id: a tree's key when its source publishes no stable one.
 
-The rule is in EXTENDING.md (step 1). Philadelphia, Tokyo, Longueuil and
-Spokane key on it; an id changes only if a tree is moved, so the format is
-pinned against ids those cities have already published.
+The rule is in EXTENDING.md (step 1); COORDINATE_ID_CITIES lists the cities
+keyed on it.  An id changes only if a tree is moved, so the format is pinned
+against ids those cities have already published.
 """
 
 import re
@@ -14,7 +14,7 @@ import pyarrow as pa
 RAW_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAW_DIR))
 
-from shared.ingest import (  # noqa: E402
+from shared.ingest import (
     coordinate_key,
     coordinate_tree_id,
     drop_stacked_coordinates,
@@ -25,6 +25,9 @@ COORDINATE_ID_CITIES = {
     "jptyo/tokyo_tree_info.py": '"tyo"',
     "calon/longueuil_tree_info.py": '"lgl"',
     "usgeg/spokane_tree_info.py": '"spokane"',
+    "ushou/houston_tree_info.py": '"hou"',
+    "cakel/kelowna_tree_info.py": '"kel"',
+    "uspor/portland_tree_info.py": '"pdx-st"',
 }
 
 

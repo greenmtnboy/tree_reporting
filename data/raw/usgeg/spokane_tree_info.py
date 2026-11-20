@@ -79,7 +79,6 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from shared.platforms.arcgis import FeatureLayer, esri_point, iter_features
 from shared.ingest import (
     UNKNOWN_SPECIES,
     coordinate_key,
@@ -90,6 +89,7 @@ from shared.ingest import (
     stream_to_table,
     validate_coordinates,
 )
+from shared.platforms.arcgis import FeatureLayer, esri_point, iter_features
 
 LAYER = FeatureLayer(
     "https://services.arcgis.com/3PDwyTturHqnGCu0/arcgis/rest/services/"

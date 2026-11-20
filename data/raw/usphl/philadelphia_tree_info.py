@@ -86,7 +86,6 @@ from pathlib import Path
 import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from shared.platforms.arcgis import FeatureLayer, iter_features, layer_metadata
 from shared.ingest import (
     SHRUB_SPECIES,
     coordinate_key,
@@ -98,6 +97,7 @@ from shared.ingest import (
     normalize_species,
     validate_coordinates,
 )
+from shared.platforms.arcgis import FeatureLayer, iter_features, layer_metadata
 
 SERVICES_URL = "https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services"
 LAYER_NAME = re.compile(r"ppr_tree_inventory_(\d{4})", re.IGNORECASE)
@@ -253,7 +253,7 @@ def select_rows(rows: list[tuple]) -> list[tuple]:
     dropped: Counter[str] = Counter()
     kept = []
     for row in rows:
-        _, name, dbh, lon, lat = row
+        _, name, dbh, lon, _lat = row
         if lon is None:
             dropped["no coordinate"] += 1
         elif not name and not has_diameter(dbh):

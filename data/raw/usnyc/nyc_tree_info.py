@@ -20,10 +20,10 @@ from trilogy.io.arrow import emit_arrow_batches
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from shared.ingest import (
     UpstreamUnavailable,
-    stream_table_batches,
     enforce_tree_schema,
     normalize_species,
     report_species_cleanup,
+    stream_table_batches,
     validate_coordinates,
 )
 from shared.platforms.socrata import SocrataDataset, row_count
@@ -40,7 +40,7 @@ PAGE_SIZE = 250000
 # Rows per emitted unit; see iter_pages.
 EMIT_ROWS = 100000
 DATASET_PARAMS = {
-    "$select": "objectid,genusspecies,dbh,planteddate,location",
+    "$select": "globalid,genusspecies,dbh,planteddate,location",
     "$limit": str(PAGE_SIZE),
     # SoQL promises nothing about the order of an unordered result, so paging
     # it by $offset can repeat or skip rows between requests -- and a short
@@ -104,12 +104,15 @@ def cast_columns(table: pa.Table) -> pa.Table:
         ts = pc.strptime(date_str, format="%Y-%m-%d", unit="s")
         table = table.set_column(idx, planted_col, pc.cast(ts, pa.date32()))
 
-    # objectid: prefix with "nyc-" for global uniqueness across cities.
-    id_col = next((c for c in table.schema.names if c.lower() == "objectid"), None)
+    # The id is the ForMS `globalid` (unique and non-null over all 1,125,266
+    # rows, November 2026), the runbook's first choice; until 2026-11-20 it was
+    # `objectid`, which no check-in referenced.  Lower-cased without braces,
+    # like every GlobalID here, and prefixed "nyc-" for the global namespace.
+    id_col = next((c for c in table.schema.names if c.lower() == "globalid"), None)
     if id_col is not None:
         ids = table[id_col].to_pylist()
         prefixed = pa.array(
-            [f"nyc-{v}" if v is not None else None for v in ids],
+            [f"nyc-{str(v).strip('{} ').lower()}" if v else None for v in ids],
             type=pa.string(),
         )
         table = table.set_column(table.schema.get_field_index(id_col), id_col, prefixed)
@@ -217,7 +220,7 @@ def iter_pages() -> Iterator[pa.Table]:
                 city="New York City",
                 data_source="NYC_OPENDATA",
                 columns={
-                    "tree_id": "objectid",
+                    "tree_id": "globalid",
                     "species": "genusspecies",
                     "plant_date": "planteddate",
                     "diameter_at_breast_height": "dbh",
