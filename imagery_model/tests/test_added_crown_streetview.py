@@ -15,5 +15,6 @@ if(b.latitude>=42||b.longitude<=-71||b.target_x!==20||b.sample_id===a.sample_id)
 if(addedCrownStreetViewTarget(region,null)!==null)throw Error('missing anchor');
 '''
     subprocess.run(['node','-e',script],check=True,capture_output=True,text=True)
-    assert "!region.tree_id&&!event.shiftKey" in html
+    assert 'selectEditableTree(scene.scene_id,addedTreeKey(region.region_id))' in html
+    assert 'if(!event.shiftKey)return;' in html
     assert 'Shift-click to edit; drag to move' in html

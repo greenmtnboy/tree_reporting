@@ -23,7 +23,8 @@ def test_latest_completed_city_model_not_latest_cohort(tmp_path):
 
 def test_image_allows_unassigned_train_but_not_test(tmp_path):
     folder=tmp_path/'chips'/'new';folder.mkdir(parents=True)
-    (folder/'summary.json').write_text(json.dumps({'source_raster':'/remote/city.vrt'}))
+    (tmp_path/'city.vrt').touch()
+    (folder/'summary.json').write_text(json.dumps({'source_raster':str(tmp_path/'city.vrt')}))
     pd.DataFrame({'chip_id':['train1','test1','val1'],'split':['train','test','validation']}).to_parquet(folder/'chips.parquet')
     context=SimpleNamespace(config=SimpleNamespace(paths=SimpleNamespace(root=tmp_path)),raster=tmp_path/'city.vrt')
     validate_training_image(context,'train1')

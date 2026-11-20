@@ -133,8 +133,8 @@ def _debug_fixture(tmp_path: Path) -> tuple[ModelDebugBundle, Path]:
 
 def test_detection_only_predictions_do_not_count_as_species_errors(tmp_path: Path) -> None:
     bundle, _ = _debug_fixture(tmp_path)
-    bundle.predictions['species_id'] = None
-    bundle.predictions['dbh_in'] = None
+    import polars as pl
+    bundle.predictions = bundle.predictions.with_columns(pl.lit(None).alias('species_id'), pl.lit(None).alias('dbh_in'))
     assert all(c['species_errors'] == 0 for c in bundle._chip_summaries())
     assert 'p.dbh_in==null' in MODEL_DEBUG_HTML
     assert 'p.species_id!=null' in MODEL_DEBUG_HTML
@@ -144,16 +144,20 @@ def test_inventory_name_is_separate_from_checkpoint_targets(tmp_path: Path) -> N
     bundle, _ = _debug_fixture(tmp_path)
     path = bundle.artifact_root / "run-inputs" / bundle.training_run_id / "ussfo"
     path.mkdir(parents=True)
-    tree_id = bundle.ground_truth.iloc[0].tree_id
+    tree_id = bundle.ground_truth.row(0, named=True)['tree_id']
     pd.DataFrame({"tree_id": [tree_id], "species": ["Acer rare"]}).to_parquet(
         path / "inventory.parquet", index=False)
-    bundle.ground_truth.loc[0, "species_id"] = np.nan
-    bundle.ground_truth.loc[0, "genus_id"] = 0
+    import polars as pl
+    first = pl.int_range(pl.len()) == 0
+    bundle.ground_truth = bundle.ground_truth.with_columns(
+        pl.when(first).then(None).otherwise(pl.col("species_id")).alias("species_id"),
+        pl.when(first).then(0).otherwise(pl.col("genus_id")).alias("genus_id"),
+    )
     bundle._add_ground_truth_names()
-    assert bundle.ground_truth.iloc[0].inventory_species == "Acer rare"
-    assert pd.isna(bundle.ground_truth.iloc[0].species)
-    assert bundle.ground_truth.iloc[0].genus == bundle.taxonomy["genera"][0]
-    assert pd.isna(bundle.ground_truth.iloc[0].species_id)
+    assert bundle.ground_truth.row(0, named=True)['inventory_species'] == "Acer rare"
+    assert pd.isna(bundle.ground_truth.row(0, named=True)['species'])
+    assert bundle.ground_truth.row(0, named=True)['genus'] == bundle.taxonomy["genera"][0]
+    assert pd.isna(bundle.ground_truth.row(0, named=True)['species_id'])
     assert "Genus-only target:" in MODEL_DEBUG_HTML
 
 

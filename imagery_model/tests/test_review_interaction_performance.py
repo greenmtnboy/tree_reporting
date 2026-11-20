@@ -111,7 +111,7 @@ def test_hidden_trees_removed_from_interaction_and_navigation_flushes():
     html = _render_grouped_registration_html([], {}, [])
     assert "new Set(['not-tree','uncertain','duplicate','occluded'])" in html
     assert 'const selectableSamples = stackVisibleSamples.filter(sample => !isHiddenTree(sample))' in html
-    assert "|| isHiddenTree(sample)) return false" in html
+    assert "sample.reference_only||isHiddenTree(sample)" in html
     assert "hideInput.className='hide-excluded-chip'" in html
     assert 'clearTimeout(localSaveTimer);storeLocalState();' in html
     assert 'if (!await syncReviews())' in html

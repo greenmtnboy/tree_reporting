@@ -82,7 +82,7 @@ def test_registration_review_builds_clickable_ui_without_test_labels(tmp_path: P
     assert "localStorage" in html
     assert 'status: "aligned"' in html
     assert "Each numbered ring is one inventory tree" in html
-    assert 'status: "offset", source: "human", image_x: x' in html
+    assert "status:'offset',source:'human',image_x:x" in html
     assert "Reset all to aligned" in html
     assert "How should I classify ambiguous trees?" in html
     assert '<option value="duplicate">Duplicate</option>' in html
@@ -94,7 +94,7 @@ def test_registration_review_builds_clickable_ui_without_test_labels(tmp_path: P
     assert "function validationQueueContext()" in html
     assert "queue.city !== pageParameters.get('city')" in html
     assert 'queue.entries[queue.chips[i]]={split:' in html
-    assert 'url.searchParams.set("chip", context.queue.chips[index])' in html
+    assert "url.searchParams.set('chip',target.chip)" in html
     assert "if (!await syncReviews()) { queueNavigating = false; return; }" in html
     assert "Previous chip" in html and "Next chip" in html
     assert 'event.key === "ArrowRight"' in html
@@ -118,11 +118,11 @@ def test_registration_review_builds_clickable_ui_without_test_labels(tmp_path: P
     assert "selectedByScene" in html
     assert "WASD moves the group" in html
     assert "boxSelect.textContent = 'Box select'" in html
-    assert "selectedByScene[scene.scene_id] = new Set(ids)" in html
-    assert "Clamp the shared translation" in html
+    assert 'selectTreesInBox(scene,start,end)' in html
+    assert 'nudgeEditableTrees(scene,delta,step,event.repeat)' in html
     assert "tree-marker:not(.group-picked)" in html
-    assert "queue.split === 'train' ? '/curate-training'" in html
-    assert "selectionFor(scene.scene_id).size !== 1" in html
+    assert "target.split === 'train' ? '/curate-training'" in html
+    assert 'const trees=selectedEditableTrees(scene.scene_id);if(trees.length!==1)return;' in html
     assert 'c: "aligned", f: "not-tree", q: "uncertain", e: "duplicate"' in html
     assert "event.key.toLowerCase()==='r'" in html
     assert "const position = displayedPosition(markerSample)" in html
@@ -133,7 +133,7 @@ def test_registration_review_builds_clickable_ui_without_test_labels(tmp_path: P
     assert "https://www.google.com/maps/embed/v1/streetview?" in html
     assert 'className = "street-view-panel"' in html
     assert 'referrerPolicy = "strict-origin-when-cross-origin"' in html
-    assert "card.append(head, wrap, streetViewPanel" in html
+    assert 'card.append(head,aerial,streetViewPanel,tools)' in html
     assert "maps.googleapis.com/maps/api/streetview/metadata?" in html
     assert "bearingDegrees(location" in html
     assert 'className = "street-view-camera"' in html
@@ -142,12 +142,12 @@ def test_registration_review_builds_clickable_ui_without_test_labels(tmp_path: P
     assert 'card.classList.add("street-view-open")' in html
     assert 'card.classList.contains("fullscreen")' in html
     assert 'className = "street-view-button"' not in html
-    assert 'className = "tree-species-label"' in html
-    assert 'sample.species || "Unknown species"' in html
+    assert "className='tree-species-label'" in html
+    assert "label.textContent=tree.species||'Unknown species'" in html
     assert '.card.fullscreen .tree-species-label' in html
     assert 'label.dataset.status = statusOf(label.dataset.sampleId)' in html
-    assert 'protect.textContent = "Protect area (P)"' in html
-    assert 'background.textContent = "Confirm background (B)"' in html
+    assert 'protect.textContent = "Woods"' in html
+    assert 'background.textContent = "Background"' in html
     assert "finishMaskRegion" in html
     assert "mask_regions: maskRegions" in html
     assert 'className = `loss-region ${region.mode}' in html
@@ -157,8 +157,8 @@ def test_registration_review_builds_clickable_ui_without_test_labels(tmp_path: P
     assert "renderPixelZoom" in html
     assert "zoomFocusByScene" in html
     assert "context.imageSmoothingEnabled = false" in html
-    assert 'label: "Clicked offset location"' in html
-    assert "focusPrediction" in html
+    assert "label:'Clicked tree location'" in html
+    assert "focusPrediction" not in html
     manifest = json.loads(Path(result["manifest"]).read_text(encoding="utf-8"))
     assert manifest["metadata"]["test_labels_included"] is False
     assert manifest["metadata"]["rendered_scenes"] == len(manifest["scenes"])

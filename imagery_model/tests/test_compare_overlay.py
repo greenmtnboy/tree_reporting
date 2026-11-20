@@ -3,7 +3,7 @@ import subprocess
 from urban_tree_ml.compare_overlay import COMPARE_OVERLAY
 from urban_tree_ml.model_debug import CHIP_COMPARE_HTML
 from urban_tree_ml.quality import _render_grouped_registration_html
-from urban_tree_ml.curation_compare import CURATION_COMPARE_JS
+from urban_tree_ml.curation_compare import CURATION_COMPARE_JS, COMPARISON_PREFERENCE_JS
 
 
 def test_overlay_markers_use_run_colors_shared_threshold_and_geometry():
@@ -33,7 +33,7 @@ def test_fullscreen_loads_only_one_prediction_path():
 let curationComparisonEnabled=true,single=0,compare=0;
 const button={setAttribute(){}},card={dataset:{scene:'s'},classList:{add(){},remove(){}},querySelector:()=>button};
 const document={querySelectorAll:()=>[],querySelector:()=>card,body:{classList:{toggle(){}}}};
-const scenesById={s:{}},curationReturn=null,streetViewEmbedApiKey=null;
+const scenesById={s:{}},curationReturn=null,streetViewEmbedApiKey=null,mapillaryAvailable=false;
 const updateValidationQueueNav=()=>{},loadPredictionOverlay=()=>single++,toggleCurationCompare=()=>compare++,loadCrownFallback=()=>{};
 ''' + code + r'''
 setExpanded(card,true);if(single!==0||compare!==1)throw Error('duplicate prediction loads');
@@ -47,7 +47,7 @@ def test_both_comparison_selectors_load_only_requested_pair_and_reuse_cache():
     js = r'''
 const nodes=[],requests=[];
 function node(){const n={style:{},children:[],handlers:{},attrs:{},value:'',dataset:{},
- append(...v){this.children.push(...v)},setAttribute(k,v){this.attrs[k]=v},
+ get options(){return this.children},toggleAttribute(){},append(...v){this.children.push(...v)},setAttribute(k,v){this.attrs[k]=v},
  addEventListener(k,v){this.handlers[k]=v},querySelectorAll(){return []},
  classList:{add(){},remove(){},toggle(){}}};nodes.push(n);return n;}
 const localStorage={getItem(){return null},setItem(){}},requestedPredictionThreshold=.35;
@@ -64,10 +64,12 @@ const card=node();card.querySelector=s=>s==='.prediction-badge'?badge:wrap;
 const scene={validation_chip_id:'chip-1'};
 const entry=id=>({available:true,run:{run_id:id},display:{chip_pixels:256,output_stride:2,resolution_m:.6},data:{predictions:[{score:.5,output_x:3,output_y:4}]}});
 const fetch=async url=>{requests.push(url);const q=new URL(url,'http://localhost').searchParams;
-return {ok:true,json:async()=>({selected_run_id:q.get('run'),choices:['a','b','c'].map(run_id=>({run_id})),
+return {ok:true,json:async()=>({selected_run_id:q.get('run'),comparison_run_id:q.get('compare_run')==='auto'?'b':q.get('compare_run'),choices:['a','b','c'].map(run_id=>({run_id})),
 runs:[entry(q.get('run')),entry(q.get('compare_run')==='auto'?'b':q.get('compare_run'))]})};};
 const loadPredictionOverlay=()=>{throw Error('single overlay loaded')};
-''' + CURATION_COMPARE_JS + r'''
+const fetchCurationAsset=fetch,scheduleQueuePrefetch=()=>{},curationMatchRadius=()=>2,
+ frozenPredictionMatches=()=>new Map(),bindPredictionAcceptance=()=>{},decoratePredictionMatch=()=>{},enablePredictionMatchHover=()=>{};
+''' + COMPARISON_PREFERENCE_JS + CURATION_COMPARE_JS + r'''
 (async()=>{
 await toggleCurationCompare(card,scene,button);
 const current=nodes.find(n=>n.attrs['aria-label']==='Current model');
@@ -75,10 +77,10 @@ const other=nodes.find(n=>n.attrs['aria-label']==='Comparison model');
 if(!current||!other||current.value!=='a'||other.value!=='b')throw Error('missing selectors');
 current.value='c';await current.handlers.change();
 let q=new URL(requests.at(-1),'http://localhost').searchParams;
-if(q.get('run')!=='c'||q.get('compare_run')!=='b')throw Error('wrong pair');
+if(q.get('run')!=='c'||q.get('compare_run')!=='auto'||other.value!=='b')throw Error('wrong pair');
 const count=requests.length;other.value='a';await other.handlers.change();
 if(requests.length!==count)throw Error('cached model fetched again');
-if(!badge.title.includes('(c)'))throw Error('current model did not change');
+if(current.value!=='c'||!badge.textContent.startsWith('Comparison:'))throw Error('current model did not change');
 const saved=new URL(location.href).searchParams;
 if(saved.get('run')!=='c'||saved.get('compare_run')!=='a'||predictionRun!=='c')throw Error('selection not persisted');
 if(queue.run!=='a')throw Error('model change should not rewrite the navigation queue');

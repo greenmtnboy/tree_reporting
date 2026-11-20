@@ -25,6 +25,7 @@ def test_hydration_failure_preserves_draft_and_retry_unlocks():
 const assert=require('node:assert/strict');
 const elements=new Map();const document={getElementById(id){if(!elements.has(id))elements.set(id,{});return elements.get(id)}};
 const metadata={editor_scene_id:'scene-558'},cards={inert:true};
+const scheduleQueuePrefetch=()=>{};let borderInventory;
 let serverRevision=null, reviewLoadError=null, reviews={local:'keep'},sceneReviews={},maskRegions=[],savedSnapshot;
 let savedVersion=-1,editVersion=0,syncTimer,stores=0,schedules=0;
 const storedState={draft_version:1,base_revision:'old',reviews:{tree:{status:'offset'}},delete_mask_regions:['mask']};

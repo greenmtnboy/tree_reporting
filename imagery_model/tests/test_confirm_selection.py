@@ -7,6 +7,7 @@ def test_confirm_requires_successful_save_and_selection_stays_empty():
     html=_render_grouped_registration_html([],{},[])
     functions=html.split('    function selectionFor(sceneId)',1)[1].split('    function updateSelectionFocus',1)[0]
     script='''const assert=require('node:assert/strict');
+const treeSelectionByScene={},selectedEditableTrees=id=>[...selectionFor(id)].map(key=>({key}));
 const deselectedScenes=new Set(),confirmingScenes=new Set(),selectedAddedByScene={};
 const selectedByScene={s:new Set(['a'])},activeByScene={s:'a'},samplesById={a:{}},isHiddenTree=()=>false;
 const zoomFocusByScene={},regionModeByScene={},regionDraftByScene={};let editVersion=1,ok=false;
@@ -29,6 +30,7 @@ def test_local_focus_preserves_far_labels_and_selected_markers():
     helper=html.split('    function updateSelectionFocus(card,scene)',1)[1].split('    function setStatus',1)[0]
     script='''const assert=require('node:assert/strict');
 const regionPixelScaleM=()=>1,samplesById={a:{}},selectionFor=()=>new Set(['a']);
+const selectedEditableTrees=()=>[{position:()=>({x:20,y:20})}];
 const displayedPosition=()=>({x:20,y:20}),reviews={},window={},maskRegions=[],selectedAddedByScene={},deselectedScenes=new Set();
 function el(x,classes){const s=new Set(classes);return {style:{left:x+'%',top:'20%'},classList:{contains:k=>s.has(k),toggle:(k,v)=>v?s.add(k):s.delete(k)},s};}
 const near=el(25,['tree-marker']),far=el(60,['tree-species-label']),active=el(20,['tree-marker','active']);
