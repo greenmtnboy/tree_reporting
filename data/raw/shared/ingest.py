@@ -662,6 +662,8 @@ SENTINEL_ENRICHMENT: dict[str, dict[str, object]] = {
 # and is deliberately not here.
 SPECIES_SYNONYMS: dict[str, str] = {
     # Nomenclatural and taxonomic synonyms (POWO lists the key under the value).
+    # Batch 9 (Madison, Richmond, Spokane, Waterloo, Nantes, Santa Monica): WCVP synonyms and hybrid marks.
+    "Tilia x dasystyla": "Tilia dasystyla",  # Nantes
     # Batch 8 (San Diego, Kitchener, Sydney, Louisville, Montpellier, Grenoble): WCVP synonyms and hybrid marks.
     "Hesperotropsis leylandii": "Cupressus x leylandii",  # Montpellier
     # Batch 7 (Bordeaux, Strasbourg, Eindhoven, Bern, Rennes, Antwerp): WCVP synonyms and hybrid marks.
@@ -886,6 +888,42 @@ SPECIES_SYNONYMS: dict[str, str] = {
 # `Celtis`/`Cercis occidentalis`, `Pinus`/`Prunus nigra` and
 # `Malus`/`Taxus baccata`.  Add an entry only with that check behind it.
 SPECIES_MISSPELLINGS: dict[str, str] = {
+    # Batch 9 (Madison, Richmond, Spokane, Waterloo, Nantes, Santa Monica): each key absent from WCVP, each value accepted there.
+    "Prunus serotinia": "Prunus serotina",  # Richmond
+    "Tillia x euchlora": "Tilia x euchlora",  # Richmond
+    "Euonymus alata": "Euonymus alatus",  # Richmond
+    "Quercus nuttalli": "Quercus texana",  # Richmond
+    "Agatis robusta": "Agathis robusta",  # Nantes
+    "Cornus nuttalii": "Cornus nuttallii",  # Nantes
+    "Eretia acuminata": "Ehretia acuminata",  # Nantes
+    "Eucomia ulmoides": "Eucommia ulmoides",  # Nantes
+    "Jubea chilensis": "Jubaea chilensis",  # Nantes
+    "Liquidambar acalyna": "Liquidambar acalycina",  # Nantes
+    "Magnolia campbelii": "Magnolia campbellii",  # Nantes
+    "Magnolia delavayii": "Magnolia delavayi",  # Nantes
+    "Mallotus japonicum": "Mallotus japonicus",  # Nantes
+    "Musa accuminata": "Musa acuminata",  # Nantes
+    "Myrica pennsylvanica": "Myrica pensylvanica",  # Nantes
+    "Osmanthus fragans": "Osmanthus fragrans",  # Nantes
+    "Picrasma quassoides": "Picrasma quassioides",  # Nantes
+    "Pinus yunnannensis": "Pinus yunnanensis",  # Nantes
+    "Prunus jamasukara": "Prunus jamasakura",  # Nantes
+    "Prunus x yedoense": "Prunus x yedoensis",  # Nantes
+    "Pteroceltis tatarinowi": "Pteroceltis tatarinowii",  # Nantes
+    "Quercus cambyi": "Quercus canbyi",  # Nantes
+    "Quercus chrysolepsis": "Quercus chrysolepis",  # Nantes
+    "Quercus pillyreoides": "Quercus phillyreoides",  # Nantes
+    "Quercus schumardii": "Quercus shumardii",  # Nantes
+    "Quercus x libannerri": "Quercus x libanerris",  # Nantes
+    "Quercus x ludoniciana": "Quercus x ludoviciana",  # Nantes
+    "Salix vinimalis": "Salix viminalis",  # Nantes
+    "Tilia kuisiana": "Tilia kiusiana",  # Nantes
+    "Auranticarpa rhombifolium": "Auranticarpa rhombifolia",  # Santa Monica
+    "Amelancheir laevis": "Amelanchier laevis",  # Waterloo
+    "Betula alleghaneinsis": "Betula alleghaniensis",  # Waterloo
+    "Gymnodladus dioicus": "Gymnocladus dioicus",  # Waterloo
+    "Rhamnus carthartica": "Rhamnus cathartica",  # Waterloo
+    "Ptelea trifolia": "Ptelea trifoliata",  # Madison
     # Batch 8 (San Diego, Kitchener, Sydney, Louisville, Montpellier, Grenoble): each key absent from WCVP, each value accepted there.
     "Rosa lucieae": "Rosa luciae",  # Montpellier
     "Platanus x acerfolia": "Platanus x hispanica",  # Kitchener
@@ -2732,8 +2770,8 @@ def _check_tree_id_grain(
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
     "USSMO": (33.99, 34.05, -118.52, -118.44),
-    "FRNTE": (47.08, 47.32, -1.83, -1.38),
-    "CAWAT": (43.42, 43.53, -80.62, -80.47),
+    "FRNTE": (47.08, 47.35, -1.83, -1.37),
+    "CAWAT": (43.43, 43.54, -80.63, -80.47),
     "USGEG": (47.58, 47.76, -117.57, -117.3),
     "USRIC": (37.44, 37.61, -77.61, -77.38),
     "USMSN": (42.98, 43.2, -89.58, -89.24),
@@ -3462,9 +3500,36 @@ DEDUP_CELL_METRES: dict[str, int] = {
 Box = tuple[float, float, float, float]
 
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
-    'USSMO': ((33.99, 34.05, -118.52, -118.44),),
-    'FRNTE': ((47.08, 47.32, -1.83, -1.38),),
-    'CAWAT': ((43.42, 43.53, -80.62, -80.47),),
+    # Santa Monica sits inside Los Angeles' box: a 0.01-degree latitude staircase drawn from its own inventory's extent; USLAX is cut around it.
+    'USSMO': (
+        (33.99, 34.0, -118.49, -118.47),
+        (34.0, 34.01, -118.5, -118.45),
+        (34.01, 34.02, -118.51, -118.44),
+        (34.02, 34.03, -118.52, -118.44),
+        (34.03, 34.04, -118.52, -118.45),
+        (34.04, 34.05, -118.51, -118.465),
+    ),
+    'FRNTE': ((47.08, 47.35, -1.83, -1.37),),
+    # Waterloo and Kitchener share a border running NW-SE: a 0.005-degree longitude staircase cut where each city's own inventory trees fall (413 of ~100k trees land on the wrong side).
+    'CAWAT': (
+        (43.43, 43.54, -80.63, -80.56),
+        (43.438, 43.54, -80.56, -80.555),
+        (43.44, 43.54, -80.555, -80.545),
+        (43.443, 43.54, -80.545, -80.54),
+        (43.447, 43.54, -80.54, -80.535),
+        (43.451, 43.54, -80.535, -80.53),
+        (43.452, 43.54, -80.53, -80.525),
+        (43.455, 43.54, -80.525, -80.52),
+        (43.457, 43.54, -80.52, -80.515),
+        (43.459, 43.54, -80.515, -80.51),
+        (43.461, 43.54, -80.51, -80.505),
+        (43.463, 43.54, -80.505, -80.5),
+        (43.47, 43.54, -80.5, -80.495),
+        (43.479, 43.54, -80.495, -80.49),
+        (43.48, 43.54, -80.49, -80.485),
+        (43.486, 43.54, -80.485, -80.48),
+        (43.505, 43.54, -80.48, -80.47),
+    ),
     'USGEG': ((47.58, 47.76, -117.57, -117.3),),
     'USRIC': ((37.44, 37.61, -77.61, -77.38),),
     'USMSN': ((42.98, 43.2, -89.58, -89.24),),
@@ -3472,7 +3537,27 @@ CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
     'FRGNB': ((44.95, 45.3, 5.6, 5.9),),
     'FRMPL': ((43.56, 43.66, 3.8, 3.95),),
     'USLOU': ((37.99, 38.38, -85.95, -85.4),),
-    'CAKIT': ((43.36, 43.52, -80.57, -80.38),),
+    # South of the Waterloo staircase (see CAWAT).
+    'CAKIT': (
+        (43.36, 43.43, -80.57, -80.56),
+        (43.36, 43.438, -80.56, -80.555),
+        (43.36, 43.44, -80.555, -80.545),
+        (43.36, 43.443, -80.545, -80.54),
+        (43.36, 43.447, -80.54, -80.535),
+        (43.36, 43.451, -80.535, -80.53),
+        (43.36, 43.452, -80.53, -80.525),
+        (43.36, 43.455, -80.525, -80.52),
+        (43.36, 43.457, -80.52, -80.515),
+        (43.36, 43.459, -80.515, -80.51),
+        (43.36, 43.461, -80.51, -80.505),
+        (43.36, 43.463, -80.505, -80.5),
+        (43.36, 43.47, -80.5, -80.495),
+        (43.36, 43.479, -80.495, -80.49),
+        (43.36, 43.48, -80.49, -80.485),
+        (43.36, 43.486, -80.485, -80.48),
+        (43.36, 43.505, -80.48, -80.47),
+        (43.36, 43.52, -80.47, -80.38),
+    ),
     'USSAN': ((32.53, 33.12, -117.31, -116.9),),
     'BEANR': ((51.13, 51.38, 4.21, 4.52),),
     'FRRNS': ((47.95, 48.31, -1.96, -1.44),),
@@ -3706,7 +3791,23 @@ CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
     'GBLON': ((51.25, 51.75, -0.55, 0.35),),
     'AUMEL': ((-38.1, -37.55, 144.55, 145.4),),
     'ARBUE': ((-34.8, -34.45, -58.55, -58.3),),
-    'USLAX': ((33.7, 34.35, -118.7, -118.1),),
+    # Everything in the box except Santa Monica's staircase (see USSMO).
+    'USLAX': (
+        (33.7, 33.99, -118.7, -118.1),
+        (34.05, 34.35, -118.7, -118.1),
+        (33.99, 34.0, -118.7, -118.49),
+        (33.99, 34.0, -118.47, -118.1),
+        (34.0, 34.01, -118.7, -118.5),
+        (34.0, 34.01, -118.45, -118.1),
+        (34.01, 34.02, -118.7, -118.51),
+        (34.01, 34.02, -118.44, -118.1),
+        (34.02, 34.03, -118.7, -118.52),
+        (34.02, 34.03, -118.44, -118.1),
+        (34.03, 34.04, -118.7, -118.52),
+        (34.03, 34.04, -118.45, -118.1),
+        (34.04, 34.05, -118.7, -118.51),
+        (34.04, 34.05, -118.465, -118.1),
+    ),
     # The District ends at the Potomac's Virginia shore; see USNVA.
     'USWAS': (
         (38.78, 38.8, -77.04, -76.88),

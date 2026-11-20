@@ -11,12 +11,12 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
-  { city: 'Santa Monica', label: 'TODO: Santa Monica tree inventory source', url: 'TODO' },
-  { city: 'Nantes', label: 'TODO: Nantes tree inventory source', url: 'TODO' },
-  { city: 'Waterloo', label: 'TODO: Waterloo tree inventory source', url: 'TODO' },
-  { city: 'Spokane', label: 'TODO: Spokane tree inventory source', url: 'TODO' },
-  { city: 'Richmond', label: 'TODO: Richmond tree inventory source', url: 'TODO' },
-  { city: 'Madison', label: 'TODO: Madison tree inventory source', url: 'TODO' },
+  { city: 'Santa Monica', label: 'City of Santa Monica, Public Landscape Division - Trees (ODC-By 1.0)', url: 'https://www.arcgis.com/home/item.html?id=64f5db2cbb224f6d87387999a300b962' },
+  { city: 'Nantes', label: 'Nantes Métropole - Patrimoine arboré de Nantes Métropole et de la Ville de Nantes (Licence Ouverte)', url: 'https://data.nantesmetropole.fr/explore/dataset/244400404_patrimoine-arbore-nantes-metropole/' },
+  { city: 'Waterloo', label: 'City of Waterloo - Street Tree Inventory (Waterloo Open Data User Licence)', url: 'https://data.waterloo.ca/datasets/2447415303e74bb9acdf0f43c2236b72' },
+  { city: 'Spokane', label: 'City of Spokane Parks Department - Tree Inventory (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://www.arcgis.com/home/item.html?id=d84eda620819425185d114a06a94d047' },
+  { city: 'Richmond', label: 'City of Richmond Public Works, Urban Forestry - Tree Inventory, public view (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://www.arcgis.com/home/item.html?id=902a0284181e4500aa220a6037d06d3d' },
+  { city: 'Madison', label: 'City of Madison Parks Department, Urban Forestry - Street Trees (open data under Madison General Ordinances 3.72; source attributed)', url: 'https://www.arcgis.com/home/item.html?id=b700541a20e446839b18d62426c266a3' },
   { city: 'Sydney', label: 'City of Sydney - Trees (CC BY 4.0)', url: 'https://data.cityofsydney.nsw.gov.au/datasets/cityofsydney::trees' },
   { city: 'Grenoble', label: 'Ville de Grenoble and Grenoble-Alpes Métropole - Arbres and Patrimoine arboré du territoire métropolitain (ODbL 1.0)', url: 'https://data.metropolegrenoble.fr/visualisation/information/?id=arbres-grenoble' },
   { city: 'Montpellier', label: 'Montpellier Méditerranée Métropole - Arbres de Montpellier (ODbL)', url: 'https://data.montpellier3m.fr/dataset/arbres-de-montpellier' },
@@ -147,12 +147,12 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
-  { city: 'Santa Monica', label: 'TODO: Santa Monica landmark source' },
-  { city: 'Nantes', label: 'TODO: Nantes landmark source' },
-  { city: 'Waterloo', label: 'TODO: Waterloo landmark source' },
-  { city: 'Spokane', label: 'TODO: Spokane landmark source' },
-  { city: 'Richmond', label: 'TODO: Richmond landmark source' },
-  { city: 'Madison', label: 'TODO: Madison landmark source' },
+  { city: 'Santa Monica', label: 'City of Santa Monica - Historic Landmarks and Structures of Merit (ODC-By 1.0); National Park Service - National Register of Historic Places', url: 'https://www.arcgis.com/home/item.html?id=abe20ceaf96d4f8bbb5774d6aa230563' },
+  { city: 'Nantes', label: 'Ministère de la Culture - Immeubles protégés au titre des Monuments Historiques (Licence Ouverte)', url: 'https://www.data.gouv.fr/datasets/immeubles-proteges-au-titre-des-monuments-historiques-2' },
+  { city: 'Waterloo', label: 'City of Waterloo - Heritage Buildings, Municipal Heritage Register (Waterloo Open Data User Licence)', url: 'https://data.waterloo.ca/datasets/3822d7856d034f07a14e67e25c6ced4b' },
+  { city: 'Spokane', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
+  { city: 'Richmond', label: 'City of Richmond - Old and Historic Sites (no licence stated; displayed with attribution only, not licensed for reuse); National Park Service - National Register of Historic Places', url: 'https://services1.arcgis.com/k3vhq11XkBNeeOfM/arcgis/rest/services/City_Old_and_Historic_Sites/FeatureServer/0' },
+  { city: 'Madison', label: 'City of Madison - Local Landmarks (open data under Madison General Ordinances 3.72); National Park Service - National Register of Historic Places', url: 'https://www.arcgis.com/home/item.html?id=279a5ad5f2f94d0bb20f898c523d5b5a' },
   { city: 'Sydney', label: 'NSW State Heritage Register curtilages (DCCEEW, CC BY)', url: 'https://data.nsw.gov.au/data/dataset/state-heritage-register-curtilages1c5ee' },
   { city: 'Sydney', label: 'Sydney LEP 2012 heritage items (NSW DPHI, CC BY)', url: 'https://data.nsw.gov.au/data/dataset/environmental-planning-instrument-heritage-her' },
   { city: 'Grenoble', label: 'Ministère de la Culture - Immeubles protégés au titre des Monuments Historiques (Licence Ouverte)', url: 'https://www.data.gouv.fr/datasets/immeubles-proteges-au-titre-des-monuments-historiques-2' },

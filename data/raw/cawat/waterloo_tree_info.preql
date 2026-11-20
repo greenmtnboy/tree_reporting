@@ -63,7 +63,23 @@ root partial datasource cawat_osm_tree_info extends tree_partition (
 )
 complete where city = 'CAWAT' and cawat_source = 'OSM_CAWAT'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/cawat_osm_staging.parquet`
-where (raw_latitude >= 43.42 and raw_latitude < 43.53 and raw_longitude >= -80.62 and raw_longitude < -80.47);
+where (raw_latitude >= 43.43 and raw_latitude < 43.54 and raw_longitude >= -80.63 and raw_longitude < -80.56)
+    or (raw_latitude >= 43.438 and raw_latitude < 43.54 and raw_longitude >= -80.56 and raw_longitude < -80.555)
+    or (raw_latitude >= 43.44 and raw_latitude < 43.54 and raw_longitude >= -80.555 and raw_longitude < -80.545)
+    or (raw_latitude >= 43.443 and raw_latitude < 43.54 and raw_longitude >= -80.545 and raw_longitude < -80.54)
+    or (raw_latitude >= 43.447 and raw_latitude < 43.54 and raw_longitude >= -80.54 and raw_longitude < -80.535)
+    or (raw_latitude >= 43.451 and raw_latitude < 43.54 and raw_longitude >= -80.535 and raw_longitude < -80.53)
+    or (raw_latitude >= 43.452 and raw_latitude < 43.54 and raw_longitude >= -80.53 and raw_longitude < -80.525)
+    or (raw_latitude >= 43.455 and raw_latitude < 43.54 and raw_longitude >= -80.525 and raw_longitude < -80.52)
+    or (raw_latitude >= 43.457 and raw_latitude < 43.54 and raw_longitude >= -80.52 and raw_longitude < -80.515)
+    or (raw_latitude >= 43.459 and raw_latitude < 43.54 and raw_longitude >= -80.515 and raw_longitude < -80.51)
+    or (raw_latitude >= 43.461 and raw_latitude < 43.54 and raw_longitude >= -80.51 and raw_longitude < -80.505)
+    or (raw_latitude >= 43.463 and raw_latitude < 43.54 and raw_longitude >= -80.505 and raw_longitude < -80.5)
+    or (raw_latitude >= 43.47 and raw_latitude < 43.54 and raw_longitude >= -80.5 and raw_longitude < -80.495)
+    or (raw_latitude >= 43.479 and raw_latitude < 43.54 and raw_longitude >= -80.495 and raw_longitude < -80.49)
+    or (raw_latitude >= 43.48 and raw_latitude < 43.54 and raw_longitude >= -80.49 and raw_longitude < -80.485)
+    or (raw_latitude >= 43.486 and raw_latitude < 43.54 and raw_longitude >= -80.485 and raw_longitude < -80.48)
+    or (raw_latitude >= 43.505 and raw_latitude < 43.54 and raw_longitude >= -80.48 and raw_longitude < -80.47);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------
