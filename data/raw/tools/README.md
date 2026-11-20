@@ -21,6 +21,7 @@ invocation assume:
 | `fairfax_source_bundle.py` | builds the Fairfax County source bundle the imagery pilot reads (`docs/FAIRFAX_TREE_DATA_HANDOFF.md`): the county boundary, and Arlington / Falls Church through their USNVA ingests plus Alexandria's notable trees as calibration, with raw snapshots, a manifest and `source-audit.md`. `--out` must be a new directory. |
 
 The enrichment table's two hand tools are not here -- they live beside the
-package they edit, as `enrichment/admin/server.py` and
+package they edit, as `enrichment/admin/` (the form `server.py` and the
+command line `cli.py` over one `backend.py`) and
 `enrichment/backfill.py` -- and they are excluded from the bundle for the
 same reason.

@@ -18,6 +18,14 @@ async function withDuckDB<T>(fn: (conn: Awaited<ReturnType<DuckDBInstance['conne
   }
 }
 
+// The rollup and the species table are republished in place, and GCS serves
+// them with `max-age=3600`: for an hour after a publish one range read can hit
+// the edge cache (the old ETag) and the next the new object, and DuckDB aborts
+// the read ("this likely means the remote file has changed"). A query string
+// of its own for this run sends every read to the object as it is now.
+const RUN_CB = Math.floor(Math.random() * 2 ** 32)
+const fresh = (url: string) => `${url}${url.includes('?') ? '&' : '?'}cb=${RUN_CB}`
+
 describe('parquet schema', () => {
   // The rollup is ~300MB and this never needs a row of it. The column list and
   // the per-column null counts come from the parquet footer alone, and the
@@ -28,7 +36,7 @@ describe('parquet schema', () => {
   test('full_tree_info has required columns, known cities, and labelled sources', async () => {
     await withDuckDB(async (conn) => {
       const colResult = await conn.runAndReadAll(
-        `SELECT column_name FROM (DESCRIBE SELECT * FROM read_parquet('${REMOTE_TREES_PARQUET_URL}'))`,
+        `SELECT column_name FROM (DESCRIBE SELECT * FROM read_parquet('${fresh(REMOTE_TREES_PARQUET_URL)}'))`,
       )
       const cols = colResult.getRowObjects().map((r) => r.column_name as string)
       const required = [
@@ -45,7 +53,7 @@ describe('parquet schema', () => {
       // the null count per column, so this is a footer read, not a scan.
       const nullResult = await conn.runAndReadAll(
         `SELECT COALESCE(SUM(stats_null_count), 0) AS nulls, COUNT(*) AS row_groups
-         FROM parquet_metadata('${REMOTE_TREES_PARQUET_URL}')
+         FROM parquet_metadata('${fresh(REMOTE_TREES_PARQUET_URL)}')
          WHERE path_in_schema = 'data_source'`,
       )
       const [nullRow] = nullResult.getRowObjects()
@@ -53,7 +61,7 @@ describe('parquet schema', () => {
       expect(Number(nullRow.nulls), 'every tree must carry a data_source').toBe(0)
 
       const pairResult = await conn.runAndReadAll(
-        `SELECT city, data_source FROM read_parquet('${REMOTE_TREES_PARQUET_URL}') GROUP BY ALL ORDER BY ALL`,
+        `SELECT city, data_source FROM read_parquet('${fresh(REMOTE_TREES_PARQUET_URL)}') GROUP BY ALL ORDER BY ALL`,
       )
       const pairs = pairResult.getRowObjects()
       expect(pairs.length, 'expected at least one city in data').toBeGreaterThan(0)
@@ -154,7 +162,7 @@ describe('parquet schema', () => {
       const literals = SPECIES_SENTINELS.map((s) => `'${s.species.replace(/'/g, "''")}'`).join(', ')
       const result = await conn.runAndReadAll(
         `SELECT species, common_names[1] AS label, tree_form, genus, photo_url
-         FROM read_parquet('${REMOTE_SPECIES_PARQUET_URL}') WHERE species IN (${literals})`,
+         FROM read_parquet('${fresh(REMOTE_SPECIES_PARQUET_URL)}') WHERE species IN (${literals})`,
       )
       const rows = result.getRowObjects()
       const published = rows.map((r) => r.species as string)
@@ -187,7 +195,7 @@ describe('parquet schema', () => {
 
   test('tree_enrichment loads and has required columns', async () => {
     await withDuckDB(async (conn) => {
-      await conn.run(`CREATE TABLE enrichment AS SELECT * FROM read_parquet('${REMOTE_SPECIES_PARQUET_URL}')`)
+      await conn.run(`CREATE TABLE enrichment AS SELECT * FROM read_parquet('${fresh(REMOTE_SPECIES_PARQUET_URL)}')`)
 
       const colResult = await conn.runAndReadAll(`SELECT column_name FROM information_schema.columns WHERE table_name = 'enrichment'`)
       const cols = colResult.getRowObjects().map((r) => r.column_name as string)

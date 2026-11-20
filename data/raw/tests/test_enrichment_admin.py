@@ -32,7 +32,8 @@ sys.path.insert(0, str(RAW_DIR))
 # `uv run tests/test_enrichment_admin.py`, which resolves its own dependencies.
 pytest.importorskip("instructor", reason="run `uv run tests/test_enrichment_admin.py` for the admin tests")
 
-from enrichment.admin import server as admin  # noqa: E402
+from enrichment.admin import backend as admin  # noqa: E402
+from enrichment.admin import cli  # noqa: E402
 from enrichment._tree_shared import (  # noqa: E402
     SPECIES_SENTINELS,
     sentinel_enrichment_rows,
@@ -177,6 +178,30 @@ def test_all_problems_are_reported_together():
 # ── patching the table ─────────────────────────────────────────────────────────
 
 
+@pytest.fixture(autouse=True)
+def _pinned_misspellings(monkeypatch):
+    """The patch tests count alias rows, and the curated misspelling map grows
+    with every city batch (`Acer rubra`, a dozen `Acer freemanii` typos), so
+    they run against a map of their own.  `alias_keys` reads the module
+    attribute on every call, which is what this replaces."""
+    import shared.ingest as ingest
+
+    monkeypatch.setattr(ingest, "SPECIES_MISSPELLINGS", {"Pinus sylverstris": "Pinus sylvestris"})
+
+
+def test_a_misspelling_row_gets_the_accepted_rows_edit():
+    """A city that has not rebuilt still carries the typo and joins on it."""
+    table = _table(_row("Pinus sylvestris"), _row("Pinus sylverstris"))
+    edit = admin.coerce_row("Pinus sylvestris", _payload(foliage_colors="#4d7466"))
+    edit["enriched_at"] = NOW
+    patched, summary = admin.apply_edits(table, {"Pinus sylvestris": edit})
+    rows = {r["species"]: r for r in patched.to_pylist()}
+    assert rows["Pinus sylverstris"]["foliage_colors"] == ["#4d7466"]
+    # A typo is not one of the taxon's names, so the accepted row does not list it.
+    assert rows["Pinus sylvestris"]["synonyms"] is None
+    assert summary["aliased"] == ["Pinus sylverstris"]
+
+
 def test_apply_edits_replaces_the_row_and_keeps_every_other_one():
     table = _table(_row("Acer rubrum"), _row("Quercus agrifolia", description="an oak"))
     edit = admin.coerce_row("Acer rubrum", _payload(description="a maple"))
@@ -291,7 +316,7 @@ def test_a_code_level_synonym_row_is_read_only(tmp_path):
     edit here would not survive; the form sends the reviewer to the accepted
     name instead."""
     state = _state(tmp_path, _row("Platanus x hispanica"), _row("Platanus x acerifolia"))
-    with pytest.raises(admin.ValidationError, match="synonym of 'Platanus x hispanica'"):
+    with pytest.raises(admin.ValidationError, match="folds onto 'Platanus x hispanica'"):
         state.save("Platanus x acerifolia", _payload())
     assert state.detail("Platanus x acerifolia")["alias_of"] == "Platanus x hispanica"
     assert state.detail("Platanus x hispanica")["alias_of"] is None
@@ -497,6 +522,159 @@ def test_publish_with_nothing_staged_is_refused(tmp_path):
     state = _state(tmp_path, _row("Acer rubrum"))
     with pytest.raises(admin.ValidationError, match="nothing to publish"):
         state.publish()
+
+
+# ── two front ends, one backend ────────────────────────────────────────────────
+
+
+def test_patch_changes_only_the_named_fields(tmp_path):
+    """A command line names one field; `save` takes the whole form, where a
+    missing field means NULL.  `patch` is the bridge."""
+    state = _state(tmp_path, _row("Pinus sylvestris", common_names=["Scots pine"], description="a pine", foliage_colors=["#303016"]))
+    detail = state.patch("Pinus sylvestris", {"foliage_colors": "#4D7466", "trunk_color": "9a5a3c"})
+    assert detail["changed"] == ["foliage_colors", "trunk_color"]
+    assert detail["row"]["foliage_colors"] == ["#4d7466"]
+    assert detail["row"]["trunk_color"] == "#9a5a3c"
+    assert detail["row"]["description"] == "a pine"
+    # A second patch builds on the staged edit, not on the published row.
+    detail = state.patch("Pinus sylvestris", {"description": "Scots pine"})
+    assert detail["row"]["foliage_colors"] == ["#4d7466"]
+
+
+def test_patch_refuses_what_save_would(tmp_path):
+    state = _state(tmp_path, _row("Pinus sylvestris"))
+    with pytest.raises(admin.ValidationError, match="not an editable column"):
+        state.patch("Pinus sylvestris", {"enriched_at": "2026-01-01"})
+    with pytest.raises(admin.ValidationError, match="not CSS hex"):
+        state.patch("Pinus sylvestris", {"foliage_colors": "dark green"})
+    with pytest.raises(admin.ValidationError, match="no row"):
+        state.patch("Pinus nope", {"description": "x"})
+    assert state.edits == {}
+
+
+def test_the_form_and_the_cli_do_not_drop_each_others_edits(tmp_path):
+    """Both stage into the same file; each write re-reads it first."""
+    form = _state(tmp_path, _row("Acer rubrum"), _row("Pinus sylvestris"))
+    other = admin.AdminState()
+    other.table, other.rows = form.table, form.rows
+    form.save("Acer rubrum", _payload(description="a maple"))
+    other.patch("Pinus sylvestris", {"trunk_color": "#9a5a3c"})
+    form.discard("Nothing staged here")
+    assert sorted(form.edits) == sorted(other.edits) == ["Acer rubrum", "Pinus sylvestris"]
+    assert sorted(admin.AdminState().edits) == ["Acer rubrum", "Pinus sylvestris"]
+
+
+def test_publish_picks_up_an_edit_staged_by_the_other_front_end(tmp_path, monkeypatch):
+    form = _state(tmp_path, _row("Pinus sylvestris"))
+    cli_state = admin.AdminState()
+    cli_state.table, cli_state.rows = form.table, form.rows
+    cli_state.patch("Pinus sylvestris", {"trunk_color": "#9a5a3c"})
+
+    uploaded: dict = {}
+    monkeypatch.setattr(admin._te, "load_existing_table", lambda url: form.table)
+    monkeypatch.setattr(admin._te, "upload_to_gcs", lambda path, uri: uploaded.update(path=path))
+    monkeypatch.setattr(admin, "PUBLISH_PATH", tmp_path / "publish.parquet")
+    assert form.publish()["replaced"] == ["Pinus sylvestris"]
+    assert not admin.EDITS_PATH.exists()
+
+
+@pytest.mark.parametrize(
+    "pairs, expected",
+    [
+        (["trunk_color=#9a5a3c"], {"trunk_color": "#9a5a3c"}),
+        (["common_names=Scots pine, Scotch pine"], {"common_names": "Scots pine, Scotch pine"}),
+        (["trunk_color="], {"trunk_color": ""}),
+        (['common_names:=["Pine, Scots"]'], {"common_names": ["Pine, Scots"]}),
+        (["description=a=b"], {"description": "a=b"}),
+    ],
+)
+def test_cli_reads_assignments_like_the_forms_text_boxes(pairs, expected):
+    assert cli.parse_assignments(pairs) == expected
+
+
+@pytest.mark.parametrize("pairs, needle", [(["trunk_color"], "field=value"), (["a=1", "a=2"], "twice"), (["a:=[1"], "not JSON")])
+def test_cli_refuses_a_malformed_assignment(pairs, needle):
+    with pytest.raises(admin.ValidationError, match=needle):
+        cli.parse_assignments(pairs)
+
+
+def test_cli_set_stages_and_pending_shows_the_change(tmp_path, capsys):
+    state = _state(tmp_path, _row("Pinus sylvestris", common_names=["Scots pine"], foliage_colors=["#303016"]))
+    assert cli.main(["set", "Pinus sylvestris", "foliage_colors=#4d7466"], state=state) == 0
+    assert "foliage_colors: #303016 -> #4d7466" in capsys.readouterr().out
+    assert cli.main(["pending"], state=state) == 0
+    assert "foliage_colors: #303016 -> #4d7466" in capsys.readouterr().out
+    assert cli.main(["show", "Pinus sylvestris"], state=state) == 0
+    assert "* foliage_colors" in capsys.readouterr().out
+
+
+def test_cli_reports_validation_problems_and_exits_2(tmp_path, capsys):
+    state = _state(tmp_path, _row("Pinus sylvestris"))
+    assert cli.main(["set", "Pinus sylvestris", "trunk_color=bark"], state=state) == 2
+    assert "not a CSS hex colour" in capsys.readouterr().err
+    assert state.edits == {}
+
+
+def test_cli_publish_asks_and_will_not_guess_without_a_terminal(tmp_path, monkeypatch, capsys):
+    state = _state(tmp_path, _row("Pinus sylvestris"))
+    state.patch("Pinus sylvestris", {"trunk_color": "#9a5a3c"})
+    monkeypatch.setattr(admin._te, "upload_to_gcs", lambda path, uri: pytest.fail("published without --yes"))
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: False, raising=False)
+    assert cli.main(["publish"], state=state) == 1
+    assert "--yes" in capsys.readouterr().err
+    assert "Pinus sylvestris" in state.edits
+
+
+def test_cli_publish_yes_publishes(tmp_path, monkeypatch, capsys):
+    state = _state(tmp_path, _row("Pinus sylvestris"))
+    state.patch("Pinus sylvestris", {"trunk_color": "#9a5a3c"})
+    monkeypatch.setattr(admin._te, "load_existing_table", lambda url: state.table)
+    monkeypatch.setattr(admin._te, "upload_to_gcs", lambda path, uri: None)
+    monkeypatch.setattr(admin, "PUBLISH_PATH", tmp_path / "publish.parquet")
+    assert cli.main(["publish", "--yes"], state=state) == 0
+    assert "replaced Pinus sylvestris" in capsys.readouterr().out
+    assert state.edits == {}
+
+
+def test_patch_many_stages_all_or_none(tmp_path):
+    state = _state(tmp_path, _row("Pinus nigra", common_names=["Austrian pine"]), _row("Pinus pinea", common_names=["Stone pine"]))
+    with pytest.raises(admin.ValidationError) as exc:
+        state.patch_many({
+            "Pinus nigra": {"trunk_color": "#5e5650"},
+            "Pinus pinea": {"trunk_color": "bark"},
+            "Pinus nope": {"trunk_color": "#5e5650"},
+            "Unknown": {"trunk_color": "#5e5650"},
+        })
+    assert any(p.startswith("Pinus pinea: trunk_color") for p in exc.value.problems)
+    assert "Pinus nope: no row in the published table" in exc.value.problems
+    assert any(p.startswith("Unknown:") for p in exc.value.problems)
+    assert state.edits == {}, "nothing staged when any row is refused"
+
+    state.patch_many({"Pinus nigra": {"trunk_color": "#5e5650"}, "Pinus pinea": {"trunk_color": "#9a6a4a"}})
+    assert sorted(state.edits) == ["Pinus nigra", "Pinus pinea"]
+
+
+def test_cli_apply_reads_a_json_file(tmp_path, capsys):
+    state = _state(tmp_path, _row("Pinus nigra", common_names=["Austrian pine"]))
+    batch = tmp_path / "batch.json"
+    batch.write_text(json.dumps({"Pinus nigra": {"foliage_colors": ["#3a5a40"], "trunk_color": "#5e5650"}}), encoding="utf-8")
+    assert cli.main(["apply", str(batch)], state=state) == 0
+    assert "staged 1 species" in capsys.readouterr().out
+    assert state.edits["Pinus nigra"]["trunk_color"] == "#5e5650"
+
+
+def test_a_leaf_in_shadow_is_staged_as_the_load_will_publish_it(tmp_path):
+    state = _state(tmp_path, _row("Pinus sylvestris", common_names=["Scots pine"]))
+    detail = state.patch("Pinus sylvestris", {"foliage_colors": "#303016"})
+    assert detail["row"]["foliage_colors"] != ["#303016"]
+
+
+def test_the_server_is_only_a_transport_over_the_backend():
+    from enrichment.admin import server
+
+    assert server.AdminState is admin.AdminState
+    assert server.STATE.__class__ is admin.AdminState
+    assert not hasattr(server, "coerce_row")
 
 
 # ── iNaturalist taxon resolution and photo ranking ─────────────────────────────

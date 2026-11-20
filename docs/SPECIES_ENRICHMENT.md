@@ -125,7 +125,16 @@ Where a shade comes from, most trusted first (`enrichment/_foliage_colors.py`):
    apart from the first). It fills `foliage_colors` only. A purple-leaved
    cultivar fails the green gate on purpose, and a full-tree photo is too
    much sky and lawn to read bark from. With `--model` the LLM answers
-   instead.
+   instead. Pixels darker than HSV value 0.25 are shadow, not leaf: below
+   that floor a close-up's shaded leaves outnumbered its lit ones and the
+   reading came back near black.
+
+Whichever source wrote it, a growing-season leaf is a marker colour:
+`marker_tone` keeps its hue and saturation and holds its HLS lightness to
+`LEAF_LIGHTNESS` (0.24-0.6, the band the hero shades sit in). The photo
+reader, the admin and every load (`with_marker_foliage`) apply it. Autumn
+shades and bark are not held to it; a yellow and a birch are meant to be
+light.
 
 The sentinels have no shades. The website catalogue does not carry them yet.
 
@@ -206,7 +215,19 @@ row or value would be lost (`--publish-checkpoint` does only this step).
 
 ## Correcting by hand
 
-`enrichment/admin/server.py` is a localhost form over the table. Edits are
+`enrichment/admin/server.py` is a localhost form over the table, and
+`enrichment/admin/cli.py` the same backend (`backend.py`) from the command
+line, for a correction you can name without browsing photos:
+
+```bash
+cd data/raw
+uv run enrichment/admin/cli.py set "Pinus sylvestris" foliage_colors=#4d7466 trunk_color=#a0603a
+uv run enrichment/admin/cli.py pending
+uv run enrichment/admin/cli.py publish
+```
+
+Both stage into one file and re-read it before each write, so either can
+publish what the other staged. Edits are
 staged locally; Publish re-reads the live parquet, patches the staged rows and
 every alias row of the taxon, uploads, and reads back to verify. An edited
 row carries today's `enriched_at`, which keeps the daily job from overwriting
