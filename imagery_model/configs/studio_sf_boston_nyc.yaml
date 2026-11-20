@@ -1,0 +1,37 @@
+default_city: usnyc
+
+cities:
+  - city: ussfo
+    label: San Francisco
+    config_path: sf_naip_citywide_curated.yaml
+    raster: ${TREE_ML_DATA_ROOT:-../artifacts}/imagery/ussfo/2022/ussfo-2022-mosaic.vrt
+    review_dir: ${TREE_ML_DATA_ROOT:-../artifacts}/qa/registration/ussfo-2022-mosaic
+    evaluation_dir: ${TREE_ML_DATA_ROOT:-../artifacts}/runs/sf-boston-naip-swin-30cm-v7-finetune/evaluation/validation
+
+  - city: usbos
+    label: Boston
+    config_path: boston_naip_external.yaml
+    raster: ${TREE_ML_DATA_ROOT:-../artifacts}/imagery/usbos/2023/usbos-2023-external.vrt
+    review_dir: ${TREE_ML_DATA_ROOT:-../artifacts}/qa/registration/usbos-2023-external
+    evaluation_dir: ${TREE_ML_DATA_ROOT:-../artifacts}/runs/sf-boston-naip-swin-30cm-v7-finetune/evaluation/validation-usbos
+
+  - city: usnyc
+    label: New York City
+    config_path: ${TREE_ML_DATA_ROOT:-../artifacts}/run-inputs/nyc-naip-native30-v7-baseline/config.json
+    raster: ${TREE_ML_DATA_ROOT:-../artifacts}/imagery/usnyc/2023/nj_m_4007309_sw_18_030_20230820_20231019.tif
+    review_dir: ${TREE_ML_DATA_ROOT:-../artifacts}/qa/registration/nj_m_4007309_sw_18_030_20230820_20231019
+    evaluation_dir: ${TREE_ML_DATA_ROOT:-../artifacts}/runs/nyc-naip-native30-v7-baseline/evaluation/validation-usnyc
+
+  - city: usffx
+    label: Fairfax County
+    config_path: ${TREE_ML_DATA_ROOT:-../artifacts}/run-inputs/fairfax-naip-2023-curation-v1/config.json
+    raster: ${TREE_ML_DATA_ROOT:-../artifacts}/run-inputs/fairfax-pilot-2023-review-v1/imagery-30cm.vrt
+    review_dir: ${TREE_ML_DATA_ROOT:-../artifacts}/qa/registration/fairfax-naip-2023-curation-v1
+    evaluation_dir: ${TREE_ML_DATA_ROOT:-../artifacts}/runs/fairfax-naip-2023-curation-v1/evaluation/validation-usffx
+
+  - city: uswas
+    label: Washington, DC
+    config_path: ${TREE_ML_DATA_ROOT:-../artifacts}/run-inputs/uswas-naip-2025-review-20261119/config.json
+    raster: ${TREE_ML_DATA_ROOT:-../artifacts}/run-inputs/uswas-naip-2025-review-20261119/imagery.vrt
+    review_dir: ${TREE_ML_DATA_ROOT:-../artifacts}/qa/registration/uswas-naip-2025
+    evaluation_dir: ${TREE_ML_DATA_ROOT:-../artifacts}/runs/sf-boston-nyc-fairfax-naip-swin-30cm-v22-curated-finetune/evaluation/validation-uswas-naip-2025

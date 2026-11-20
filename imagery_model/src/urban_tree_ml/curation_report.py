@@ -72,6 +72,7 @@ def city_report(context, catalog) -> dict:
     return {
         "city": context.city, "label": context.label,
         "training_progress": training_chip_catalog(context, manifest, state),
+        "validation_progress": training_chip_catalog(context, manifest, state, split="validation"),
         "scenes": len(manifest["scenes"]),
         "done": sum(bool(r.get("done")) for r in state["scene_reviews"].values()),
         "tree_reviews": sum(bool(r.get("status")) for r in reviews.values()),
@@ -111,6 +112,13 @@ function polishCards(){
   document.querySelectorAll('.card').forEach((card,i)=>{
     const c=cities[i],e=c.evaluation;
     const progress=c.training_progress;
+    if(progress){
+      const headline=card.querySelector('.big'),bar=headline.nextElementSibling,counts=bar.nextElementSibling;
+      headline.textContent=`${pct(progress.more_reviewed_fraction)} of training chips marked More done`;
+      bar.value=progress.more_reviewed;
+      bar.setAttribute('aria-label',`${c.label} training chips marked More done`);
+      counts.textContent=`${progress.more_reviewed} / ${progress.total} training chips · full-chip More done status only`;
+    }
     if(progress&&progress.trees_total!=null){
       const chipHeadline=card.querySelector('.big');
       chipHeadline.classList.remove('big');
@@ -122,6 +130,15 @@ function polishCards(){
       card.insertBefore(coverage,chipHeadline);
     }
     const badge=document.createElement('div');badge.className='score-panel';
+    const validation=c.validation_progress;
+    if(validation){
+      const coverage=document.createElement('section');
+      coverage.innerHTML=`<div class="big">${pct(validation.tree_fraction)} of validation trees in done tiles</div>
+        <progress aria-label="${esc(c.label)} validation trees in done tiles" value="${validation.trees_in_done_scenes}" max="${validation.trees_total||1}"></progress>
+        <p>${validation.trees_in_done_scenes.toLocaleString()} / ${validation.trees_total.toLocaleString()} unique validation trees</p>
+        <p class="muted">Retained validation targets in the current chip catalog. Done or More done counts; overlapping tiles count each tree once. Small crops contribute only their own trees. Training/test trees are excluded.</p>`;
+      card.insertBefore(coverage,card.children[1]);
+    }
     const url='/model?'+new URLSearchParams({city:c.city,run:e?.run||'',radius:'4.0',threshold:String(e?.threshold??.35)});
     badge.innerHTML=`<span class="muted">Goal-aligned validation F2 · 4.0 m</span><div class="big">${pct(e?.f2)}</div><span class="muted">${e?`${e.chips} chips · confidence threshold ${e.threshold}`:'No saved 4 m evaluation'}</span>${e?`<a class="action" href="${esc(url)}">Open validation</a>`:''}`;
     card.insertBefore(badge,card.children[1]);

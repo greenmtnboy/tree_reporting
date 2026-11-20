@@ -1,4 +1,5 @@
 from __future__ import annotations
+from urban_tree_ml.catalog_imagery import matches_catalog_imagery
 
 import hashlib
 import json
@@ -12,10 +13,11 @@ from uuid import uuid4
 import numpy as np
 
 from urban_tree_ml.config import ProjectConfig
+from urban_tree_ml.review_native import encode_json
 from urban_tree_ml.tree_curation import expand_tree_records, geographic_regions, storage_payload
 
 REVIEW_STATUSES = frozenset({"aligned", "offset", "not-tree", "uncertain", "duplicate", "occluded"})
-MASK_REGION_MODES = frozenset({"protect", "confirmed-background", "confirmed-tree"})
+MASK_REGION_MODES = frozenset({"protect", "confirmed-background", "confirmed-tree", "single-tree", "confirmed-woods", "copse", "shrub-mass"})
 _NUMERIC_REVIEW_FIELDS = frozenset({"image_x", "image_y", "east_m", "north_m", "crown_radius_m"})
 _SAFE_PATH_SEGMENT = re.compile(r"[^A-Za-z0-9._-]+")
 
@@ -26,7 +28,7 @@ class ReviewStateConflictError(ValueError):
 
 def _write_json_atomic(path: Path, value: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    encoded = (json.dumps(value, indent=2, sort_keys=True) + "\n").encode('utf-8')
+    encoded = encode_json(value, pretty=True)
     if path.exists() and path.read_bytes() == encoded:
         return
     temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
@@ -41,7 +43,7 @@ def _write_json_atomic(path: Path, value: object) -> None:
 
 
 def _json_sha256(value: object) -> str:
-    encoded = json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+    encoded = encode_json(value)
     return hashlib.sha256(encoded).hexdigest()
 
 
@@ -137,14 +139,21 @@ def normalize_review_payload(
         if status is not None and status not in REVIEW_STATUSES:
             raise ValueError(f"review {sample_id!r} has unknown status {status!r}")
         review: dict[str, object] = {}
+        if 'species_override' in raw_review:
+            from urban_tree_ml.species_corrections import normalize_species_override
+            review['species_override'] = (None if raw_review['species_override'] is None else
+                                          normalize_species_override(raw_review['species_override']))
         if status is not None:
             review["status"] = status
-        note = raw_review.get("note")
-        if note is not None:
-            review["note"] = str(note)[:2000]
+        from urban_tree_ml.tree_observations import normalize_observations
+        review.update(normalize_observations(raw_review))
         source = raw_review.get("source")
         if source is not None:
             review["source"] = str(source)[:100]
+        if raw_review.get('peer_image') is not None:
+            review['peer_image'] = str(raw_review['peer_image'])[:100]
+        from urban_tree_ml.tree_curation import peer_split_provenance
+        review.update(peer_split_provenance(raw_review))
         heuristic_id = raw_review.get("heuristic_id")
         if heuristic_id is not None:
             review["heuristic_id"] = str(heuristic_id)[:200]
@@ -237,9 +246,9 @@ def normalize_mask_region_payload(
     raw_regions += [{**tree, 'mode': 'confirmed-tree', 'radius_m': tree['crown_radius_m']}
                    for tree in payload.get('added_trees', {}).values()]
     if manifest['metadata'].get('curation_schema_version') == 2:
-        from pyproj import Transformer
+        from urban_tree_ml.tree_curation import transformers
         regions = geographic_regions(raw_regions, manifest)
-        projector = Transformer.from_crs('EPSG:4326', manifest['metadata']['curation_crs'], always_xy=True)
+        projector = transformers(manifest['metadata']['curation_crs'])[0]
         seen = set()
         for region in regions:
             rid = region.get('region_id')
@@ -252,9 +261,27 @@ def normalize_mask_region_payload(
             if None in (lon,lat,radius) or not -180 <= lon <= 180 or not -90 <= lat <= 90 or not 0 < radius <= 500:
                 raise ValueError('Invalid geographic mask center or radius')
             region['world_x'], region['world_y'] = projector.transform(lon,lat)
+            if 'polygon' in region:
+                from urban_tree_ml.single_tree import polygon_points
+                points = polygon_points(region['polygon'])
+                xs, ys = projector.transform(points[:,0], points[:,1])
+                if np.any(np.hypot(xs-region['world_x'], ys-region['world_y']) > radius + .01):
+                    raise ValueError('Area polygon exceeds its bounding radius')
+                region['world_polygon'] = list(map(list, zip(xs, ys)))
+                if region['mode'] in {'copse', 'shrub-mass'}:
+                    from urban_tree_ml.single_tree import inside_polygon
+                    if not inside_polygon(region['world_x'], region['world_y'], region['world_polygon']):
+                        raise ValueError('Vegetation group center must be inside its polygon')
+            if region['mode'] in {'copse', 'shrub-mass'}:
+                if region.get('tree_id') or region.get('species'):
+                    raise ValueError('Vegetation groups are categories, not individual species/tree overrides')
+        from urban_tree_ml.vegetation_groups import validate_group_overlaps
+        validate_group_overlaps(regions)
         return sorted(regions, key=lambda r: r['region_id']) if migrate_crowns else regions
     scenes = manifest.get("scenes", [])
     samples = manifest.get("samples", [])
+    if any(r.get('mode') in {'single-tree', 'confirmed-woods', 'copse', 'shrub-mass'} or 'polygon' in r or 'world_polygon' in r for r in raw_regions if isinstance(r, dict)):
+        raise ValueError('Polygon areas require image-scoped curation schema 2')
     if not isinstance(scenes, list) or not isinstance(samples, list):
         raise ValueError("registration review manifest scenes and samples must be lists")
     scenes_by_id = {
@@ -318,6 +345,9 @@ def normalize_mask_region_payload(
         }
         if raw_region.get("created_at") is not None:
             region["created_at"] = str(raw_region["created_at"])[:100]
+        if mode == 'confirmed-tree':
+            from urban_tree_ml.tree_observations import normalize_observations
+            region.update(normalize_observations(raw_region))
         normalized.append(region)
     return normalized
 
@@ -371,7 +401,8 @@ def persist_review_payload(review_dir: str | Path, payload: dict[str, object]) -
     }
 
 
-def load_persisted_reviews(review_dir: str | Path, *, migrate_crowns: bool = True) -> dict[str, object]:
+def load_persisted_reviews(review_dir: str | Path, *, migrate_crowns: bool = True,
+                           manifest: dict[str, object] | None = None) -> dict[str, object]:
     directory = Path(review_dir)
     path = directory / "reviews.json"
     if not path.exists():
@@ -385,7 +416,9 @@ def load_persisted_reviews(review_dir: str | Path, *, migrate_crowns: bool = Tru
             "mask_regions": mask_regions,
             "state_revision": _review_state_sha256(reviews, scene_reviews, mask_regions),
         }
-    manifest = _read_manifest(directory)
+    # Collection callers already loaded this large file under the review lock.
+    if manifest is None:
+        manifest = _read_manifest(directory)
     payload = json.loads(path.read_text(encoding="utf-8"))
     payload_metadata = payload.get("metadata", {})
     if isinstance(payload_metadata, dict) and payload_metadata.get("review_id") not in (
@@ -433,7 +466,7 @@ def snapshot_registration_annotations(
     )
     manifest = _read_manifest(directory)
     metadata = manifest["metadata"]
-    if Path(str(metadata.get("source_raster", ""))).name != raster.name:
+    if not matches_catalog_imagery(config.paths.root, metadata.get("source_raster"), raster):
         raise ValueError("registration review was generated for a different raster")
 
     source_reviews = Path(reviews_path) if reviews_path is not None else directory / "reviews.json"
@@ -518,9 +551,9 @@ def snapshot_registration_annotations(
     bundle_path = bundle_dir / "bundle.json"
     _write_json_atomic(bundle_path, bundle)
     if (config.paths.root / 'curation-archive' / 'ENABLED').exists():
-        from urban_tree_ml.curation_archive import capture
+        from urban_tree_ml.curation_archive import capture, workspace_status_key
 
-        error_path = config.paths.root / 'curation-archive' / 'errors' / f'{city}.json'
+        error_path = config.paths.root / 'curation-archive' / 'errors' / f'{workspace_status_key(city, metadata["review_id"])}.json'
         try:
             capture(config.paths.root, bundle_dir, archive_review_dir or directory, raster)
             _write_json_atomic(error_path, {'error': None})
@@ -568,6 +601,7 @@ def finalize_registration_feedback(
     review_dir: str | Path | None = None,
     reviews_path: str | Path | None = None,
     minimum_training_reviews: int = 20,
+    snapshot_annotations: bool = True,
 ) -> dict[str, object]:
     if minimum_training_reviews < 1:
         raise ValueError("minimum_training_reviews must be at least one")
@@ -580,7 +614,7 @@ def finalize_registration_feedback(
     manifest = _read_manifest(directory)
     metadata = manifest["metadata"]
     manifest_raster = Path(str(metadata.get("source_raster", "")))
-    if manifest_raster.name != raster.name:
+    if not matches_catalog_imagery(config.paths.root, manifest_raster, raster):
         raise ValueError("registration review was generated for a different raster")
 
     source_reviews = Path(reviews_path) if reviews_path is not None else directory / "reviews.json"
@@ -671,6 +705,13 @@ def finalize_registration_feedback(
                 validation_offsets.append(offset)
 
     region_overrides: list[dict[str, object]] = []
+    taxonomy_corrections = {}
+    for sample_id, review in reviews.items():
+        sample = samples[sample_id]
+        if review.get('species_override') is not None and sample['split'] in {'train', 'validation'}:
+            key = (str(sample['tree_id']), str(sample['split']))
+            taxonomy_corrections[key] = dict(tree_id=key[0], split=key[1],
+                species=review['species_override'], source='human')
     for sample_id, review in reviews.items():
         sample = samples[sample_id]
         if review.get('crown_radius_m') and sample['split'] in {'train', 'validation'}:
@@ -684,7 +725,7 @@ def finalize_registration_feedback(
         if 'longitude' in region:
             region_overrides.append({
                 'region_id':region['region_id'], 'mode':region['mode'],
-                **{k:region[k] for k in ['tree_id','species','identification_source'] if k in region},
+                **{k:region[k] for k in ['tree_id','species','identification_source','polygon'] if k in region},
                 'splits':['train','validation'], 'anchor_longitude':region['longitude'],
                 'anchor_latitude':region['latitude'], 'east_m':0.0,'north_m':0.0,
                 'radius_m':region['radius_m'], 'source':region.get('source','human')})
@@ -755,6 +796,7 @@ def finalize_registration_feedback(
         },
         "exclusions": exclusions,
         "point_corrections": point_corrections,
+        "taxonomy_corrections": list(taxonomy_corrections.values()),
         "region_overrides": region_overrides,
         "ignored_test_regions": ignored_test_regions,
     }
@@ -764,7 +806,7 @@ def finalize_registration_feedback(
         config,
         raster,
         review_dir=directory,
-    )
+    ) if snapshot_annotations else {"annotation_bundle": None, "bundle_manifest": None}
     return {
         "feedback": str(feedback_path),
         "annotation_bundle": snapshot["annotation_bundle"],
@@ -786,6 +828,8 @@ def load_training_feedback(
     path: str | Path,
     raster_path: str | Path,
     dataset: str,
+    *,
+    source_raster: str | Path | None = None,
 ) -> dict[str, object]:
     feedback_path = Path(path)
     feedback = json.loads(feedback_path.read_text(encoding="utf-8"))
@@ -793,8 +837,12 @@ def load_training_feedback(
         raise ValueError("unsupported registration feedback schema")
     if feedback.get("dataset") != dataset:
         raise ValueError("registration feedback was finalized for a different dataset")
-    if feedback.get("source_raster_name") != Path(raster_path).name:
+    identity_path = Path(source_raster) if source_raster is not None else Path(raster_path)
+    if feedback.get("source_raster_name") != identity_path.name:
         raise ValueError("registration feedback was finalized for a different raster")
+    if source_raster is not None:
+        from urban_tree_ml.resolution_recipe import validate_resolution_derivative
+        validate_resolution_derivative(identity_path, Path(raster_path))
     registration = feedback.get("registration")
     if not isinstance(registration, dict):
         raise ValueError("registration feedback is missing its correction")
@@ -802,6 +850,8 @@ def load_training_feedback(
     if not isinstance(exclusions, list):
         raise ValueError("registration feedback exclusions must be a list")
     point_corrections = feedback.get("point_corrections", [])
+    from urban_tree_ml.species_corrections import validate_corrections
+    validate_corrections(feedback.get('taxonomy_corrections', []))
     if not isinstance(point_corrections, list):
         raise ValueError("registration feedback point corrections must be a list")
     correction_keys: set[tuple[str, str]] = set()
@@ -845,6 +895,11 @@ def load_training_feedback(
         region_ids.add(region_id)
         if region["mode"] not in MASK_REGION_MODES:
             raise ValueError(f"registration region override has unknown mode {region['mode']!r}")
+        if region['mode'] in {'single-tree', 'confirmed-woods'} or 'polygon' in region:
+            from urban_tree_ml.single_tree import polygon_points
+            points = polygon_points(region.get('polygon'))
+            if (abs(points[:,0]) > 180).any() or (abs(points[:,1]) > 90).any():
+                raise ValueError('Invalid geographic curation polygon')
         splits = region["splits"]
         if not isinstance(splits, list) or not splits or any(
             split not in {"train", "validation"} for split in splits

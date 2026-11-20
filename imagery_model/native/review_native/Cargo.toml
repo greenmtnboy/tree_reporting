@@ -1,0 +1,16 @@
+[package]
+name = "urban-tree-review-native"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "_review_native"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "=0.26.0", features = ["extension-module"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

@@ -278,8 +278,15 @@ def build_prediction(
 
     genus = row.get("genus") or taxon(row.get("genus_id"), genera)
     species = row.get("species") or taxon(row.get("species_id"), species_names)
+    from urban_tree_ml.vegetation_groups import GROUP_CLASSES
+    category = next((kind for kind, name in GROUP_CLASSES.items() if name == species), None)
+    category = category or (row.get('vegetation_type') if row.get('vegetation_type') in GROUP_CLASSES else None)
+    if category:
+        species = genus = None
     dbh_in = row.get("dbh_in")
     dbh_in = float(dbh_in) if dbh_in is not None and math.isfinite(float(dbh_in)) else None
+    if category:
+        dbh_in = None
 
     crown = coefficients.crown_width_m(genus, dbh_in) if coefficients else None
     prediction = {
@@ -303,8 +310,11 @@ def build_prediction(
         "candidateTreeIds": candidate_tree_ids(lon, lat, inventory, candidate_radius_m),
     }
     top = row.get("species_top_ids")
+    if category:
+        prediction['vegetationType'] = category
+        prediction['speciesConfidence'] = prediction['genusConfidence'] = None
     if top is not None:
-        prediction["speciesTop"] = [taxon(i, species_names) for i in list(top)][:5]
+        prediction["speciesTop"] = [name for i in list(top) if (name := taxon(i, species_names)) not in GROUP_CLASSES.values()][:5]
     return prediction
 
 
@@ -655,16 +665,15 @@ def main(argv: list[str] | None = None) -> int:
     if not chips_dir.exists():
         raise SystemExit(f"chip manifest not found: {chips_dir}")
 
+    from urban_tree_ml.catalog_imagery import resolve_catalog_raster, matches_catalog_imagery
+    configured = metadata.get('source_raster') or config['imagery'].get('local_raster')
+    raster_path = resolve_catalog_raster(artifacts, configured)
+    if raster_path is None:
+        raise SystemExit(f"Exact evaluation imagery unavailable: {configured}")
     if args.raster:
+        if not matches_catalog_imagery(artifacts, raster_path, args.raster):
+            raise SystemExit('Export raster does not match the evaluation imagery')
         raster_path = Path(args.raster)
-    else:
-        configured = Path(str(config["imagery"].get("local_raster") or ""))
-        candidates = sorted((artifacts / "imagery" / city.lower()).glob("*/*.vrt"))
-        raster_path = next((c for c in candidates if c.name == configured.name), None) or (
-            candidates[-1] if candidates else configured
-        )
-    if not raster_path.exists():
-        raise SystemExit(f"mosaic not found: {raster_path}; pass --raster")
     mosaic_manifest = read_json(raster_path.with_suffix(".manifest.json"))
     version = imagery_version(mosaic_manifest)
     acquisition = acquisition_window(mosaic_manifest, raster_path.parent)

@@ -44,6 +44,9 @@ scripts/*.png
 # committed; downloaded rasters, materialized chips, checkpoints, and run logs
 # are not.
 imagery_model/artifacts/
+# Curation belongs in the private training-data repository, including fallback saves.
+imagery_model/annotations/**
+!imagery_model/annotations/README.md
 imagery_model/data/
 imagery_model/outputs/
 imagery_model/lightning_logs/

@@ -3,6 +3,11 @@
 # ruff: noqa: E501
 
 from __future__ import annotations
+from urban_tree_ml.catalog_imagery import matches_catalog_imagery
+from urban_tree_ml.single_tree_ui import SINGLE_TREE_JS
+from urban_tree_ml.editor_trees import EDITOR_TREES_JS
+from urban_tree_ml.border_inventory_ui import BORDER_INVENTORY_JS
+from urban_tree_ml.tree_observations import OBSERVATIONS_JS
 
 import json
 import os
@@ -12,11 +17,20 @@ from pathlib import Path
 from uuid import uuid4
 
 import numpy as np
-import pandas as pd
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import pandas as pd
+import polars as pl
 from pyproj import Transformer
 
 from urban_tree_ml.config import ProjectConfig
-from urban_tree_ml.curation_compare import CURATION_COMPARE_JS
+from urban_tree_ml.curation_compare import COMPARISON_PREFERENCE_JS, CURATION_COMPARE_JS
+from urban_tree_ml.accept_prediction import ACCEPT_PREDICTION_JS
+from urban_tree_ml.prediction_matches import PREDICTION_MATCH_JS
+from urban_tree_ml.queue_prefetch import QUEUE_PREFETCH_JS
+from urban_tree_ml.aerial_display import AERIAL_DISPLAY_CSS, AERIAL_DISPLAY_JS, AERIAL_DISPLAY_SVG
+from urban_tree_ml.crown_overlay import OVERLAY_DOM_JS
 
 VEGETATION_HEURISTIC_PROFILE: dict[str, object] = {
     "id": "naip-rgbn-conservative-gray-v1",
@@ -87,6 +101,7 @@ def _attach_coordinate_stack_sizes(samples: list[dict[str, object]]) -> tuple[in
 
 def _diverse_order(frame: pd.DataFrame, seed: int) -> pd.DataFrame:
     """Prioritize taxonomic, spatial, size, and split diversity deterministically."""
+    import pandas as pd
     candidates = frame.copy()
     rng = np.random.default_rng(seed)
     candidates["_random"] = rng.random(len(candidates))
@@ -201,6 +216,12 @@ def _render_grouped_registration_html(
         samples = [dict(s) for s in samples]
         for sample in samples:
             sample['world_x'],sample['world_y']=projector.transform(sample['longitude'],sample['latitude'])
+        scenes = [dict(scene) for scene in scenes]
+        for scene in scenes:
+            if scene.get('anchor'):
+                scene['anchor'] = dict(scene['anchor'])
+                anchor = scene['anchor']
+                anchor['world_x'], anchor['world_y'] = projector.transform(anchor['longitude'], anchor['latitude'])
     payload = json.dumps(samples, separators=(",", ":")).replace("<", "\\u003c")
     scene_payload = json.dumps(scenes, separators=(",", ":")).replace("<", "\\u003c")
     metadata_payload = json.dumps(metadata, separators=(",", ":")).replace("<", "\\u003c")
@@ -210,6 +231,7 @@ def _render_grouped_registration_html(
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Urban tree grouped registration review</title>
+  <style>{AERIAL_DISPLAY_CSS}</style>
   <style>
     :root {{ color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }}
     * {{ box-sizing: border-box; }}
@@ -256,6 +278,14 @@ def _render_grouped_registration_html(
     .heuristic-button.preview {{ border-color: #ffcf66; color: #ffdf91; }}
     .heuristic-button.applied {{ border-color: #ff9f43; color: #ffd0a1; }}
     .fullscreen-only {{ display: none; }}
+    .image-frame {{ position: relative; width: 100%; aspect-ratio: 1; overflow: hidden; background: #283039; }}
+    .image-frame.has-context .image-wrap {{ position: absolute; left: var(--context-x); top: var(--context-y);
+      width: calc(100% - 2 * var(--context-x)); height: calc(100% - 2 * var(--context-y)); }}
+    .neighbor-context {{ position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none;
+      filter: var(--aerial-display-filter, none); user-select: none; }}
+    .tile-ownership-boundary {{ position: absolute; inset: var(--context-y) var(--context-x); z-index: 9;
+      outline: 1px dashed #ffd166; box-shadow: 0 0 0 1000px #ffcf6618; pointer-events: none; }}
+    .context-status {{ color: #ffd166 !important; }}
     .image-wrap {{ position: relative; width: 100%; aspect-ratio: 1; background: #050806; cursor: crosshair; }}
     .image-wrap img {{ display: block; width: 100%; height: 100%; object-fit: contain;
       image-rendering: auto; user-select: none; }}
@@ -264,12 +294,21 @@ def _render_grouped_registration_html(
       font-size: 9px; font-weight: 800; line-height: 17px; text-align: center; z-index: 3; }}
     .tree-marker:hover {{ background: #152c24; transform: translate(-50%, -50%) scale(1.15); }}
     .tree-marker[data-status="offset"] {{ border-color: #ffe34e; color: #ffe34e; }}
+    .inventory-context-marker {{ position:absolute; z-index:7; width:22px; height:22px; padding:0;
+      border:2px dashed #8bbcff; border-radius:50%; transform:translate(-50%,-50%);
+      background:#101d31; color:#cce2ff; cursor:pointer; font:600 11px/18px system-ui; }}
+    .inventory-context-marker:focus, .inventory-context-highlighted {{ outline:3px solid white; outline-offset:2px; }}
+    .inventory-context-crown {{ position:absolute; border:1px dashed #8bbcff;
+      border-radius:50%; transform:translate(-50%,-50%); pointer-events:none; }}
     .tree-marker[data-status="not-tree"] {{ border-color: #ff5757; color: #ff9c9c; }}
     .tree-marker[data-status="uncertain"] {{ border-color: #ff9f43; color: #ffd0a1; }}
     .tree-marker[data-status="duplicate"] {{ border-color: #c084fc; color: #e9d5ff; }}
     .prediction-marker {{ display: none; position: absolute; width: 13px; height: 13px; padding: 0;
-      border: 2px solid #250725; border-radius: 50%; transform: translate(-50%, -50%);
-      background: #ed55e8e6; box-shadow: 0 0 0 1px #f8d8f6cc; cursor: zoom-in; z-index: 7; }}
+      border: 2px solid #ed55e8; color: #ed55e8; border-radius: 50%; transform: translate(-50%, -50%);
+      background: transparent; box-shadow: 0 0 0 1px #f8d8f6cc; pointer-events: none; z-index: 3; }}
+    .prediction-match-matched::after {{ content: ''; position: absolute; left: 50%; top: 50%;
+      width: 4px; height: 4px; border-radius: 50%; background: currentColor; transform: translate(-50%,-50%); pointer-events: none; }}
+    .prediction-match-unavailable {{ border-style: dashed !important; }}
     .prediction-marker.penalized {{ outline: 2px solid #ff4055; outline-offset: 2px; }}
     .prediction-marker.ignored {{ outline: 2px solid #35e5ee; outline-offset: 2px; }}
     .prediction-marker.near-positive {{ outline: 2px dashed #ffd166; outline-offset: 2px; }}
@@ -300,11 +339,17 @@ def _render_grouped_registration_html(
     .card .prediction-crown,
     .card .curation-comparison-ring {{ filter: opacity(25%); }}
     .image-wrap.multi-select {{ cursor: not-allowed; }}
+    .card.isolate-selection .image-wrap > :not(img):not(.tree-marker.active):not(.crown-circle.nudge-selected):not(.loss-region.nudge-selected):not(.loss-region.selected) {{ visibility: hidden !important; pointer-events: none !important; }}
     .image-wrap.region-drawing {{ cursor: crosshair; touch-action: none; }}
+    .image-wrap.single-area-drawing, .image-wrap.single-area-drawing * {{ cursor: crosshair !important; }}
+    .image-wrap.single-area-drawing > :not(img):not(.single-tree-area) {{ visibility: hidden !important; pointer-events: none !important; }}
+    .card.isolate-selection .image-wrap.single-area-drawing > .single-tree-area {{ visibility: visible !important; }}
+    .image-wrap.single-area-drawing .single-tree-area * {{ pointer-events: none !important; }}
     .loss-region {{ position: absolute; padding: 0; border-radius: 50%; transform: translate(-50%, -50%);
       z-index: 1; box-shadow: 0 0 0 1px #07110dcc; }}
     .loss-region.protect {{ border: 2px solid #35e5ee; background: #35e5ee24; }}
     .loss-region.confirmed-background {{ border: 2px solid #ff4055; background: #ff405524; }}
+    .loss-region.confirmed-background.nudge-selected {{ outline: 2px solid white; cursor: move; }}
     .loss-region.confirmed-tree {{ border: 1px solid #7cff82; background: transparent; cursor: grab; touch-action: none; }}
     .loss-region.confirmed-tree.dragging {{ cursor: grabbing; }}
     .loss-region.confirmed-tree::after {{ content: ''; position: absolute; left: 50%; top: 50%; width: 5px; height: 5px; border-radius: 50%; background: #7cff82; transform: translate(-50%, -50%); }}
@@ -327,6 +372,7 @@ def _render_grouped_registration_html(
       width: 16px; height: 16px; border: 3px solid #d8f7ff; border-radius: 50%;
       background: #1685a6; box-shadow: 0 0 0 2px #071317; }}
     .street-view-camera.outside {{ opacity: .72; }}
+    .street-view-camera.position-only::before {{ display: none; }}
     .tree-list {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(38px, 1fr)); gap: 6px;
       max-height: 132px; padding: 9px 12px 0; overflow-y: auto; }}
     .tree-choice {{ width: 100%; min-width: 0; height: 32px; padding: 0; font-size: 11px; }}
@@ -342,8 +388,10 @@ def _render_grouped_registration_html(
     .pixel-zoom-head {{ display: flex; justify-content: space-between; gap: 8px; margin-bottom: 6px;
       color: #dce9df; font-size: 12px; }}
     .pixel-zoom-label {{ color: #9eb6a5; font-variant-numeric: tabular-nums; text-align: right; }}
-    .pixel-zoom canvas {{ display: block; width: min(100%, 190px); aspect-ratio: 1; margin: 0 auto;
-      border: 1px solid #496252; border-radius: 5px; background: #050806;
+    .pixel-zoom-image {{ position: relative; width: min(100%, 190px); aspect-ratio: 1; margin: 0 auto;
+      border: 1px solid #496252; border-radius: 5px; overflow: hidden; background: #050806; }}
+    .pixel-zoom-crosshair {{ position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }}
+    .pixel-zoom canvas {{ display: block; width: 100%; aspect-ratio: 1;
       image-rendering: pixelated; image-rendering: crisp-edges; }}
     .selected-species {{ color: #eef5ef; font-size: 14px; font-weight: 700; }}
     .actions {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(82px, 1fr)); gap: 5px; padding: 10px 12px; }}
@@ -366,42 +414,157 @@ def _render_grouped_registration_html(
     .card.fullscreen .card-head {{ grid-area: head; border-bottom: 1px solid #30443a; }}
     .card.fullscreen .fullscreen-only {{ display: inline-block; }}
     .card.fullscreen .tree-species-label {{ display: block; }}
-    .card.fullscreen .image-wrap {{ grid-area: image; align-self: start; justify-self: center;
+    .card.fullscreen .image-frame {{ grid-area: image; align-self: start; justify-self: center;
       width: min(calc(100vw - 440px), calc(100vh - 72px)); max-width: 100%; }}
     .card.fullscreen .tree-list {{ grid-area: list; padding-top: 14px; }}
     .card.fullscreen .pixel-zoom {{ grid-area: zoom; display: block; }}
     .card.fullscreen .details {{ grid-area: details; }}
     .card.fullscreen .actions {{ grid-area: actions; }}
     .card.fullscreen .mask-actions {{ grid-area: mask; display: grid; }}
-    .card.fullscreen textarea {{ grid-area: note; align-self: start; }}
+    .card.fullscreen .tree-observations {{ grid-area: note; align-self: start; min-width: 0; }}
+    .tree-observations {{ margin: 0 12px 12px; }}
+    .tree-observations label {{ display: inline-flex; align-items: center; gap: 6px; margin: 8px 8px 8px 0; }}
+    .tree-observations textarea {{ box-sizing: border-box; width: 100%; margin: 0 0 8px; }}
+    .observation-help {{ font-size: 12px; opacity: .75; margin-top: 4px; }}
     .street-view-panel {{ display: none; min-width: 200px; min-height: 420px; overflow: hidden;
       border: 1px solid #30443a; border-radius: 8px; background: #0b110e; }}
-    .street-view-head {{ display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    .street-view-head {{ display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px;
       min-height: 42px; padding: 6px 8px; color: #c8d7cc; font-size: 12px; }}
     .street-view-head a {{ color: #b9e6c5; }}
     .street-view-head button {{ min-height: 28px; padding: 3px 8px; font-size: 11px; }}
-    .street-view-frame-wrap {{ width: 100%; height: calc(100% - 42px); min-height: 378px; }}
+    .street-view-frame-wrap {{ width: 100%; flex: 1; min-height: 378px; }}
     .street-view-frame {{ display: block; width: 100%; height: 100%; min-height: 378px; border: 0; }}
     .street-view-frame.locked {{ pointer-events: none; }}
     .card.fullscreen.street-view-open {{ grid-template-columns: minmax(300px, 1fr) minmax(300px, 1fr) minmax(330px, 400px);
       grid-template-areas: "head head head" "image street list" "image street zoom" "image street details" "image street actions" "image street mask" "image street note"; }}
-    .card.fullscreen.street-view-open .image-wrap {{ width: min(calc(50vw - 205px), calc(100vh - 72px)); }}
-    .card.fullscreen.street-view-open .street-view-panel {{ grid-area: street; display: block; align-self: stretch; }}
+    .card.fullscreen.street-view-open .image-frame {{ width: min(calc(50vw - 205px), calc(100vh - 72px)); }}
+    .card.fullscreen.street-view-open .street-view-panel {{ grid-area: street; display: flex; flex-direction: column; align-self: stretch; }}
+    .editor-aerial, .editor-tools, .editor-selection {{ display: contents; }}
+    .card.fullscreen [data-shortcut]::after {{
+      content: attr(data-shortcut); display: inline-block; margin-inline-start: .4em;
+      padding: 0 3px; border: 1px solid currentColor; border-radius: 3px;
+      font: 600 10px/15px system-ui; opacity: .85; white-space: nowrap;
+    }}
+    .card.fullscreen .curation-compare-panel:not([hidden]) {{
+      display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 4px 8px;
+      flex: 1 0 100%; padding-top: 4px; border-top: 1px solid #30443a; min-width: 0;
+    }}
+    .curation-compare-panel .model-picker {{ width: clamp(140px, 18vw, 310px); max-width: 100%; }}
+    .curation-compare-panel label {{ display: inline-flex; align-items: center; gap: 3px; }}
+    .curation-compare-panel select {{ min-width: 0; }}
+    .editor-tools summary {{ cursor: pointer; }}
+    .extra-tools {{ grid-column: 1 / -1; }}
+    .extra-tools > div {{ display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 4px; }}
+    .extra-tools summary, .tree-observations summary, .chip-tag-editor summary {{ color: #c9dccf; }}
+    @media (min-width: 1101px) {{
+      body.modal-open #studio-navigation {{ gap: 5px 10px; padding: 4px 10px; }}
+      body.modal-open #studio-navigation .studio-links {{ gap: 4px; }}
+      body.modal-open #studio-navigation :is(a,button,select) {{ min-height: 28px; padding: 3px 7px; font: 12px/18px system-ui; }}
+    }}
+    .street-example-body {{ padding: 8px; overflow: auto; min-height: 0; }}
+    .street-example-body:empty {{ display: none; }}
     .hidden {{ display: none; }}
     @media (max-width: 1100px) {{
       .card.fullscreen.street-view-open {{ grid-template-columns: minmax(0, 1fr) minmax(330px, 420px);
         grid-template-areas: "head head" "street list" "street zoom" "street details" "street actions" "street mask" "street note"; }}
-      .card.fullscreen.street-view-open .image-wrap {{ display: none; }}
+      .card.fullscreen.street-view-open .image-frame {{ display: none; }}
+      .card.fullscreen.street-view-open.mapillary-preview {{
+        grid-template-areas: "head head" "image list" "street zoom" "street details" "street actions" "street mask" "street note"; }}
+      .card.fullscreen.street-view-open.mapillary-preview .image-frame {{ display: block; width: min(100%, 50vh); }}
     }}
     @media (max-width: 850px) {{
       main {{ padding: 8px; grid-template-columns: 1fr; }} #stats {{ width: 100%; }}
       .card.fullscreen {{ display: block; }}
-      .card.fullscreen .image-wrap {{ width: min(100vw, calc(100vh - 72px)); }}
+      .card.fullscreen .image-frame {{ width: min(100vw, calc(100vh - 72px)); }}
+    }}
+    @media (min-width: 1101px) {{
+      .card.fullscreen, .card.fullscreen.street-view-open {{
+        --tool-width: clamp(350px, 27vw, 440px);
+        --control-height: 28px;
+        grid-template-rows: auto minmax(0, 1fr);
+        grid-template-columns: minmax(0, 1fr) var(--tool-width);
+        grid-template-areas: "head head" "aerial tools";
+        gap: 0; overflow: hidden;
+      }}
+      .card.fullscreen.street-view-open {{
+        grid-template-columns: repeat(2, minmax(0, 1fr)) var(--tool-width);
+        grid-template-areas: "head head head" "aerial street tools";
+      }}
+      .card.fullscreen .editor-aerial {{
+        grid-area: aerial; display: grid; place-items: center; container-type: size;
+        min-height: 0; min-width: 0; background: #0b110e;
+      }}
+      .card.fullscreen .editor-aerial .image-frame {{
+        grid-area: auto; align-self: center; width: min(100cqw, calc(100cqh * var(--image-ratio)));
+      }}
+      .card.fullscreen .editor-tools {{
+        grid-area: tools; display: flex; flex-direction: column; gap: 6px; overflow: auto;
+        min-height: 0; padding: 8px; border-left: 1px solid #30443a; font-size: 12px;
+      }}
+      .editor-tools > * {{ flex: none; }}
+      .card.fullscreen .card-head {{ align-items: flex-start; padding: 6px 10px; gap: 6px; position: relative; z-index: 12; }}
+      .card.fullscreen .badges {{ align-items: center; gap: 4px; min-width: 0; }}
+      .card.fullscreen .badges {{ flex: 1; }}
+      .card.fullscreen .identity {{ flex: 0 0 145px; overflow-wrap: anywhere; }}
+      .card.fullscreen :is(.badges, .editor-tools, .street-view-panel) :is(button, select, input:not([type=checkbox],[type=range]), summary),
+      .card.fullscreen :is(.badges .toggle-label, .street-view-external) {{
+        box-sizing: border-box; min-height: var(--control-height); min-width: 0;
+        padding: 3px 7px; border-radius: 5px; font: 500 12px/16px system-ui;
+      }}
+      .card.fullscreen .street-view-panel {{ min-height: 0; min-width: 0; border-radius: 0; }}
+      .card.fullscreen .street-view-head {{ min-height: 0; gap: 4px; justify-content: flex-start; padding: 5px 7px; }}
+      .card.fullscreen .street-view-location {{ order: 1; flex: 1 0 100%; font-size: 11px; overflow-wrap: anywhere; }}
+      .street-view-location:empty {{ display: none; }}
+      .card.fullscreen .street-view-frame-wrap, .card.fullscreen .street-view-frame {{ min-height: 0; }}
+      .card.fullscreen .street-view-frame-wrap {{ flex: 1 1 0; }}
+      .card.fullscreen .street-view-frame {{ height: 100%; }}
+      .card.fullscreen .street-example-body {{ max-height: 100%; }}
+      .card.fullscreen .tree-list {{ padding: 0; gap: 3px; max-height: 72px; grid-template-columns: repeat(auto-fill,minmax(30px,1fr)); }}
+      .card.fullscreen .tree-list:empty {{ display: none; }}
+      .card.fullscreen .tree-choice {{ min-height: 22px; height: 22px; padding: 1px; }}
+      .card.fullscreen .pixel-zoom {{ display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 4px 8px; }}
+      .card.fullscreen .pixel-zoom-head {{ flex-direction: column; margin: 0; gap: 2px; }}
+      .card.fullscreen .pixel-zoom-label {{ text-align: left; }}
+      .card.fullscreen .pixel-zoom-image {{ flex: none; width: 190px; margin: 0; }}
+      .card.fullscreen .details {{ padding: 0; min-height: 0; line-height: 1.3; }}
+      .card.fullscreen .actions, .card.fullscreen .mask-actions {{
+        padding: 0; gap: 4px; grid-template-columns: repeat(3,minmax(0,1fr));
+      }}
+      .card.fullscreen .actions button, .card.fullscreen .mask-actions button {{ padding: 3px 4px; }}
+      @media (max-height: 760px) {{
+        .card.fullscreen .editor-tools {{ padding: 5px; gap: 4px; }}
+        .card.fullscreen .tree-list {{ max-height: 47px; }}
+      }}
+      .card.fullscreen .mask-actions > span {{ grid-column: 1 / -1; font: 11px/1.25 system-ui; }}
+      .card.fullscreen .editor-selection {{ display: grid; grid-template-columns: minmax(0,1fr) 198px; grid-template-areas: "list zoom" "details zoom"; align-items: center; align-content: start; gap: 4px 8px; }}
+      .card.fullscreen .editor-selection > :is(.details,.pixel-zoom) {{ min-width:0; overflow-wrap:anywhere; }}
+      .card.fullscreen .editor-selection .pixel-zoom {{ flex-direction: column; gap: 2px; text-align: center; padding: 3px; }}
+      .card.fullscreen .pixel-zoom-head {{ margin: 0; font-size: 10px; }}
+      .card.fullscreen .pixel-zoom-label {{ text-align: center; line-height: 1.15; }}
+      @media (max-height: 760px) {{
+        .card.fullscreen, .card.fullscreen.street-view-open {{ --tool-width: 406px; }}
+        .card.fullscreen .editor-selection {{ grid-template-areas: "list zoom" "details zoom" "caption zoom"; }}
+        .card.fullscreen .editor-selection .pixel-zoom {{ display: contents; }}
+        .card.fullscreen .pixel-zoom-head {{ grid-area: caption; align-items: start; }}
+        .card.fullscreen .pixel-zoom-label {{ text-align: left; }}
+        .card.fullscreen .pixel-zoom-image {{ grid-area: zoom; justify-self: center; }}
+      }}
+      .card.fullscreen .tree-observations {{ margin: 0; width: 100%; display: flex; align-items: start; gap: 4px; }}
+      .card.fullscreen .tree-observations details {{ flex: 1; min-width: 0; }}
+      .card.fullscreen .extra-tools summary, .card.fullscreen .tree-observations summary,
+      .card.fullscreen .chip-tag-editor summary {{ border: 1px solid #496252; border-radius: 5px; padding: 5px 7px; cursor: pointer; }}
+      .card.fullscreen .chip-tag-editor {{ flex: none; }}
+      .card.fullscreen .expand-button {{ text-transform: none; }}
+      .card.fullscreen .curation-compare-panel .model-picker input {{ background: #101b15; color: #dce9df; border: 1px solid #496252; }}
+      .card.fullscreen .tree-observations label {{ margin: 4px; }}
+      .card.fullscreen .tree-observations summary {{ display: list-item; }}
+      .card.fullscreen .tree-observations textarea {{ min-height: 36px; }}
     }}
   </style>
 </head>
 <body>
   <header>
+    {AERIAL_DISPLAY_SVG}
     <h1>Grouped registration review</h1>
     <p class="lede">Each numbered ring is one inventory tree. Select a ring, then click its apparent
       tree center to record an offset. Cyan = aligned, yellow = offset, red = not tree,
@@ -452,30 +615,47 @@ def _render_grouped_registration_html(
   </aside>
   <main id="cards"></main>
   <script>
+    {OVERLAY_DOM_JS}
     const samples = {payload};
     const scenes = {scene_payload};
     const metadata = {metadata_payload};
     const streetViewEmbedApiKey = null;
+    const mapillaryAvailable = false;
+    const reviewHotkeys = {{c: "aligned", f: "not-tree", q: "uncertain", e: "duplicate", o: "occluded"}};
     const pageParameters = new URLSearchParams(location.search);
+    {AERIAL_DISPLAY_JS}
     const requestedSceneId = pageParameters.get("scene");
     let curationReturn = pageParameters.get("return") || (metadata.editor_scene_id?'/registration?city='+encodeURIComponent(pageParameters.get('city')||'ussfo'):null);
+    if(curationReturn&&!pageParameters.has('return')&&pageParameters.has('acquisition'))curationReturn+='&acquisition='+encodeURIComponent(pageParameters.get('acquisition'));
     let predictionRun = pageParameters.get("run");
-    const requestedPredictionThreshold = Number.parseFloat(pageParameters.get("threshold"));
+    let requestedPredictionThreshold = Number.parseFloat(pageParameters.get("threshold"));
+    {COMPARISON_PREFERENCE_JS}
+    {QUEUE_PREFETCH_JS}
     const samplesById = Object.fromEntries(samples.map(sample => [sample.sample_id, sample]));
+    for(const scene of scenes)if(scene.anchor)samplesById[scene.anchor.sample_id]=scene.anchor;
     const scenesById = Object.fromEntries(scenes.map(scene => [scene.scene_id, scene]));
     const isStacked = sample => Number(sample.coordinate_stack_size || 1) > 1;
     const stackedSamples = samples.filter(isStacked);
     const activeByScene = Object.fromEntries(scenes.map(scene => [scene.scene_id,
-      scene.sample_ids.find(sampleId => !isStacked(samplesById[sampleId])) || scene.sample_ids[0]
+      scene.sample_ids.find(sampleId => samplesById[sampleId].tree_id===pageParameters.get('tree_id')) ||
+      scene.sample_ids.find(sampleId => !isStacked(samplesById[sampleId])) || scene.sample_ids[0] || scene.anchor?.sample_id
     ]));
     const selectedByScene = Object.fromEntries(Object.entries(activeByScene).map(
-      ([sceneId, sampleId]) => [sceneId, new Set([sampleId])]
+      ([sceneId, sampleId]) => [sceneId, new Set(scenesById[sceneId].sample_ids.length?[sampleId]:[])]
     ));
     const storageKey = `urban-tree-registration:${{metadata.review_id}}${{metadata.editor_scene_id?':scene:'+metadata.editor_scene_id:''}}`;
     const storedState = JSON.parse(localStorage.getItem(storageKey) || "{{}}");
     const hasWrappedState = storedState && typeof storedState === "object"
       && Object.prototype.hasOwnProperty.call(storedState, "reviews");
     let reviews = hasWrappedState ? (storedState.reviews || {{}}) : (storedState || {{}});
+    for(const sample of samples) {{
+      const originalSpecies=sample.species, originalGenus=sample.genus;
+      Object.defineProperty(sample,'species',{{enumerable:true,get:()=>reviews[sample.sample_id]?.species_override ?? originalSpecies}});
+      Object.defineProperty(sample,'genus',{{enumerable:true,get:()=>{{
+        const value=reviews[sample.sample_id]?.species_override;
+        return value==null?originalGenus:(value.split(' ')[0]||'');
+      }}}});
+    }}
     let sceneReviews = hasWrappedState ? (storedState.scene_reviews || {{}}) : {{}};
     let maskRegions = hasWrappedState ? (storedState.mask_regions || []) : [];
     let serverRevision = null;
@@ -485,7 +665,7 @@ def _render_grouped_registration_html(
     const crownCursorByScene = {{}};
     let copiedTree = null;
     const selectedAddedByScene = {{}};
-    const deselectedScenes = new Set();
+    const deselectedScenes = new Set(scenes.filter(scene=>!scene.sample_ids.length).map(scene=>scene.scene_id));
     const confirmingScenes = new Set();
     function addedTreeNumber(id) {{
       // Stable across chips/reloads; prefix distinguishes these from inventory indices.
@@ -511,10 +691,26 @@ def _render_grouped_registration_html(
     const hideExcluded=document.getElementById('hide-excluded');
     hideExcluded.checked=localStorage.getItem('tree-review:hide-excluded')==='1';
     const excludedStatuses=new Set(['not-tree','uncertain','duplicate','occluded']);
-    const isHiddenTree=sample=>hideExcluded.checked&&excludedStatuses.has(statusOf(sample.sample_id));
+    const isHiddenTree=sample=>(hideExcluded.checked&&excludedStatuses.has(statusOf(sample.sample_id)))
+      || (scenesById[sample.scene_id]&&pointInVegetationGroup(displayedPosition(sample),scenesById[sample.scene_id]));
     function toggleExcluded(value) {{hideExcluded.checked=value;localStorage.setItem('tree-review:hide-excluded',value?'1':'0');update();}}
     hideExcluded.addEventListener('change',()=>toggleExcluded(hideExcluded.checked));
     let localSaveTimer=null,nudgeFrame=null;
+    let isolatedCard=null;
+    function clearIsolation() {{
+      isolatedCard?.classList.remove('isolate-selection');
+      isolatedCard?.querySelector('.isolate-button')?.setAttribute('aria-pressed','false');
+      isolatedCard=null;
+    }}
+    function isolateSelection(card) {{
+      clearIsolation();
+      if(!card.classList.contains('selection-focus'))return;
+      isolatedCard=card;card.classList.add('isolate-selection');
+      card.querySelector('.isolate-button')?.setAttribute('aria-pressed','true');
+    }}
+    document.addEventListener('keyup',event=>{{if(event.code==='Space'||event.key===' ')clearIsolation();}});
+    window.addEventListener('blur',clearIsolation);
+    document.addEventListener('visibilitychange',()=>{{if(document.hidden)clearIsolation();}});
     let nudgeFocusCard=null,nudgeFocusTimer=null;
     const nudgeHeldKeys=new Set();
     function clearNudgeFocus() {{
@@ -547,7 +743,7 @@ def _render_grouped_registration_html(
         delete r.image_x;delete r.image_y;return r;}};
       for(const sample of samples){{target[sample.sample_id]=true;
         if(source[sample.sample_id])trees[sample.tree_id]=canonical(sample,source[sample.sample_id]);
-        else trees[sample.tree_id]??={{status:'aligned'}};}}
+        else trees[sample.tree_id]??=(metadata.peer_copy_required?{{status:'aligned',source:'inventory-suggestion'}}:{{status:'aligned'}});}}
       return new Proxy(target,{{get:(t,key)=>samplesById[key]?trees[samplesById[key].tree_id]:t[key],
         set:(t,key,value)=>{{trees[samplesById[key].tree_id]=canonical(samplesById[key],value);return true;}}}});
     }};
@@ -654,21 +850,56 @@ def _render_grouped_registration_html(
       clearTimeout(syncTimer); syncTimer = setTimeout(syncReviews, 250);
     }}
     const moveUndoByScene = {{}};
-    const moveFields=['image_x','image_y','east_m','north_m','world_x','world_y','longitude','latitude'];
+    const moveFields=['image_x','image_y','east_m','north_m','world_x','world_y','longitude','latitude','world_polygon','polygon'];
+    const classificationFields=['status','source','heuristic_id','image_x','image_y','east_m','north_m'];
+    function pushReviewUndo(sceneId, entry) {{
+      const stack=moveUndoByScene[sceneId] ||= [];stack.push(entry);
+      if(stack.length>50)stack.shift();
+    }}
+    function rememberClassification(sceneId, ids=[], region=null) {{
+      const pick=value=>Object.fromEntries(classificationFields.filter(k=>Object.hasOwn(value,k)).map(k=>[k,value[k]]));
+      pushReviewUndo(sceneId,{{key:'classification',kind:'classification',
+        ids:ids.map(id=>[id,pick(reviews[id]||{{}}),Object.hasOwn(reviews,id)]),
+        region:region?{{value:JSON.parse(JSON.stringify(region)),index:maskRegions.indexOf(region)}}:null,
+        active:activeByScene[sceneId]}});
+    }}
     function rememberMove(sceneId, ids=[], region=null, repeat=false) {{
       const stack=moveUndoByScene[sceneId] ||= [];
       const key=region?'region:'+region.region_id:'trees:'+ids.slice().sort().join('|');
       if(repeat&&stack.at(-1)?.key===key)return;
       const pick=value=>Object.fromEntries([...moveFields,'status','source','heuristic_id'].filter(k=>Object.hasOwn(value,k)).map(k=>[k,value[k]]));
-      stack.push({{key,ids:ids.map(id=>[id,pick(reviews[id]||{{}})]),
+      pushReviewUndo(sceneId,{{key,ids:ids.map(id=>[id,pick(reviews[id]||{{}})]),
         region:region?{{id:region.region_id,position:pick(region)}}:null}});
-      if(stack.length>50)stack.shift();
     }}
     function undoMove(sceneId) {{
       const saved=moveUndoByScene[sceneId]?.pop();if(!saved)return;
-      const restore=(target,position)=>{{
-        for(const key of moveFields){{delete target[key];if(Object.hasOwn(position,key))target[key]=position[key];}}
+      if(undoTreeEdit(sceneId,saved))return;
+      const restore=(target,position,fields=moveFields)=>{{
+        for(const key of fields){{delete target[key];if(Object.hasOwn(position,key))target[key]=position[key];}}
       }};
+      if(saved.kind==='observation'){{
+        const target=saved.regionId?maskRegions.find(r=>r.region_id===saved.regionId):(reviews[saved.sampleId] ||= {{}});
+        if(!target)return;
+        if(saved.existed)target[saved.field]=saved.before;else delete target[saved.field];
+        if(saved.sampleId&&!saved.recordExisted&&!Object.keys(target).length)delete reviews[saved.sampleId];
+        persist(sceneId);return;
+      }}
+      if(saved.kind==='classification'){{
+        for(const [id,before,existed] of saved.ids){{
+          const target=reviews[id] ||= {{}};restore(target,before,classificationFields);
+          if(!existed&&!Object.keys(target).length)delete reviews[id];
+        }}
+        delete selectedAddedByScene[sceneId];
+        selectedByScene[sceneId]=new Set(saved.ids.map(([id])=>id));
+        if(saved.active)activeByScene[sceneId]=saved.active;
+        if(saved.region){{
+          const region=saved.region.value;
+          if(!maskRegions.some(r=>r.region_id===region.region_id))maskRegions.splice(saved.region.index,0,region);
+          selectStandaloneRegion(sceneId,region.region_id);
+        }}
+        deselectedScenes.delete(sceneId);clearNudgeFocus();
+        delete zoomFocusByScene[sceneId];persist(sceneId);return;
+      }}
       for(const [id,position] of saved.ids){{
         const target=reviews[id] ||= {{}};restore(target,position);
         // Do not undo an exclusion/classification made after the movement.
@@ -685,33 +916,40 @@ def _render_grouped_registration_html(
     function selectionFor(sceneId) {{
       if(deselectedScenes.has(sceneId))return new Set();
       if(selectedAddedByScene[sceneId])return new Set();
+      if(treeSelectionByScene[sceneId])return selectedByScene[sceneId] ||= new Set();
       if (!selectedByScene[sceneId]?.size) {{
         const active=activeByScene[sceneId];
-        selectedByScene[sceneId] = new Set(active&&!isHiddenTree(samplesById[active])?[active]:[]);
+        selectedByScene[sceneId] = new Set(active&&!samplesById[active]?.reference_only&&!isHiddenTree(samplesById[active])?[active]:[]);
       }}
       return selectedByScene[sceneId];
+    }}
+    function clearTreeSelection(sceneId) {{
+      delete treeSelectionByScene[sceneId];
+      selectedByScene[sceneId]=new Set();delete selectedAddedByScene[sceneId];
+      deselectedScenes.add(sceneId);delete zoomFocusByScene[sceneId];
+      // Keep the last active ID as a coordinate anchor, not as a selection.
+      clearNudgeFocus();
+    }}
+    function ensureVisibleSelection(sceneId, visibleSamples) {{
+      if(deselectedScenes.has(sceneId)||selectedAddedByScene[sceneId]||treeSelectionByScene[sceneId])return;
+      if(!visibleSamples.some(sample=>sample.sample_id===activeByScene[sceneId]))clearTreeSelection(sceneId);
     }}
     async function confirmSelection(sceneId) {{
       if(confirmingScenes.has(sceneId)||deselectedScenes.has(sceneId))return;
       confirmingScenes.add(sceneId);
       const version=editVersion;
-      const selectionKey=()=>JSON.stringify([[...selectionFor(sceneId)],selectedAddedByScene[sceneId]]);
+      const selectionKey=()=>JSON.stringify([selectedEditableTrees(sceneId).map(t=>t.key),selectedAddedByScene[sceneId]]);
       const originalSelection=selectionKey();
       try {{
         if(!await syncReviews()||editVersion!==version||selectionKey()!==originalSelection)return;
-        selectedByScene[sceneId]=new Set();delete selectedAddedByScene[sceneId];
-        deselectedScenes.add(sceneId);delete zoomFocusByScene[sceneId];
+        clearTreeSelection(sceneId);
         delete regionModeByScene[sceneId];delete regionDraftByScene[sceneId];
-        clearNudgeFocus();update(sceneId);
+        update(sceneId);
       }} finally {{confirmingScenes.delete(sceneId);}}
     }}
     function updateSelectionFocus(card,scene) {{
-      const scale=regionPixelScaleM(samplesById[scene.sample_ids[0]]);
-      const centers=[...selectionFor(scene.scene_id)].map(id=>{{
-        const sample=samplesById[id],p=displayedPosition(sample);
-        const radius=Number(reviews[id]?.crown_radius_m||window.estimateCrown?.(sample)?.width_m/2||0);
-        return {{...p,radius:Math.max(10,radius)}};
-      }});
+      const scale=regionPixelScaleM(samplesById[scene.sample_ids[0]||scene.anchor?.sample_id]);
+      const centers=selectedEditableTrees(scene.scene_id).map(t=>({{...t.position(),radius:10}}));
       const stored=maskRegions.find(r=>r.region_id===selectedAddedByScene[scene.scene_id]);
       const added=stored&&regionForScene(stored,scene);
       if(added&&!deselectedScenes.has(scene.scene_id))centers.push({{x:added.image_x,y:added.image_y,radius:Math.max(10,Number(added.radius_m)||0)}});
@@ -725,21 +963,7 @@ def _render_grouped_registration_html(
       }});
     }}
     function setStatus(sceneId, status) {{
-      const addedId=selectedAddedByScene[sceneId];
-      if(addedId){{
-        // Keep ownership even after deletion: held/repeated hotkeys must never
-        // fall through to the previous inventory selection.
-        const added=maskRegions.find(r=>r.region_id===addedId&&r.mode==='confirmed-tree'&&!r.tree_id);
-        if(added&&['uncertain','not-tree','duplicate'].includes(status))removeMaskRegion(addedId);
-        return;
-      }}
-      selectionFor(sceneId).forEach(sampleId => {{
-        const next = {{...(reviews[sampleId] || {{}}), status, source: "human"}};
-        delete next.heuristic_id;
-        if(status !== 'occluded') ["image_x", "image_y", "east_m", "north_m"].forEach(field => delete next[field]);
-        reviews[sampleId] = next;
-      }});
-      persist();
+      classifyEditableTrees(sceneId,status);
     }}
     function runVegetationHeuristic(sceneId) {{
       const scene = scenesById[sceneId];
@@ -783,44 +1007,12 @@ def _render_grouped_registration_html(
       return {{x: sample.target_x, y: sample.target_y}};
     }}
     function selectSample(sceneId, sampleId, extend = false) {{
-      deselectedScenes.delete(sceneId);
-      delete selectedAddedByScene[sceneId];
-      if(isHiddenTree(samplesById[sampleId]))return;
-      const selected = selectionFor(sceneId);
-      if (!extend) {{
-        selected.clear(); selected.add(sampleId);
-      }} else if (selected.has(sampleId) && selected.size > 1) {{
-        selected.delete(sampleId);
-      }} else {{
-        selected.add(sampleId);
-      }}
-      activeByScene[sceneId] = selected.has(sampleId) ? sampleId : [...selected][0];
-      const activeSample = samplesById[activeByScene[sceneId]];
-      if (activeSample) {{
-        const number = scenesById[sceneId].sample_ids.indexOf(activeSample.sample_id) + 1;
-        zoomFocusByScene[sceneId] = {{...displayedPosition(activeSample),
-          label: `Tree ${{number}} current location`}};
-      }}
-      update(sceneId);
+      selectEditableTree(sceneId,sampleId,extend);
     }}
     function toggleSelectAll(sceneId) {{
-      deselectedScenes.delete(sceneId);
-      delete selectedAddedByScene[sceneId];
-      const available = scenesById[sceneId].sample_ids.filter(
-        sampleId => (showStacks.checked || !isStacked(samplesById[sampleId])) && !isHiddenTree(samplesById[sampleId])
-      );
-      if (!available.length) return;
-      const selected = selectionFor(sceneId);
-      const allSelected = available.length > 1 && available.every(sampleId => selected.has(sampleId));
-      if (allSelected) {{
-        selectedByScene[sceneId] = new Set([activeByScene[sceneId]]);
-      }} else {{
-        selectedByScene[sceneId] = new Set(available);
-        if (!selectedByScene[sceneId].has(activeByScene[sceneId])) {{
-          activeByScene[sceneId] = available[0];
-        }}
-      }}
-      update();
+      const scene=scenesById[sceneId],keys=[...editableTrees(scene).keys()];
+      const selected=selectedEditableTrees(sceneId);
+      applyTreeSelection(scene,selected.length===keys.length?[]:keys);update(sceneId);
     }}
     function setSceneDone(sceneId, done) {{
       if (done) sceneReviews[sceneId] = {{...sceneReviews[sceneId], done: true, completed_at: sceneReviews[sceneId]?.completed_at || new Date().toISOString()}};
@@ -869,6 +1061,10 @@ def _render_grouped_registration_html(
       const rowScale = Math.hypot(sample.transform_b, sample.transform_e);
       return (columnScale + rowScale) / 2;
     }}
+    {EDITOR_TREES_JS}
+    {BORDER_INVENTORY_JS}
+    {SINGLE_TREE_JS}
+    {OBSERVATIONS_JS}
     function setRegionMode(sceneId, mode) {{
       regionModeByScene[sceneId] = regionModeByScene[sceneId] === mode ? null : mode;
       delete regionDraftByScene[sceneId];
@@ -880,32 +1076,45 @@ def _render_grouped_registration_html(
         if(sample){{const r={{...reviews[sample.sample_id]}};delete r.crown_radius_m;delete r.crown_source;reviews[sample.sample_id]=r;}}
       }}
       maskRegions = maskRegions.filter(region => region.region_id !== regionId);
+      for(const [sceneId,selectedId] of Object.entries(selectedAddedByScene)){{
+        if(selectedId===regionId)clearTreeSelection(sceneId);
+      }}
       persist();
     }}
     function removeLastMaskRegion(sceneId) {{
       const index = maskRegions.findLastIndex(region => regionForScene(region,scenesById[sceneId]));
       if (index < 0) return;
-      maskRegions.splice(index, 1);
-      persist();
+      removeMaskRegion(maskRegions[index].region_id);
     }}
-    function finishMaskRegion(sceneId, x, y, radiusPx, treeId=null, template=null) {{
+    function finishMaskRegion(sceneId, x, y, radiusPx, treeId=null, template=null, addedRegionId=null) {{
       const scene = scenesById[sceneId];
-      const anchorSampleId = activeByScene[sceneId] || scene.sample_ids[0];
+      if(addedRegionId){{
+        const stored=maskRegions.find(r=>r.region_id===addedRegionId&&(r.mode==='confirmed-tree'||isVegetationGroup(r.mode))&&!r.world_polygon&&!r.tree_id);
+        const projected=stored&&regionForScene(stored,scene);
+        const sample=projected&&samplesById[projected.anchor_sample_id];
+        if(!sample)return;
+        if(radiusPx>=1)stored.radius_m=Math.min(500,radiusPx*regionPixelScaleM(sample));
+        regionModeByScene[sceneId]=null;delete regionDraftByScene[sceneId];persist(sceneId);return;
+      }}
+      const anchorSampleId = activeByScene[sceneId] || scene.sample_ids[0] || scene.anchor?.sample_id;
       const anchor = samplesById[anchorSampleId];
       const mode = regionModeByScene[sceneId] === 'measure-tree' ? 'confirmed-tree' : regionModeByScene[sceneId];
       if (!anchor || !mode) return;
-      if (mode === "confirmed-tree" && radiusPx < 1) {{
+      if ((mode === "confirmed-tree" || isVegetationGroup(mode)) && radiusPx < 1) {{
         delete regionDraftByScene[sceneId];
         update();
         return;
       }}
       const pixelScaleM = regionPixelScaleM(anchor);
       const defaultRadiusPx = 5 / pixelScaleM;
-      const finalRadiusPx = mode === "confirmed-tree" || radiusPx >= 3 ? radiusPx : defaultRadiusPx;
+      const finalRadiusPx = mode === "confirmed-tree" || isVegetationGroup(mode) || radiusPx >= 3 ? radiusPx : defaultRadiusPx;
       if(treeId) {{
         const sample=scene.sample_ids.map(id=>samplesById[id]).find(s=>s.tree_id===treeId);
         reviews[sample.sample_id]={{...(reviews[sample.sample_id]||{{}}),crown_radius_m:finalRadiusPx*pixelScaleM,crown_source:'human'}};
         regionModeByScene[sceneId]=null;delete regionDraftByScene[sceneId];persist(sceneId);return;
+      }}
+      if(mode==='confirmed-tree'&&!checkNewTree(scene,x,y)){{
+        regionModeByScene[sceneId]=null;delete regionDraftByScene[sceneId];update(sceneId);return;
       }}
       const dx = x - anchor.target_x, dy = y - anchor.target_y;
       const regionId = globalThis.crypto?.randomUUID
@@ -931,13 +1140,29 @@ def _render_grouped_registration_html(
       }}
       if(treeId)maskRegions=maskRegions.filter(r=>!(r.mode==='confirmed-tree'&&r.tree_id===treeId));
       maskRegions.push(newRegion);
-      if(mode==='confirmed-tree'&&!treeId){{deselectedScenes.delete(sceneId);selectedAddedByScene[sceneId]=regionId;}}
+      if((['confirmed-tree','confirmed-background'].includes(mode)||isVegetationGroup(mode))&&!treeId){{deselectedScenes.delete(sceneId);selectStandaloneRegion(sceneId,regionId);}}
       if(treeId)newRegion.tree_id=treeId;
       regionModeByScene[sceneId] = null;
       delete regionDraftByScene[sceneId];
       persist();
     }}
     function armCrownSizing(sceneId, cursor=null) {{
+      if(selectedEditableTrees(sceneId).length>1)return;
+      const addedId=selectedAddedByScene[sceneId];
+      if(addedId){{
+        const stored=maskRegions.find(r=>r.region_id===addedId&&(r.mode==='confirmed-tree'||isVegetationGroup(r.mode))&&!r.world_polygon&&!r.tree_id);
+        const region=stored&&regionForScene(stored,scenesById[sceneId]);
+        const anchor=region&&samplesById[region.anchor_sample_id];if(!anchor)return;
+        if(cursor){{
+          const radiusPx=Math.hypot(cursor.x-region.image_x,cursor.y-region.image_y);
+          if(radiusPx>=1){{finishMaskRegion(sceneId,region.image_x,region.image_y,radiusPx,null,null,addedId);return;}}
+        }}
+        if(regionModeByScene[sceneId]==='measure-tree'){{setRegionMode(sceneId,'measure-tree');return;}}
+        regionModeByScene[sceneId]='measure-tree';
+        regionDraftByScene[sceneId]={{x:region.image_x,y:region.image_y,image_x:region.image_x,image_y:region.image_y,
+          radius_px:stored.radius_m/regionPixelScaleM(anchor),mode:'confirmed-tree',added_region_id:addedId}};
+        update();return;
+      }}
       if(selectionFor(sceneId).size!==1)return;
       const sample=samplesById[activeByScene[sceneId]];if(!sample)return;
       const point=displayedPosition(sample);
@@ -974,23 +1199,32 @@ def _render_grouped_registration_html(
         }}
       }}
     }}
+    // Coordinates always remain relative to the original tile. Neighbor edits
+    // are canonical world annotations, shared by every intersecting tile.
+    function editableBorder(scene) {{ return scene.contextReady ? scene.context_pixels : 0; }}
+    function clampScenePoint(scene,x,y) {{
+      const b=editableBorder(scene);
+      return {{x:Math.max(-b,Math.min(scene.image_width+b,x)),
+        y:Math.max(-b,Math.min(scene.image_height+b,y))}};
+    }}
     function regionForScene(region,scene) {{
       if(region.mode==='confirmed-tree'&&region.tree_id) {{
         const sample=scene.sample_ids.map(id=>samplesById[id]).find(s=>s?.tree_id===region.tree_id);
         if(sample) {{const p=displayedPosition(sample);return {{...region,image_x:p.x,image_y:p.y,anchor_sample_id:sample.sample_id}};}}
       }}
       if(region.world_x==null)return region.scene_id===scene.scene_id?region:null;
-      const s=samplesById[scene.sample_ids[0]];if(!s)return null;
+      const s=samplesById[scene.sample_ids[0]||scene.anchor?.sample_id];if(!s)return null;
       const dx=region.world_x-s.world_x,dy=region.world_y-s.world_y;
       const det=s.transform_a*s.transform_e-s.transform_b*s.transform_d;
       const x=s.target_x+(s.transform_e*dx-s.transform_b*dy)/det;
       const y=s.target_y+(-s.transform_d*dx+s.transform_a*dy)/det;
       const r=region.radius_m/regionPixelScaleM(s);
-      if(x+r<0||y+r<0||x-r>scene.image_width||y-r>scene.image_height)return null;
+      const border=scene.context_pixels||0;
+      if(x+r<-border||y+r<-border||x-r>scene.image_width+border||y-r>scene.image_height+border)return null;
       return {{...region,image_x:x,image_y:y,anchor_sample_id:s.sample_id}};
     }}
     function bindCrownDrag(marker, card, scene, region, anchor) {{
-      // Inventory crown geometry is owned by the tree; only standalone added trees drag.
+      // Inventory crowns remain tree-owned; standalone crowns/backgrounds can move.
       if(region.tree_id)return;
       let drag = null;
       const image = card.querySelector('.image-wrap img');
@@ -1000,8 +1234,11 @@ def _render_grouped_registration_html(
           y:(event.clientY-rect.top)/rect.height*scene.image_height}};
       }};
       marker.addEventListener('pointerdown', event => {{
-        if (event.button !== 0) return;
+        if (event.button !== 0 || event.shiftKey || card.querySelector('.box-select')?.getAttribute('aria-pressed')==='true') return;
         event.preventDefault(); event.stopPropagation();
+        if(region.mode==='confirmed-background'||isVegetationGroup(region.mode)||region.world_polygon){{
+          deselectedScenes.delete(scene.scene_id);selectStandaloneRegion(scene.scene_id,region.region_id);
+        }}
         drag = {{id:event.pointerId, start:position(event), x:region.image_x, y:region.image_y, moved:false}};
         marker.setPointerCapture(event.pointerId);
       }});
@@ -1011,10 +1248,13 @@ def _render_grouped_registration_html(
         const point = position(event);
         if (!drag.moved && Math.hypot(point.x-drag.start.x,point.y-drag.start.y)<1) return;
         drag.moved = true;
-        drag.x = Math.max(0,Math.min(scene.image_width,region.image_x+point.x-drag.start.x));
-        drag.y = Math.max(0,Math.min(scene.image_height,region.image_y+point.y-drag.start.y));
-        marker.style.left = `${{100*drag.x/scene.image_width}}%`;
-        marker.style.top = `${{100*drag.y/scene.image_height}}%`;
+        const bounded=clampScenePoint(scene,region.image_x+point.x-drag.start.x,region.image_y+point.y-drag.start.y);
+        drag.x=bounded.x; drag.y=bounded.y;
+        if(region.world_polygon)marker.setAttribute('transform',`translate(${{drag.x-region.image_x}} ${{drag.y-region.image_y}})`);
+        else {{
+          marker.style.left = `${{100*drag.x/scene.image_width}}%`;
+          marker.style.top = `${{100*drag.y/scene.image_height}}%`;
+        }}
         marker.classList.add('dragging');
       }});
       const finish = (event, cancelled=false) => {{
@@ -1046,11 +1286,12 @@ def _render_grouped_registration_html(
               stored.world_x+=east; stored.world_y+=north;
               // The save normalizer derives fresh lat/lon from world coordinates.
               delete stored.longitude; delete stored.latitude;
+              if(stored.world_polygon)translateAreaPolygon(stored,east,north);
             }} else {{
               stored.image_x=completed.x; stored.image_y=completed.y;
               stored.east_m+=east; stored.north_m+=north;
             }}
-            persist(); return;
+            persist(scene.scene_id); return;
           }}
         }}
         renderMaskRegions(card,scene);
@@ -1062,6 +1303,7 @@ def _render_grouped_registration_html(
     function renderMaskRegions(card, scene) {{
       const wrap = card.querySelector(".image-wrap");
       wrap.querySelectorAll(".loss-region").forEach(region => region.remove());
+      wrap.querySelectorAll('.single-tree-area').forEach(region=>region.remove());
       const visibleRegions = maskRegions.map(region=>regionForScene(region,scene)).filter(Boolean);
       for(const id of scene.sample_ids) {{
         const sample=samplesById[id],radius=reviews[id]?.crown_radius_m;
@@ -1072,15 +1314,17 @@ def _render_grouped_registration_html(
       }}
       const draft = regionDraftByScene[scene.scene_id];
       const draw = (region, isDraft = false) => {{
+        if(!isDraft&&region.mode==='confirmed-tree'&&!region.tree_id&&pointInVegetationGroup({{x:region.image_x,y:region.image_y}},scene))return;
+        if(region.world_polygon||region.points){{renderSingleArea(wrap,scene,region,isDraft);return;}}
         const marker = document.createElement(isDraft ? "span" : "button");
         marker.className = `loss-region ${{region.mode}}${{isDraft ? " draft" : ""}}`;
         if(!isDraft&&region.mode==='confirmed-tree'&&!region.tree_id){{
           marker.classList.add('added-tree');
-          marker.classList.toggle('selected',selectedAddedByScene[scene.scene_id]===region.region_id);
+          marker.classList.toggle('selected',regionIsSelected(scene.scene_id,region.region_id));
           const center=document.createElement('span');center.className='added-tree-center';
           center.textContent=addedTreeNumber(region.region_id);marker.append(center);
         }}
-        marker.classList.toggle('nudge-selected',selectedAddedByScene[scene.scene_id]===region.region_id||Boolean(region.tree_id&&scene.sample_ids.some(
+        marker.classList.toggle('nudge-selected',regionIsSelected(scene.scene_id,region.region_id)||Boolean(region.tree_id&&scene.sample_ids.some(
           id=>samplesById[id]?.tree_id===region.tree_id&&selectionFor(scene.scene_id).has(id))));
         const anchor = samplesById[region.anchor_sample_id] || samplesById[activeByScene[scene.scene_id]];
         const radiusPx = isDraft ? region.radius_px : Number(region.radius_m) / regionPixelScaleM(anchor);
@@ -1088,13 +1332,19 @@ def _render_grouped_registration_html(
         marker.style.top = `${{100 * Number(region.image_y) / scene.image_height}}%`;
         marker.style.width = `${{200 * radiusPx / scene.image_width}}%`;
         marker.style.height = `${{200 * radiusPx / scene.image_height}}%`;
-        const label = region.mode === "confirmed-tree" ? "Confirmed tree center and crown" : region.mode === "protect" ? "Loss-free protected area" : "Confirmed background";
+        const label = areaLabels[region.mode] || (region.mode === "confirmed-tree" ? "Confirmed tree center and crown" : region.mode === "protect" ? "Loss-free protected area" : "Confirmed background");
+        if(isVegetationGroup(region.mode)){{marker.style.borderColor=region.mode==='copse'?'#c89bff':'#f5a75c';marker.textContent=region.mode==='copse'?'C':'S';}}
         marker.title = isDraft ? `${{label}} · drag to size` : `${{label}} · ${{Number(region.radius_m).toFixed(1)}} m radius · click to remove`;
         marker.setAttribute("aria-label", marker.title);
         if (!isDraft && region.mode === 'confirmed-tree') {{
           marker.title = `${{label}} · ${{Number(region.radius_m).toFixed(1)}} m radius · ${{region.species||'unknown species'}} · ` +
-            (region.tree_id?'anchored to tree; R sets radius at cursor; click to edit':'click for Street View; Shift-click to edit; drag to move');
+            (region.tree_id?'anchored to tree; R sets radius at cursor; click to edit':'click for Street View; R sets radius at cursor; Shift-click to edit; drag to move');
           marker.setAttribute('aria-label', marker.title);
+          bindCrownDrag(marker,card,scene,region,anchor);
+        }}
+        if(!isDraft&&(region.mode==='confirmed-background'||isVegetationGroup(region.mode))){{
+          marker.title=`${{label}} · ${{Number(region.radius_m).toFixed(1)}} m radius · click to select; drag or WASD to move; R resizes circles; Shift-click to remove; X to deselect`;
+          marker.setAttribute('aria-label',marker.title);
           bindCrownDrag(marker,card,scene,region,anchor);
         }}
         if (!isDraft) {{
@@ -1102,26 +1352,21 @@ def _render_grouped_registration_html(
           marker.addEventListener("pointerdown", event => event.stopPropagation());
           marker.addEventListener("click", event => {{
             event.stopPropagation();
+            if(region.mode==='confirmed-background'||isVegetationGroup(region.mode)){{
+              if(card.dataset.ignoreImageClick){{delete card.dataset.ignoreImageClick;update(scene.scene_id);return;}}
+              if(event.shiftKey){{
+                if(confirm('Remove this '+label+'?'))removeMaskRegion(region.region_id);
+                return;
+              }}
+              deselectedScenes.delete(scene.scene_id);selectStandaloneRegion(scene.scene_id,region.region_id);
+              regionModeByScene[scene.scene_id]=null;delete regionDraftByScene[scene.scene_id];
+              update(scene.scene_id);return;
+            }}
             if (region.mode === 'confirmed-tree') {{
               if(!region.tree_id){{
-                deselectedScenes.delete(scene.scene_id);
-                selectedAddedByScene[scene.scene_id]=region.region_id;
-                wrap.querySelectorAll('.tree-marker.active,.tree-choice.active').forEach(el=>el.classList.remove('active'));
-              }}
-              if(!region.tree_id&&!event.shiftKey){{
                 if(card.dataset.ignoreImageClick){{delete card.dataset.ignoreImageClick;return;}}
-                selectedAddedByScene[scene.scene_id]=region.region_id;
-                wrap.querySelectorAll('.added-tree.selected').forEach(el=>el.classList.remove('selected'));
-                marker.classList.add('selected');
-                zoomFocusByScene[scene.scene_id]={{x:region.image_x,y:region.image_y,label:'Selected added tree'}};
-                renderPixelZoom(card,scene);
-                const target=addedCrownStreetViewTarget(region,anchor);
-                if(!target)return;
-                card.classList.add('street-view-open');
-                if(streetViewEmbedApiKey)refreshStreetView(card,target);
-                else window.open(externalStreetViewUrl(target),'_blank','noopener');
-                update(scene.scene_id);
-                return;
+                selectEditableTree(scene.scene_id,addedTreeKey(region.region_id));
+                if(!event.shiftKey)return;
               }}
               const stored=region.tree_id?region:maskRegions.find(r=>r.region_id===region.region_id);
               if(!stored)return;
@@ -1151,6 +1396,24 @@ def _render_grouped_registration_html(
       visibleRegions.forEach(region => draw(region));
       if (draft) draw({{...draft, anchor_sample_id: activeByScene[scene.scene_id]}}, true);
     }}
+    function renderAddedTreeDetails(card, scene) {{
+      const background=maskRegions.find(r=>r.region_id===selectedAddedByScene[scene.scene_id]&&r.mode!=='confirmed-tree');
+      if(background){{
+        card.querySelector('.selected-species').textContent=areaLabels[background.mode]||'Protected area';
+        card.querySelector('.selected-facts').textContent=areaDescriptions[background.mode]||'Ignored region';
+        card.querySelector('.offset').textContent='Drag or WASD to move · Shift+WASD: 5 pixels · Shift-click: remove · X: deselect';
+        return;
+      }}
+      const added = maskRegions.find(r => r.region_id === selectedAddedByScene[scene.scene_id]
+        && r.mode === 'confirmed-tree' && !r.tree_id);
+      if (!added) return;
+      card.querySelector('.selected-species').textContent = added.species || 'Unknown species';
+      card.querySelector('.selected-facts').textContent =
+        `${{addedTreeNumber(added.region_id)}} · manually added tree · DBH unknown · crown radius ${{Number(added.radius_m).toFixed(1)}} m`;
+      const offset = card.querySelector('.offset');
+      offset.textContent = 'Human-placed center · WASD moves this tree. No inventory offset.';
+      offset.classList.add('offset-hint');
+    }}
     function renderPixelZoom(card, scene) {{
       const panel = card.querySelector(".pixel-zoom");
       if (!panel) return;
@@ -1161,7 +1424,7 @@ def _render_grouped_registration_html(
       const review = reviews[activeSample.sample_id] || {{}};
       const added=maskRegions.find(r=>r.region_id===selectedAddedByScene[scene.scene_id]);
       const addedPoint=added&&regionForScene(added,scene);
-      const focus = addedPoint ? {{x:addedPoint.image_x,y:addedPoint.image_y,label:'Selected added tree'}}
+      const focus = addedPoint ? {{x:addedPoint.image_x,y:addedPoint.image_y,label:added.mode==='confirmed-tree'?'Selected added tree':'Selected curation area'}}
         : zoomFocusByScene[scene.scene_id] || {{...displayedPosition(activeSample),label:'Selected tree current location'}};
       const cropPixels = 20;
       const outputPixels = 240;
@@ -1176,20 +1439,15 @@ def _render_grouped_registration_html(
         return;
       }}
       context.imageSmoothingEnabled = false;
-      context.drawImage(image, focus.x - cropPixels / 2, focus.y - cropPixels / 2,
-        cropPixels, cropPixels, 0, 0, outputPixels, outputPixels);
-      const middle = outputPixels / 2;
-      const crosshair = color => {{
-        context.strokeStyle = color;
-        context.beginPath();
-        context.moveTo(middle - 17, middle); context.lineTo(middle - 5, middle);
-        context.moveTo(middle + 5, middle); context.lineTo(middle + 17, middle);
-        context.moveTo(middle, middle - 17); context.lineTo(middle, middle - 5);
-        context.moveTo(middle, middle + 5); context.lineTo(middle, middle + 17);
-        context.stroke();
-      }};
-      context.lineWidth = 5; crosshair("#06110c");
-      context.lineWidth = 2; crosshair("#8ff7ff");
+      const neighborImage = card.querySelector('.neighbor-context');
+      const useContext = neighborImage?.complete && neighborImage.naturalWidth > 0;
+      const border = useContext ? scene.context_pixels : 0;
+      const source = useContext ? neighborImage : image;
+      const scaleX = source.naturalWidth / (scene.image_width + 2 * border);
+      const scaleY = source.naturalHeight / (scene.image_height + 2 * border);
+      context.drawImage(source, (focus.x + border - cropPixels / 2) * scaleX,
+        (focus.y + border - cropPixels / 2) * scaleY,
+        cropPixels * scaleX, cropPixels * scaleY, 0, 0, outputPixels, outputPixels);
       const spanM = cropPixels * regionPixelScaleM(activeSample);
       panel.querySelector(".pixel-zoom-label").textContent =
         `${{focus.label}} · ${{spanM.toFixed(1)}} m square · source pixel (${{focus.x.toFixed(1)}}, ${{focus.y.toFixed(1)}})`;
@@ -1252,19 +1510,35 @@ def _render_grouped_registration_html(
     function renderStreetViewCamera(card, sample, panorama) {{
       const marker = card.querySelector(".street-view-camera");
       const pixel = cameraPixel(sample, panorama.location);
-      if (!pixel) {{ marker.style.display = "none"; return; }}
+      if (!pixel || !Number.isFinite(pixel.x) || !Number.isFinite(pixel.y)) {{
+        marker.style.display = "none"; return "Camera position unavailable on this tile";
+      }}
       const scene = scenesById[card.dataset.scene];
       const outside = pixel.x < 0 || pixel.y < 0 || pixel.x > scene.image_width || pixel.y > scene.image_height;
-      const clampedX = Math.max(8, Math.min(scene.image_width - 8, pixel.x));
-      const clampedY = Math.max(8, Math.min(scene.image_height - 8, pixel.y));
+      const clampedX = outside ? Math.max(8, Math.min(scene.image_width - 8, pixel.x)) : pixel.x;
+      const clampedY = outside ? Math.max(8, Math.min(scene.image_height - 8, pixel.y)) : pixel.y;
       marker.style.display = "block";
       marker.style.left = `${{100 * clampedX / scene.image_width}}%`;
       marker.style.top = `${{100 * clampedY / scene.image_height}}%`;
-      marker.style.setProperty("--camera-heading", `${{panorama.heading}}deg`);
+      const directional = Number.isFinite(panorama.heading) && !panorama.is_pano;
+      marker.classList.toggle("position-only", !directional);
+      let rotation = 0;
+      if (directional) {{
+        const radians = panorama.heading * Math.PI / 180, east = Math.sin(radians), north = Math.cos(radians);
+        const det = sample.transform_a * sample.transform_e - sample.transform_b * sample.transform_d;
+        const dx = (sample.transform_e * east - sample.transform_b * north) / det;
+        const dy = (sample.transform_a * north - sample.transform_d * east) / det;
+        rotation = Math.atan2(dx, -dy) * 180 / Math.PI;
+      }}
+      marker.style.setProperty("--camera-heading", `${{rotation}}deg`);
       marker.classList.toggle("outside", outside);
-      marker.title = `Street View camera${{outside ? " (outside tile; clamped to edge)" : ""}} · `
-        + `${{panorama.heading.toFixed(0)}}° toward selected tree · ${{panorama.location.lat.toFixed(6)}}, `
-        + panorama.location.lng.toFixed(6);
+      const type = panorama.provider || "Street View";
+      const direction = panorama.is_pano ? "360° panorama" : !directional ? "heading unavailable"
+        : `${{panorama.heading.toFixed(0)}}° ${{type === "Mapillary" ? "capture heading" : "toward selected tree"}}`;
+      const description = `${{type}} camera${{outside ? " (outside tile; shown at edge)" : ""}} · ${{direction}}`;
+      marker.title = description + ` · ${{panorama.location.lat.toFixed(6)}}, ${{panorama.location.lng.toFixed(6)}}`;
+      marker.setAttribute("aria-label", marker.title);
+      return description;
     }}
     async function resolveStreetViewPanorama(sample) {{
       if (streetViewMetadataCache.has(sample.sample_id)) return streetViewMetadataCache.get(sample.sample_id);
@@ -1290,6 +1564,11 @@ def _render_grouped_registration_html(
     }}
     function closeStreetView(card) {{
       clearTimeout(card.streetViewTimer);delete card.dataset.streetViewRequest;
+      card.streetExamples?.clear();
+      card.streetViewGeneration=(card.streetViewGeneration||0)+1;
+      delete card.dataset.streetViewPaused;
+      const pause=card.querySelector('.street-view-pause');
+      if(pause){{pause.textContent='Pause';pause.setAttribute('aria-pressed','false');}}
       card.classList.remove("street-view-open");
       const frame = card.querySelector(".street-view-frame");
       frame.src = "about:blank";
@@ -1302,43 +1581,79 @@ def _render_grouped_registration_html(
       card.querySelector(".street-view-camera").style.display = "none";
     }}
     function refreshStreetView(card, sample) {{
+      if(card.dataset.streetViewPaused==='true'||selectedEditableTrees(card.dataset.scene).length>1)return;
       const scene=scenesById[card.dataset.scene];
+      if(deselectedScenes.has(scene.scene_id))return;
       const added=maskRegions.find(r=>r.region_id===selectedAddedByScene[scene.scene_id]);
+      if(added&&added.mode!=='confirmed-tree')return;
       const region=added&&regionForScene(added,scene);
-      if(region)sample=addedCrownStreetViewTarget(region,samplesById[region.anchor_sample_id]);
+      let streetTree = sample?.tree_id || sample?.sample_id;
+      let streetSpecies = sample?.species;
+      let streetSource = reviews[sample?.sample_id]?.species_override ? 'curated' : 'inventory';
+      if(region){{
+        sample=addedCrownStreetViewTarget(region,samplesById[region.anchor_sample_id]);
+        streetTree=region.tree_id || region.region_id; streetSpecies=region.species; streetSource='curated';
+      }}
       else if(sample&&samplesById[sample.sample_id]){{
         const point=displayedPosition(sample);
         sample=addedCrownStreetViewTarget({{image_x:point.x,image_y:point.y,region_id:sample.sample_id}},sample);
       }}
       if(!sample)return;
       if(card.dataset.streetViewRequest===sample.sample_id)return;
+      sample={{...sample,streetTree,streetSpecies,streetSource}};
+      card.streetExamples?.clear();
       card.dataset.streetViewRequest=sample.sample_id;
       clearTimeout(card.streetViewTimer);
-      card.streetViewTimer=setTimeout(()=>refreshStreetViewNow(card,sample),350);
+      const generation=card.streetViewGeneration=(card.streetViewGeneration||0)+1;
+      card.streetViewTimer=setTimeout(()=>card.streetExamples
+        ? card.streetExamples.refresh(sample) : refreshStreetViewNow(card,sample,generation),350);
     }}
-    async function refreshStreetViewNow(card, sample) {{
+    async function refreshStreetViewNow(card, sample, generation=card.streetViewGeneration) {{
+      if(card.dataset.streetViewPaused==='true'||generation!==card.streetViewGeneration)return;
       const frame = card.querySelector(".street-view-frame");
       if (frame.dataset.viewpoint === sample.sample_id) return;
-      frame.dataset.viewpoint = sample.sample_id;
-      frame.src = "about:blank";
       const locationLabel = card.querySelector(".street-view-location");
-      locationLabel.textContent = "Finding nearest street camera…";
-      locationLabel.title = "";
-      delete locationLabel.dataset.initialHeading;
-      card.querySelector(".street-view-external").href = externalStreetViewUrl(sample);
-      card.querySelector(".street-view-camera").style.display = "none";
+      // Keep the existing iframe (including its user-adjusted angle) until the
+      // replacement is ready. Pausing during metadata lookup must not blank it.
+      if(!frame.dataset.viewpoint)locationLabel.textContent = "Finding nearest street camera…";
+      const stale=()=>card.dataset.streetViewPaused==='true'||generation!==card.streetViewGeneration||
+        card.dataset.streetViewRequest!==sample.sample_id||!card.classList.contains('street-view-open');
+      const commit=()=>{{
+        frame.dataset.viewpoint=sample.sample_id;
+        card.querySelector('.street-view-external').href=externalStreetViewUrl(sample);
+        locationLabel.title='';delete locationLabel.dataset.initialHeading;
+        card.querySelector('.street-view-camera').style.display='none';
+      }};
       try {{
         const panorama = await resolveStreetViewPanorama(sample);
-        if (card.dataset.streetViewRequest !== sample.sample_id || frame.dataset.viewpoint !== sample.sample_id || !card.classList.contains("street-view-open")) return;
+        if(stale())return;
+        commit();
         frame.src = embeddedStreetViewUrl(sample, panorama);
         locationLabel.textContent = `Camera ${{panorama.heading.toFixed(0)}}° toward tree`;
         locationLabel.dataset.initialHeading = panorama.heading.toFixed(0);
         renderStreetViewCamera(card, sample, panorama);
       }} catch (error) {{
-        if (card.dataset.streetViewRequest !== sample.sample_id || frame.dataset.viewpoint !== sample.sample_id || !card.classList.contains("street-view-open")) return;
+        if(stale())return;
+        commit();
         frame.src = embeddedStreetViewUrl(sample);
         locationLabel.textContent = `Nearest panorama · camera metadata unavailable`;
         locationLabel.title = error.message;
+      }}
+    }}
+    function toggleStreetViewPause(card) {{
+      if(!card.classList.contains('street-view-open'))return;
+      const paused=card.dataset.streetViewPaused!=='true';
+      card.dataset.streetViewPaused=String(paused);
+      clearTimeout(card.streetViewTimer);delete card.dataset.streetViewRequest;
+      card.streetViewGeneration=(card.streetViewGeneration||0)+1;
+      const button=card.querySelector('.street-view-pause');
+      button.textContent=paused?'Resume':'Pause';
+      button.setAttribute('aria-pressed',String(paused));
+      button.title=paused?'Street View stays here while you curate. Resume following the selected tree (G).':
+        'Pause automatic Street View updates without resetting the current panorama or angle (G).';
+      if(!paused){{
+        const scene=scenesById[card.dataset.scene];
+        refreshStreetView(card,samplesById[activeByScene[scene.scene_id]||scene.sample_ids[0]]);
       }}
     }}
     function toggleStreetViewInteraction(card) {{
@@ -1363,7 +1678,7 @@ def _render_grouped_registration_html(
       const dbh = Number(prediction.dbh_in);
       const supervision = prediction.center_supervision;
       return [
-        `Model prediction: ${{prediction.species || "Unknown species"}}`,
+        `Model prediction: ${{areaLabels[prediction.vegetation_type] || prediction.species || "Unknown species"}}`,
         Number.isFinite(centerConfidence) ? `${{(100 * centerConfidence).toFixed(0)}}% center confidence` : null,
         Number.isFinite(speciesConfidence) ? `${{(100 * speciesConfidence).toFixed(0)}}% species confidence` : null,
         Number.isFinite(dbh) ? `${{dbh.toFixed(1)}} in predicted DBH` : null,
@@ -1372,15 +1687,58 @@ def _render_grouped_registration_html(
           ? ` (${{Math.round(100 * Number(supervision.negative_weight))}}% negative weight)` : ""}}` : null,
       ].filter(Boolean).join(" · ");
     }}
+    {PREDICTION_MATCH_JS}
     {CURATION_COMPARE_JS}
+    {ACCEPT_PREDICTION_JS}
+    // Crowns for inventory trees Tallo has no fit for (crown_overlay.py): the
+    // run's predictions on the scene's chip, each tree matched to the nearest
+    // predicted crown centre within CROWN_FALLBACK_MATCH_M of where it is drawn.
+    const CROWN_FALLBACK_MATCH_M = 3;
+    const crownFallbackLoaded = new Set();
+    async function loadCrownFallback(scene) {{
+      if (!scene?.validation_chip_id || crownFallbackLoaded.has(scene.scene_id)) return;
+      crownFallbackLoaded.add(scene.scene_id);
+      try {{
+        const apiUrl = new URL(`/api/model/chip/${{encodeURIComponent(scene.validation_chip_id)}}`, location.origin);
+        if (predictionRun) apiUrl.searchParams.set("run", predictionRun);
+        const response = await fetch(apiUrl);
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || `HTTP ${{response.status}}`);
+        const threshold = Number.isFinite(requestedPredictionThreshold)
+          ? requestedPredictionThreshold : Number(data.confidence_threshold);
+        const pixels = Number(data.display?.chip_pixels), stride = Number(data.display?.output_stride);
+        const extentM = pixels * Number(data.display?.resolution_m);
+        if (!(pixels > 0 && stride > 0 && extentM > 0)) return;
+        const crowns = data.predictions
+          .filter(prediction => Number(prediction.score) >= threshold && Number(prediction.crown_radius_m) > 0)
+          .map(prediction => ({{x: Number(prediction.output_x) * stride / pixels,
+            y: Number(prediction.output_y) * stride / pixels, width: 2 * Number(prediction.crown_radius_m)}}));
+        const matched = window.predictedCrownBySample || (window.predictedCrownBySample = {{}});
+        scene.sample_ids.forEach(sampleId => {{
+          const sample = samplesById[sampleId], position = displayedPosition(sample);
+          const x = position.x / sample.image_width, y = position.y / sample.image_height;
+          let best = null, bestM = CROWN_FALLBACK_MATCH_M;
+          crowns.forEach(crown => {{
+            const distanceM = Math.hypot(crown.x - x, crown.y - y) * extentM;
+            if (distanceM <= bestM) {{ best = crown; bestM = distanceM; }}
+          }});
+          if (best) matched[sampleId] = best.width; else delete matched[sampleId];
+        }});
+        update(scene.scene_id);
+      }} catch (error) {{
+        crownFallbackLoaded.delete(scene.scene_id);
+        console.warn("crown fallback unavailable", error);
+      }}
+    }}
     async function loadPredictionOverlay(card, scene) {{
-      if (!scene.validation_chip_id || card.dataset.predictionsLoaded) return;
+      if (pageParameters.get('source_predictions') === 'unavailable') return;
+      if (!scene.validation_chip_id || ["loading", "true"].includes(card.dataset.predictionsLoaded)) return;
       card.dataset.predictionsLoaded = "loading";
       const badge = card.querySelector(".prediction-badge");
       const apiUrl = new URL(`/api/model/chip/${{encodeURIComponent(scene.validation_chip_id)}}`, location.origin);
       if (predictionRun) apiUrl.searchParams.set("run", predictionRun);
       try {{
-        const response = await fetch(apiUrl);
+        const response = await fetchCurationAsset(apiUrl);
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || `HTTP ${{response.status}}`);
         const threshold = Number.isFinite(requestedPredictionThreshold)
@@ -1389,6 +1747,7 @@ def _render_grouped_registration_html(
         const outputStride = Number(data.display?.output_stride);
         if (!Number.isFinite(chipPixels) || !Number.isFinite(outputStride)) throw new Error("prediction display metadata is unavailable");
         const predictions = data.predictions.filter(prediction => Number(prediction.score) >= threshold);
+        const radius=curationMatchRadius(),matches=frozenPredictionMatches(data,data.display,threshold,radius);
         const wrap = card.querySelector(".image-wrap");
         wrap.querySelectorAll(".prediction-marker,.prediction-crown").forEach(marker => marker.remove());
         predictions.forEach(prediction => {{
@@ -1402,34 +1761,25 @@ def _render_grouped_registration_html(
           marker.style.left = `${{100 * predictionX / chipPixels}}%`;
           marker.style.top = `${{100 * predictionY / chipPixels}}%`;
           marker.title = predictionTitle(prediction)+' · '+(window.crownDescription?.(prediction)||'');
+          bindPredictionAcceptance(marker,card,scene,prediction,data.display,predictionRun);
+          decoratePredictionMatch(marker,matches.get(prediction),radius);
           const estimate=window.estimateCrown?.(prediction),resolution=Number(data.display?.resolution_m);
           if(estimate&&resolution>0) {{const circle=document.createElement('i');circle.className='prediction-crown crown-circle predicted';
             circle.style.left=marker.style.left;circle.style.top=marker.style.top;
             circle.style.width=100*estimate.width_m/resolution/chipPixels+'%';circle.style.height=circle.style.width;wrap.append(circle);}}
           marker.setAttribute("aria-label", marker.title);
-          marker.setAttribute("role", "button");
-          marker.tabIndex = 0;
-          const focusPrediction = event => {{
-            event.stopPropagation();
-            zoomFocusByScene[scene.scene_id] = {{x: predictionX, y: predictionY,
-              label: `Model prediction ${{Math.round(100 * Number(prediction.score))}}%`}};
-            renderPixelZoom(card, scene);
-          }};
-          marker.addEventListener("click", focusPrediction);
-          marker.addEventListener("keydown", event => {{
-            if (event.key === "Enter" || event.key === " ") {{ event.preventDefault(); focusPrediction(event); }}
-          }});
           wrap.append(marker);
         }});
         if (badge) {{
           badge.textContent = `${{predictions.length}} model prediction${{predictions.length === 1 ? "" : "s"}} ≥ ${{Math.round(100 * threshold)}}%`;
-          badge.title = "Magenta markers are model predictions; hover for species, DBH, and confidence";
+          badge.title = `Dot = matched; hollow = unmatched against frozen labels at ${{radius}} m. Hover for match, species, DBH, and confidence.`;
         }}
+        enablePredictionMatchHover(card);
         card.dataset.predictionsLoaded = "true";
       }} catch (error) {{
         if (badge) {{ badge.textContent = "Predictions unavailable"; badge.title = error.message; }}
         card.dataset.predictionsLoaded = "error";
-      }}
+      }} finally {{ scheduleQueuePrefetch(); }}
     }}
     async function closeExpandedCard(card) {{
       if (!curationReturn) {{
@@ -1454,6 +1804,7 @@ def _render_grouped_registration_html(
         const button = card.querySelector(".expand-button");
         button.textContent = curationReturn ? "Back to chip review" : "Close";
         button.setAttribute("aria-expanded", "true"); card.scrollTop = 0;
+        void loadCrownFallback(scenesById[card.dataset.scene]);
         const compareButton = card.querySelector('.compare-models');
         if (curationComparisonEnabled && compareButton) {{
           if(!card._comparisonPanel||card._comparisonPanel.hidden)
@@ -1464,12 +1815,15 @@ def _render_grouped_registration_html(
           void loadPredictionOverlay(card, scenesById[card.dataset.scene]);
         }}
         updateValidationQueueNav(card);
-        if (streetViewEmbedApiKey && selectionFor(card.dataset.scene).size === 1) {{
+        if ((mapillaryAvailable || streetViewEmbedApiKey) && selectedEditableTrees(card.dataset.scene).length === 1) {{
           card.classList.add("street-view-open");
           refreshStreetView(card, samplesById[activeByScene[card.dataset.scene]]);
         }}
       }}
       document.body.classList.toggle("modal-open", Boolean(document.querySelector(".card.fullscreen")));
+    }}
+    function isReviewChipId(chip) {{
+      return typeof chip === 'string' && /^(?:shift_)?r[0-9]{{6,}}_c[0-9]{{6,}}$/.test(chip);
     }}
     function validationQueueContext() {{
       const id = pageParameters.get("queue");
@@ -1481,9 +1835,15 @@ def _render_grouped_registration_html(
           const index=queue.chips.findIndex((chip,i)=>chip===pageParameters.get('queue_chip')&&queue.cities[i]===pageParameters.get('city'));
           return index<0?null:{{id,queue,index}};
         }}
+        if(queue?.split==='all'&&queue.version===4){{
+          if(!Array.isArray(queue.chips)||!Array.isArray(queue.routes)||queue.chips.length!==queue.routes.length)return null;
+          if(!queue.chips.every(isReviewChipId)||!queue.routes.every(r=>Array.isArray(r)&&[0,1].includes(r[0])&&/^[a-z]{{5}}$/.test(r[1])&&typeof r[2]==='string'&&(!r[2]||/^[a-z0-9-]+$/.test(r[2]))&&typeof r[3]==='string'&&(!r[4]||/^scene-[0-9]+$/.test(r[4]))))return null;
+          const index=queue.chips.findIndex((chip,i)=>chip===pageParameters.get('queue_chip')&&queue.routes[i][1]===pageParameters.get('city')&&queue.routes[i][2]===(pageParameters.get('acquisition')||''));
+          return index<0?null:{{id,queue,index}};
+        }}
         if(queue?.split==='all'&&queue.version===3){{
           if(!Array.isArray(queue.chips)||!Array.isArray(queue.routes)||queue.chips.length!==queue.routes.length)return null;
-          if(!queue.chips.every(chip=>/^r[0-9]{{6}}_c[0-9]{{6}}$/.test(chip))||!queue.routes.every(r=>Array.isArray(r)&&[0,1].includes(r[0])&&/^[a-z]{{5}}$/.test(r[1])))return null;
+          if(!queue.chips.every(isReviewChipId)||!queue.routes.every(r=>Array.isArray(r)&&[0,1].includes(r[0])&&/^[a-z]{{5}}$/.test(r[1])))return null;
           const index=queue.chips.findIndex((chip,i)=>chip===pageParameters.get('queue_chip')&&queue.routes[i][1]===pageParameters.get('city'));
           return index<0?null:{{id,queue,index}};
         }}
@@ -1497,7 +1857,7 @@ def _render_grouped_registration_html(
           }}
         }}
         if (!queue || (['all','train','registration'].includes(queue.split) && queue.city !== pageParameters.get('city')) || !Array.isArray(queue.chips)
-            || !queue.chips.every(chip => queue.split==='registration'?/^scene-[0-9]+$/.test(chip):/^r[0-9]{{6}}_c[0-9]{{6}}$/.test(chip))) return null;
+            || !queue.chips.every(chip => queue.split==='registration'?/^scene-[0-9]+$/.test(chip):isReviewChipId(chip))) return null;
         const index = queue.chips.indexOf(pageParameters.get("queue_chip"));
         return index < 0 ? null : {{id, queue, index}};
       }} catch {{ return null; }}
@@ -1524,34 +1884,9 @@ def _render_grouped_registration_html(
         if (index < 0 || index >= context.queue.chips.length) return;
         queueNavigating = true;
         if (!await syncReviews()) {{ queueNavigating = false; return; }}
-        if(context.queue.split==='registration'){{
-          const url=new URL('/registration',location.origin);
-          url.search=new URLSearchParams({{city:context.queue.cities?.[index]||context.queue.city,scene:context.queue.chips[index],fullscreen:'1',
-            queue:context.id,queue_chip:context.queue.chips[index],return:curationReturn||'/registration'}});
-          if(pageParameters.get('run'))url.searchParams.set('run',pageParameters.get('run'));
-          if(pageParameters.get('compare_run'))url.searchParams.set('compare_run',pageParameters.get('compare_run'));
-          location.href=url.pathname+url.search;return;
-        }}
-        if(context.queue.split==='all'){{
-          const chip=context.queue.chips[index],route=context.queue.routes?.[index];
-          const entry=context.queue.version===3?{{split:route[0]===0?'train':'validation',city:route[1]}}:context.queue.entries?.[chip];
-          if(!entry||!['train','validation'].includes(entry.split)){{queueNavigating=false;return;}}
-          const url=new URL(entry.split==='train'?'/curate-training':'/curate',location.origin);
-          url.search=new URLSearchParams(pageParameters);
-          for(const key of ['scene','queue_chip','fullscreen'])url.searchParams.delete(key);
-          url.searchParams.set('city',entry.city||context.queue.city);url.searchParams.set('chip',chip);
-          url.searchParams.set('return',curationReturn||'/model?split=all');
-          location.href=url.pathname+url.search;return;
-        }}
-        const url = new URL(context.queue.split === 'train' ? '/curate-training' : "/curate", location.origin);
-        if (context.queue.split === 'train') url.searchParams.set('city', context.queue.city);
-        if (pageParameters.get('run')) url.searchParams.set("run", pageParameters.get('run'));
-        if(pageParameters.get('compare_run'))url.searchParams.set('compare_run',pageParameters.get('compare_run'));
-        url.searchParams.set("chip", context.queue.chips[index]);
-        url.searchParams.set("queue", context.id);
-        if (pageParameters.get('threshold') != null) url.searchParams.set("threshold", pageParameters.get('threshold'));
-        url.searchParams.set("return", curationReturn || "/model");
-        location.href = url.pathname + url.search;
+        const destination = queueDestination(context,index,preparedNext(context,index));
+        if (!destination) {{queueNavigating=false;return;}}
+        location.href = destination;
         return;
       }}
       const visible = matchingScenes();
@@ -1586,18 +1921,13 @@ def _render_grouped_registration_html(
         const visible = completingScene===scene.scene_id || ((!splitFilter.value || scene.splits.includes(splitFilter.value))
           && (!coverageFilter.value || (coverageFilter.value === "seam") === Boolean(scene.seam_priority))
           && matchesSceneReviewFilter(sceneStatusFilter.value, sceneReviews[scene.scene_id])
-          && statusMatches.length > 0);
+          && (statusMatches.length > 0 || (scene.anchor && (!statusFilter.value || (statusFilter.value==='unreviewed'&&!sceneDone)))));
         if (!visible && card.classList.contains("fullscreen")) {{
           setExpanded(card, false);queueMicrotask(()=>update());
         }}
         card.classList.toggle("hidden", !visible);
         if (visible) visibleScenes += 1;
-        let activeChanged = false;
-        if (!statusMatches.some(sample => !isHiddenTree(sample)&&sample.sample_id === activeByScene[scene.scene_id])) {{
-          activeByScene[scene.scene_id] = statusMatches.find(sample=>!isHiddenTree(sample))?.sample_id
-            || selectableSamples[0]?.sample_id || scene.sample_ids[0];
-          activeChanged = true;
-        }}
+        ensureVisibleSelection(scene.scene_id,statusMatches.filter(sample=>!isHiddenTree(sample)));
         const activeId = activeByScene[scene.scene_id];
         const selected = samplesById[activeId];
         const selectedReview = reviews[activeId] || {{}};
@@ -1606,17 +1936,20 @@ def _render_grouped_registration_html(
         [...sceneSelection].filter(sampleId => !selectableIds.has(sampleId)).forEach(
           sampleId => sceneSelection.delete(sampleId)
         );
-        if(deselectedScenes.has(scene.scene_id)||selectedAddedByScene[scene.scene_id]||!selectableIds.has(activeId)) {{sceneSelection.clear();}}
-        else if (activeChanged || !sceneSelection.size) {{
+        if(treeSelectionByScene[scene.scene_id]) {{ /* Shared tree selection owns membership. */ }}
+        else if(deselectedScenes.has(scene.scene_id)||selectedAddedByScene[scene.scene_id]||!selectableIds.has(activeId)) {{sceneSelection.clear();}}
+        else if (!sceneSelection.size) {{
           sceneSelection.clear(); sceneSelection.add(activeId);
         }} else if (!sceneSelection.has(activeId)) {{
           sceneSelection.add(activeId);
         }}
         const selectedIds = [...sceneSelection];
-        card.classList.toggle('selection-focus',selectedIds.length>0||maskRegions.some(
+        card.classList.toggle('selection-focus',selectedEditableTrees(scene.scene_id).length>0||maskRegions.some(
           r=>r.region_id===selectedAddedByScene[scene.scene_id]&&r.mode==='confirmed-tree'));
         card.querySelector('.hide-excluded-chip').checked=hideExcluded.checked;
-        const multiSelect = selectedIds.length > 1;
+        const selectedTrees=selectedEditableTrees(scene.scene_id);
+        const selectionCount=selectedTrees.length;
+        const multiSelect = selectionCount > 1;
         card.classList.toggle("completed", sceneDone);
         const doneButton = card.querySelector(".done-button");
         doneButton.textContent = sceneDone ? "Done ✓" : "Mark done";
@@ -1651,15 +1984,21 @@ def _render_grouped_registration_html(
         heuristicButton.classList.toggle("preview", hasPreview && previewCount > 0);
         heuristicButton.classList.toggle("applied", appliedCount > 0);
         const regionMode = regionModeByScene[scene.scene_id];
-        card.querySelector(".mask-protect").classList.toggle("active", regionMode === "protect");
+        card.querySelector(".mask-protect").classList.toggle("active", regionMode === "confirmed-woods");
         card.querySelector(".mask-background").classList.toggle("active", regionMode === "confirmed-background");
+        card.querySelector('.mask-single-tree').classList.toggle('active',regionMode==='single-tree');
+        card.querySelector('.mask-hint').textContent=isPolygonAreaMode(regionMode)
+          ? `${{areaLabels[regionMode]}}: ${{areaDescriptions[regionMode]}}. Other areas remain visible; tree markers hidden. Trace the boundary and release to save. Escape or click the tool again to cancel. Undo last area, or Shift-click its outline to remove.`
+          : 'Drag to trace · WASD to move · Shift-click to remove · Esc to cancel.';
         card.querySelector(".mask-tree").classList.toggle("active", regionMode === "confirmed-tree");
         const sceneMaskRegions = maskRegions.filter(region => regionForScene(region,scene));
         card.querySelector(".mask-undo").disabled = sceneMaskRegions.length === 0;
         card.querySelector(".mask-undo").textContent = sceneMaskRegions.length
           ? `Undo last area (${{sceneMaskRegions.length}})` : "No mask areas";
         card.querySelector(".image-wrap").classList.toggle("region-drawing", Boolean(regionMode));
+        card.querySelector('.image-wrap').classList.toggle('single-area-drawing',isPolygonAreaMode(regionMode));
         renderMaskRegions(card, scene);
+        renderBorderInventory(card, scene);
         renderPixelZoom(card, scene);
         card.querySelectorAll(".tree-marker:not(.group-picked)").forEach(marker => {{
           const markerSample = samplesById[marker.dataset.sampleId];
@@ -1707,7 +2046,7 @@ def _render_grouped_registration_html(
             + " · Shift-click to add or remove from selection";
         }});
         card.querySelector(".selected-species").textContent = multiSelect
-          ? `${{selectedIds.length}} trees selected` : selected.species;
+          ? `${{selectionCount}} trees selected` : selected.species;
         const dbh = selected.dbh_in == null ? "DBH unknown" : `${{selected.dbh_in.toFixed(1)}} in DBH`;
         card.querySelector(".selected-facts").textContent = multiSelect
           ? "Choose a classification below to apply it to the entire selection."
@@ -1718,26 +2057,28 @@ def _render_grouped_registration_html(
           : selectedReview.east_m == null ? "Select this ring, then click the apparent center if it is offset."
           : `Measured offset: ${{selectedReview.east_m.toFixed(2)}} m east, ${{selectedReview.north_m.toFixed(2)}} m north`;
         offset.classList.toggle("offset-hint", multiSelect || selectedReview.east_m == null);
+        if(!selectionCount){{
+          card.querySelector('.selected-species').textContent='No tree selected';
+          card.querySelector('.selected-facts').textContent='Select a tree to edit it.';
+          offset.textContent='Street View stays at the last location until another tree is selected.';
+        }}
+        renderAddedTreeDetails(card, scene);
         card.querySelector(".image-wrap").classList.toggle("multi-select", multiSelect);
         card.querySelectorAll("[data-review-status]").forEach(button => {{
-          button.disabled=!selectedIds.length;
-          const selectedStatus = selectedIds.every(
+          button.disabled=!selectionCount;
+          const selectedStatus = selectedIds.length===selectionCount && selectedIds.length>0 && selectedIds.every(
             sampleId => statusOf(sampleId) === button.dataset.reviewStatus
           );
           button.classList.toggle("active", selectedStatus);
           button.textContent = multiSelect
-            ? `${{button.dataset.reviewLabel}} (${{selectedIds.length}})`
+            ? `${{button.dataset.reviewLabel}} (${{selectionCount}})`
             : button.dataset.reviewLabel;
         }});
-        const note = card.querySelector("textarea");
-        note.disabled = multiSelect || !selectedIds.length;
-        note.value = multiSelect ? "" : selectedReview.note || "";
-        note.placeholder = multiSelect
-          ? "Notes are disabled while multiple trees are selected."
-          : note.dataset.singlePlaceholder;
-        if (multiSelect && card.classList.contains("street-view-open")) closeStreetView(card);
-        if(deselectedScenes.has(scene.scene_id)&&card.classList.contains('street-view-open'))closeStreetView(card);
-        if (!deselectedScenes.has(scene.scene_id) && !multiSelect && streetViewEmbedApiKey && card.classList.contains("fullscreen")) {{
+        renderTreeObservations(card,scene.scene_id);
+        if (multiSelect && card.classList.contains("street-view-open") && card.dataset.streetViewPaused!=='true') closeStreetView(card);
+        // Deselecting retains the existing panorama and layout. Refresh is
+        // suppressed below until a tree is explicitly selected again.
+        if (!deselectedScenes.has(scene.scene_id) && !multiSelect && (mapillaryAvailable || streetViewEmbedApiKey) && card.classList.contains("fullscreen")) {{
           card.classList.add("street-view-open");
         }}
         if (card.classList.contains("street-view-open")) {{
@@ -1781,11 +2122,13 @@ def _render_grouped_registration_html(
       }}
       if (scene.validation_chip_id) {{
         const predictionBadge = document.createElement("span"); predictionBadge.className = "badge prediction-badge";
-        predictionBadge.textContent = "Loading model predictions…";
+        predictionBadge.textContent = pageParameters.get('source_predictions') === 'unavailable'
+          ? 'No saved predictions for this model and chip'
+          : "Loading model predictions…";
         predictionBadge.title = "Predictions from the validation run that opened this curation scene";
         badges.append(predictionBadge);
       }}
-      if (scene.validation_chip_id && pageParameters.get('run')) {{
+      if (scene.validation_chip_id && pageParameters.get('run') && pageParameters.get('source_predictions') !== 'unavailable') {{
         const compare = document.createElement('button');
         compare.className = 'compare-models fullscreen-only';
         compare.textContent = 'Compare models';
@@ -1803,12 +2146,12 @@ def _render_grouped_registration_html(
       selectAll.title = "Select every currently available tree in this image";
       selectAll.addEventListener("click", () => toggleSelectAll(scene.scene_id)); badges.append(selectAll);
       const confirmTree=document.createElement('button');confirmTree.type='button';
-      confirmTree.className='confirm-selection';confirmTree.textContent='Confirm & deselect · X';
+      confirmTree.className='confirm-selection';confirmTree.textContent='Confirm & deselect';
       confirmTree.title='Save the current edits and clear selection; classifications are unchanged';
       confirmTree.onclick=()=>confirmSelection(scene.scene_id);badges.append(confirmTree);
       const boxSelect = document.createElement('button'); boxSelect.textContent = 'Box select';
       boxSelect.title = 'Drag a rectangle to select trees, then WASD to move together. Shift-drag also selects.';
-      boxSelect.setAttribute('aria-pressed', 'false');
+      boxSelect.className='box-select';boxSelect.setAttribute('aria-pressed', 'false');
       boxSelect.onclick = () => {{boxSelect.setAttribute('aria-pressed', boxSelect.getAttribute('aria-pressed') === 'true' ? 'false' : 'true');}};
       badges.append(boxSelect);
       const hideLabel=document.createElement('label');hideLabel.className='toggle-label';
@@ -1825,10 +2168,10 @@ def _render_grouped_registration_html(
       moreDone.addEventListener('click',()=>completeSecondPass(card,!sceneReviews[scene.scene_id]?.more_done));
       badges.append(moreDone);
       const previous = document.createElement("button"); previous.className = "scene-previous fullscreen-only";
-      previous.textContent = "← Previous"; previous.title = "Previous visible scene (Left Arrow)";
+      previous.textContent = "Previous"; previous.title = "Previous visible scene (Left Arrow)";
       previous.addEventListener("click", () => moveScene(card, -1)); badges.append(previous);
       const next = document.createElement("button"); next.className = "scene-next fullscreen-only";
-      next.textContent = "Next →"; next.title = "Next visible scene (Right Arrow)";
+      next.textContent = "Next"; next.title = "Next visible scene (Right Arrow)";
       next.addEventListener("click", () => moveScene(card, 1)); badges.append(next);
       const expand = document.createElement("button"); expand.className = "expand-button"; expand.textContent = "Full screen";
       expand.setAttribute("aria-expanded", "false"); expand.title = "Open a large review view with the same per-tree controls";
@@ -1836,10 +2179,53 @@ def _render_grouped_registration_html(
         if (card.classList.contains("fullscreen")) {{ await closeExpandedCard(card); return; }}
         openScene(scene.scene_id);
       }}); badges.append(expand);
+      badges.append(aerialDisplay.controls());
       head.append(identity, badges);
+      const frame = document.createElement('div'); frame.className = 'image-frame';
+      frame.style.aspectRatio = `${{scene.image_width}} / ${{scene.image_height}}`;
       const wrap = document.createElement("div"); wrap.className = "image-wrap";
-      const image = document.createElement("img"); image.src = scene.image; image.alt = `NAIP scene with ${{scene.tree_count}} inventory trees`; image.draggable = false;
+      const image = document.createElement("img"); image.src = prefetchedImage(scene.image); image.alt = `NAIP scene with ${{scene.tree_count}} inventory trees`; image.draggable = false;
       wrap.append(image);
+      if (scene.context_image && scene.context_pixels === 16) {{
+        const border = scene.context_pixels;
+        frame.classList.add('has-context');
+        frame.style.aspectRatio = `${{scene.image_width+2*border}} / ${{scene.image_height+2*border}}`;
+        frame.style.setProperty('--context-x', `${{100*border/(scene.image_width+2*border)}}%`);
+        frame.style.setProperty('--context-y', `${{100*border/(scene.image_height+2*border)}}%`);
+        const contextStatus = document.createElement('span'); contextStatus.className = 'context-status';
+        contextStatus.textContent = 'Loading 16 px neighboring-tile border…';
+        identity.append(contextStatus);
+        const neighborImage = document.createElement('img'); neighborImage.className = 'neighbor-context';
+        neighborImage.alt = '16 source pixels from neighboring tiles; editable at their actual map locations';
+        neighborImage.draggable = false;
+        scene.contextReady=false;
+        const borderHits=[];
+        // Four transparent hit surfaces outside the original image box. Events
+        // bubble to the existing editor, without rebasing any tree coordinates.
+        const bx=100*border/scene.image_width,by=100*border/scene.image_height;
+        for(const [left,top,width,height] of [[-bx,-by,100+2*bx,by],[-bx,100,100+2*bx,by],[-bx,0,bx,100],[100,0,bx,100]]){{
+          const hit=document.createElement('div');hit.className='neighbor-edit-surface';
+          Object.assign(hit.style,{{position:'absolute',left:left+'%',top:top+'%',width:width+'%',height:height+'%',display:'none'}});
+          wrap.append(hit);borderHits.push(hit);
+        }}
+        neighborImage.addEventListener('load', () => {{
+          scene.contextReady=true;borderHits.forEach(hit=>hit.style.display='block');
+          contextStatus.textContent = '16 px border · I = neighbor inventory';
+          contextStatus.title = 'Amber marks this tile. Dashed blue I markers are neighboring inventory; click to open its original review tile where available. Added trees are shared across the border.';
+          renderBorderInventory(card, scene);
+          renderPixelZoom(card, scene);
+        }});
+        neighborImage.addEventListener('error', () => {{
+          contextStatus.textContent = 'Neighboring imagery unavailable · original tile remains editable';
+          scene.contextReady=false;borderHits.forEach(hit=>hit.style.display='none');
+          neighborImage.hidden = true;
+        }});
+        neighborImage.src = prefetchedImage(scene.context_image, 1);
+        frame.append(neighborImage);
+        const boundary = document.createElement('div'); boundary.className = 'tile-ownership-boundary';
+        boundary.setAttribute('aria-hidden', 'true'); frame.append(boundary);
+      }}
+      frame.append(wrap);
       sceneSamples.forEach((sample, index) => {{
         const marker = document.createElement("button"); marker.className = "tree-marker"; marker.dataset.sampleId = sample.sample_id;
         marker.classList.toggle("stacked", isStacked(sample));
@@ -1849,14 +2235,9 @@ def _render_grouped_registration_html(
           event.stopPropagation(); selectSample(scene.scene_id, sample.sample_id, event.shiftKey);
         }});
         wrap.append(marker);
-        const crown=document.createElement('i');crown.className='crown-circle';crown.dataset.sampleId=sample.sample_id;wrap.append(crown);
-        const speciesLabel = document.createElement("span"); speciesLabel.className = "tree-species-label";
-        speciesLabel.dataset.sampleId = sample.sample_id;
+        const {{crown,label:speciesLabel}}=window.createTreeOverlay(sample,sample.target_x,sample.target_y,scene.image_width,scene.image_height);wrap.append(crown);
         speciesLabel.classList.toggle("stacked", isStacked(sample));
-        speciesLabel.style.left = `${{100 * sample.target_x / scene.image_width}}%`;
-        speciesLabel.style.top = `${{100 * sample.target_y / scene.image_height}}%`;
         speciesLabel.style.setProperty("--label-offset", `${{index % 2 ? 8 : -8}}px`);
-        speciesLabel.textContent = sample.species || "Unknown species";
         wrap.append(speciesLabel);
       }});
       const picked = document.createElement("span"); picked.className = "picked"; wrap.append(picked);
@@ -1864,18 +2245,15 @@ def _render_grouped_registration_html(
       wrap.append(streetViewCamera);
       const pointerPosition = event => {{
         const rect = image.getBoundingClientRect();
-        return {{
-          x: Math.max(0, Math.min(scene.image_width, (event.clientX - rect.left) / rect.width * scene.image_width)),
-          y: Math.max(0, Math.min(scene.image_height, (event.clientY - rect.top) / rect.height * scene.image_height)),
-        }};
+        return clampScenePoint(scene,(event.clientX-rect.left)/rect.width*scene.image_width,
+          (event.clientY-rect.top)/rect.height*scene.image_height);
       }};
       let selectionBox = null;
       const rectangle = document.createElement('div');
       rectangle.style.cssText = 'display:none;position:absolute;border:2px solid #70e4ff;background:#70e4ff22;pointer-events:none;z-index:30';
       wrap.append(rectangle);
       wrap.addEventListener('pointerdown', event => {{
-        if (event.button !== 0 || regionModeByScene[scene.scene_id]
-            || event.target.closest('.loss-region')
+        if (event.button !== 0 || (event.altKey && event.target.closest('.accept-prediction-center')) || regionModeByScene[scene.scene_id]
             || (!event.shiftKey && boxSelect.getAttribute('aria-pressed') !== 'true')) return;
         selectionBox = {{start:pointerPosition(event), id:event.pointerId, moved:false}};
         event.preventDefault();
@@ -1898,14 +2276,7 @@ def _render_grouped_registration_html(
         if (wrap.hasPointerCapture(event.pointerId)) wrap.releasePointerCapture(event.pointerId);
         event.preventDefault(); event.stopPropagation(); card.dataset.ignoreImageClick = 'true';
         const end = pointerPosition(event), start = draft.start;
-        const ids = sceneSamples.filter(sample => {{
-          if ((!showStacks.checked && isStacked(sample)) || isHiddenTree(sample)) return false;
-          const review = reviews[sample.sample_id] || {{}};
-          const {{x, y}} = displayedPosition(sample);
-          return x >= Math.min(start.x,end.x) && x <= Math.max(start.x,end.x)
-            && y >= Math.min(start.y,end.y) && y <= Math.max(start.y,end.y);
-        }}).map(sample => sample.sample_id);
-        if (ids.length) {{ deselectedScenes.delete(scene.scene_id);delete selectedAddedByScene[scene.scene_id]; selectedByScene[scene.scene_id] = new Set(ids); activeByScene[scene.scene_id] = ids[0]; }}
+        selectTreesInBox(scene,start,end);
         boxSelect.setAttribute('aria-pressed','false'); update();
       }}, true);
       wrap.addEventListener('pointercancel', () => {{ selectionBox = null; rectangle.style.display = 'none'; }});
@@ -1914,8 +2285,14 @@ def _render_grouped_registration_html(
       }}, true);
       wrap.addEventListener("pointerdown", event => {{
         const mode = regionModeByScene[scene.scene_id];
-        if (!mode || event.button !== 0 || (mode!=='measure-tree'&&event.target.closest(".loss-region"))) return;
+        if (!mode || event.button !== 0 || (mode!=='measure-tree'&&!isPolygonAreaMode(mode)&&event.target.closest(".loss-region"))) return;
         event.preventDefault();
+        if(isPolygonAreaMode(mode)){{
+          event.stopImmediatePropagation();
+          const p=pointerPosition(event);
+          regionDraftByScene[scene.scene_id]={{mode,points:[p],pointer_id:event.pointerId}};
+          wrap.setPointerCapture(event.pointerId);renderMaskRegions(card,scene);return;
+        }}
         if(mode==='measure-tree'){{
           event.stopImmediatePropagation();
           const draft=regionDraftByScene[scene.scene_id];if(!draft)return;
@@ -1933,7 +2310,16 @@ def _render_grouped_registration_html(
         const point = pointerPosition(event);
         crownCursorByScene[scene.scene_id]=point;
         const draft = regionDraftByScene[scene.scene_id];
-        if (!draft || (draft.pointer_id !== event.pointerId && !(draft.tree_id && draft.pointer_id==null))) return;
+        if (!draft || (draft.pointer_id !== event.pointerId && !((draft.tree_id||draft.added_region_id) && draft.pointer_id==null))) return;
+        if(isPolygonAreaMode(draft.mode)){{
+          event.preventDefault();event.stopImmediatePropagation();
+          const last=draft.points.at(-1);
+          if(Math.hypot(point.x-last.x,point.y-last.y)>=2){{
+            draft.points.push(point);
+            if(draft.points.length>128)draft.points=draft.points.filter((_,i)=>i%2===0);
+          }}
+          renderMaskRegions(card,scene);return;
+        }}
         draft.radius_px = Math.hypot(point.x - draft.x, point.y - draft.y);
         renderMaskRegions(card, scene);
       }}, true);
@@ -1944,6 +2330,8 @@ def _render_grouped_registration_html(
         event.preventDefault();
         if (wrap.hasPointerCapture(event.pointerId)) wrap.releasePointerCapture(event.pointerId);
         card.dataset.ignoreImageClick = "true";
+        if(isPolygonAreaMode(draft.mode)){{finishSingleArea(scene.scene_id,draft);return;}}
+        if(draft.added_region_id){{finishMaskRegion(scene.scene_id,draft.x,draft.y,draft.radius_px,null,null,draft.added_region_id);return;}}
         finishMaskRegion(scene.scene_id, draft.x, draft.y, Math.min(draft.radius_px,500/regionPixelScaleM(samplesById[activeByScene[scene.scene_id]])),draft.tree_id||null);
       }};
       wrap.addEventListener("pointerup", completeRegionDraw);
@@ -1957,19 +2345,14 @@ def _render_grouped_registration_html(
         if (card.dataset.ignoreImageClick) {{ delete card.dataset.ignoreImageClick; return; }}
         if (regionModeByScene[scene.scene_id]) return;
         if (boxSelect.getAttribute('aria-pressed') === 'true') return;
-        if (selectionFor(scene.scene_id).size !== 1) return;
-        const sampleId = activeByScene[scene.scene_id], sample = samplesById[sampleId];
-        const rect = image.getBoundingClientRect();
-        const x = (event.clientX - rect.left) / rect.width * scene.image_width;
-        const y = (event.clientY - rect.top) / rect.height * scene.image_height;
-        const dx = x - sample.target_x, dy = y - sample.target_y;
-        zoomFocusByScene[scene.scene_id] = {{x, y, label: "Clicked offset location"}};
-        rememberMove(scene.scene_id,[sampleId]);
-        reviews[sampleId] = {{...(reviews[sampleId] || {{}}), status: "offset", source: "human", image_x: x, image_y: y,
-          east_m: sample.transform_a * dx + sample.transform_b * dy,
-          north_m: sample.transform_d * dx + sample.transform_e * dy}};
-        delete reviews[sampleId].heuristic_id;
-        persist();
+        const trees=selectedEditableTrees(scene.scene_id);if(trees.length!==1)return;
+        const rect=image.getBoundingClientRect();
+        const x=(event.clientX-rect.left)/rect.width*scene.image_width;
+        const y=(event.clientY-rect.top)/rect.height*scene.image_height;
+        const tree=trees[0],before=tree.position();
+        rememberTreeEdit(scene.scene_id,trees,'move');tree.move(x-before.x,y-before.y);
+        zoomFocusByScene[scene.scene_id]={{x,y,label:'Clicked tree location'}};
+        persist(scene.scene_id);
       }});
       const treeList = document.createElement("div"); treeList.className = "tree-list";
       sceneSamples.forEach((sample, index) => {{
@@ -1985,7 +2368,14 @@ def _render_grouped_registration_html(
       pixelZoomHead.append(pixelZoomTitle, pixelZoomLabel);
       const pixelZoomCanvas = document.createElement("canvas");
       pixelZoomCanvas.setAttribute("aria-label", "Marker-free close-up around the selected location");
-      pixelZoom.append(pixelZoomHead, pixelZoomCanvas);
+      const pixelZoomImage = document.createElement("div"); pixelZoomImage.className = "pixel-zoom-image";
+      // Keep the location marker outside the filtered pixels, just like the main aerial overlays.
+      pixelZoomImage.innerHTML = `<svg class="pixel-zoom-crosshair" viewBox="0 0 240 240" aria-hidden="true">
+        <path d="M103 120H115 M125 120H137 M120 103V115 M120 125V137" fill="none" stroke="#06110c" stroke-width="5"/>
+        <path d="M103 120H115 M125 120H137 M120 103V115 M120 125V137" fill="none" stroke="#8ff7ff" stroke-width="2"/>
+      </svg>`;
+      pixelZoomImage.prepend(pixelZoomCanvas);
+      pixelZoom.append(pixelZoomHead, pixelZoomImage);
       const details = document.createElement("div"); details.className = "details";
       const species = document.createElement("div"); species.className = "selected-species";
       const facts = document.createElement("div"); facts.className = "selected-facts";
@@ -1996,10 +2386,26 @@ def _render_grouped_registration_html(
         ["duplicate", "Duplicate"], ["occluded", "Occluded"]].forEach(([status, label]) => {{
         const button = document.createElement("button"); button.dataset.reviewStatus = status;
         button.dataset.reviewLabel = label; button.textContent = label;
-        button.title = label + " (" + ({{aligned: "C", "not-tree": "F", uncertain: "Q", duplicate: "E", occluded: "O"}}[status]) + ")";
+        const shortcut=Object.keys(reviewHotkeys).find(key=>reviewHotkeys[key]===status).toUpperCase();
+        button.dataset.shortcut=shortcut;button.setAttribute('aria-keyshortcuts',shortcut);
+        button.title=label+' ('+shortcut+')';
         button.addEventListener("click", () => setStatus(scene.scene_id, status)); actions.append(button);
       }});
       const maskActions = document.createElement("div"); maskActions.className = "mask-actions fullscreen-only";
+      const isolateButton=document.createElement('button');isolateButton.className='isolate-button';
+      isolateButton.textContent='Hold to isolate';isolateButton.type='button';
+      isolateButton.title='Hold Space or this button to hide all overlays except selected trees and their crowns.';
+      isolateButton.setAttribute('aria-pressed','false');
+      isolateButton.addEventListener('pointerdown',event=>{{
+        if(event.button!==0)return;event.preventDefault();
+        isolateButton.setPointerCapture(event.pointerId);isolateSelection(card);
+      }});
+      ['pointerup','pointercancel','lostpointercapture'].forEach(name=>isolateButton.addEventListener(name,clearIsolation));
+      maskActions.append(isolateButton);
+      const acceptHint=document.createElement('span');
+      acceptHint.textContent='Alt-click: add crown · Alt+Shift-click: also confirm species';
+      acceptHint.title='Hover a prediction center for species confidence. Neither shortcut confirms DBH. Avoid adding a second target for an existing tree.';
+
       let overlapUndo=null;
       const overlaps=document.createElement('button');overlaps.textContent='Mark crown overlaps occluded';
       overlaps.title='Advisory: smaller estimated crown center inside a larger radius. Missing crown sizes count as zero for candidate selection only; they cannot occlude other trees. Preserves human decisions; confirm before applying. Publish then rescore to update scoring.';
@@ -2023,26 +2429,87 @@ def _render_grouped_registration_html(
       }});
       actions.append(overlaps);
       const protect = document.createElement("button"); protect.className = "mask-protect";
-      protect.textContent = "Protect area (P)";
-      protect.title = "Draw a circle that receives no center loss; use for plausible vegetation or unlabeled trees";
-      protect.addEventListener("click", () => setRegionMode(scene.scene_id, "protect"));
+      protect.textContent = "Woods";
+      protect.disabled=metadata.curation_schema_version!==2;
+      protect.title = "Trace incompletely labeled woods: ignore negative center loss and unmatched predictions, without crediting them as correct. Known trees remain supervised.";
+      protect.addEventListener("click", () => setRegionMode(scene.scene_id, "confirmed-woods"));
       const background = document.createElement("button"); background.className = "mask-background";
-      background.textContent = "Confirm background (B)";
-      background.title = "Draw a circle that receives trusted negative center loss; use only where no tree exists";
+      background.textContent = "Background";
+      background.disabled=metadata.curation_schema_version!==2;
+      background.title = "Trace a polygon with trusted negative center loss; use only where no tree exists. Existing background circles remain editable.";
       background.addEventListener("click", () => setRegionMode(scene.scene_id, "confirmed-background"));
+      const tileBackground=document.createElement('button');
+      tileBackground.className='mask-tile-background';tileBackground.textContent='Confirm entire tile background';
+      tileBackground.disabled=metadata.curation_schema_version!==2;
+      tileBackground.title='Cover this tile with trusted background, excluding the context border. Existing tree labels stay; Undo last area removes the background.';
+      tileBackground.onclick=()=>confirmTileBackground(scene.scene_id);
       const undoRegion = document.createElement("button"); undoRegion.className = "mask-undo";
       const addTree = document.createElement("button"); addTree.className = "mask-tree";
-      addTree.textContent = "Add tree crown (T)";
+      addTree.textContent = "Add tree crown";
       addTree.title = "For an unlisted tree: drag from its crown center to its edge. Adds a detection target with unknown species and DBH after publication; radius does not widen scoring tolerance. Do not add a second center for an existing tree.";
       addTree.addEventListener("click", () => setRegionMode(scene.scene_id, "confirmed-tree"));
-      const measureTree=document.createElement('button');measureTree.textContent='Set selected tree radius (R)';
+      const measureTree=document.createElement('button');measureTree.textContent='Set crown radius';
       measureTree.title='Select one tree, hover at its crown edge, and press R to save that radius. Or click this button, move to the edge, and click to save. Center stays anchored to the tree; Escape cancels.';
       measureTree.onclick=()=>armCrownSizing(scene.scene_id);
       undoRegion.textContent = "Undo last area";
       undoRegion.addEventListener("click", () => removeLastMaskRegion(scene.scene_id));
       const maskHint = document.createElement("span"); maskHint.className = "mask-hint";
-      maskHint.textContent = "Arm a tool, then drag from center to edge. Green = added tree; cyan = loss-free; red = trusted background. Click an existing circle to remove it. Escape cancels.";
-      maskActions.append(addTree, measureTree, protect, background, undoRegion, maskHint);
+      const singleArea=document.createElement('button');singleArea.className='mask-single-tree';
+      singleArea.textContent='Single-tree area';singleArea.disabled=metadata.curation_schema_version!==2;
+      singleArea.title='Trace the canopy boundary, then release. Extra centers inside are penalized; each retained labeled tree keeps one allowance. Separate from crown size. Shift-click outline to remove; Escape cancels.';
+      singleArea.onclick=()=>setRegionMode(scene.scene_id,'single-tree');
+      maskHint.textContent = "Area tools: trace a boundary. Cyan = ignored woods; red = trusted background; amber = single-tree area. Select an outline to move it; Shift-click to remove. Escape cancels.";
+      maskActions.append(addTree, measureTree, singleArea, protect, background, tileBackground, undoRegion, maskHint);
+      const peerCopy=document.createElement('button');peerCopy.textContent='Populate from peer image';
+      peerCopy.disabled=!metadata.peer_images_enabled;
+      peerCopy.title='Copy tree decisions, overlap flags, added trees and background/woods/single-tree areas from the nearest available year. Existing edits are kept. Notes/observations, vegetation groups and Done/More done are not copied. This image remains unfinished; review presence and crown sizes before marking it done.';
+      peerCopy.onclick=async()=>{{
+        peerCopy.disabled=true;peerRevert.disabled=true;
+        try{{
+          if(!await syncReviews())throw Error('Save current edits before copying peer trees.');
+          const version=editVersion;
+          const q=new URLSearchParams({{city:pageParameters.get('city')||'ussfo',scene:scene.scene_id}});
+          const response=await fetch('/api/peer-image?'+q),preview=await response.json();
+          if(!response.ok)throw Error(preview.error||'Peer preview failed');
+          if(version!==editVersion)throw Error('Edits changed while loading. Try again after saving.');
+          if(!preview.copied){{alert('No additional tree decisions, added trees or areas available in a matching peer image.');return;}}
+          for(const [id,review] of Object.entries(preview.reviews))if(!Object.hasOwn(savedSnapshot.reviews,id)||savedSnapshot.reviews[id]?.source==='inventory-suggestion')reviews[id]=review;
+          const existing=new Set(maskRegions.map(r=>r.region_id));
+          for(const region of preview.mask_regions)if(!existing.has(region.region_id))maskRegions.push(region);
+          delete sceneReviews[scene.scene_id];
+          persist(scene.scene_id);
+        }}catch(error){{alert(error.message);}}finally{{peerCopy.disabled=!metadata.peer_images_enabled;peerRevert.disabled=!metadata.peer_images_enabled;}}
+      }};
+      const peerRevert=document.createElement('button');peerRevert.textContent='Revert imported curation';
+      peerRevert.disabled=!metadata.peer_images_enabled;
+      peerRevert.title='On this tile only: reset unchanged imported decisions to inventory defaults and remove unchanged imported trees and areas. Keep subsequent edits and other tiles.';
+      peerRevert.onclick=async()=>{{
+        peerRevert.disabled=true;peerCopy.disabled=true;
+        try{{
+          if(!await syncReviews())throw Error('Save current edits before reverting imported curation.');
+          const version=editVersion;
+          const q=new URLSearchParams({{city:pageParameters.get('city')||'ussfo',scene:scene.scene_id,action:'revert'}});
+          const response=await fetch('/api/peer-image?'+q),preview=await response.json();
+          if(!response.ok)throw Error(preview.error||'Revert preview failed');
+          if(version!==editVersion)throw Error('Edits changed while loading. Try again after saving.');
+          if(!preview.reverted){{alert('No unchanged imported curation to revert on this tile. Later edits are kept.');return;}}
+          if(!confirm(`Revert ${{Object.keys(preview.reviews).length}} imported decisions to inventory defaults and remove ${{preview.remove_mask_regions.length}} imported trees/areas on this tile? Later edits are kept. Completion flags will not be restored.`))return;
+          for(const [id,review] of Object.entries(preview.reviews))reviews[id]=review;
+          const removed=new Set(preview.remove_mask_regions);maskRegions=maskRegions.filter(r=>!removed.has(r.region_id));
+          persist(scene.scene_id);
+        }}catch(error){{alert(error.message);}}finally{{peerRevert.disabled=!metadata.peer_images_enabled;peerCopy.disabled=!metadata.peer_images_enabled;}}
+      }};
+      const groupKind=document.createElement('select');groupKind.className='vegetation-kind';groupKind.setAttribute('aria-label','Vegetation group category');
+      for(const [value,text] of [['copse','Copse'],['shrub-mass','Shrub mass']]){{const option=document.createElement('option');option.value=value;option.textContent=text;groupKind.append(option);}}
+      const groupCircle=document.createElement('button');groupCircle.className='vegetation-circle';groupCircle.textContent='Group circle';
+      const groupPolygon=document.createElement('button');groupPolygon.className='vegetation-polygon';groupPolygon.textContent='Group polygon';
+      for(const button of [groupCircle,groupPolygon]){{button.disabled=metadata.curation_schema_version!==2;button.title='One center + extent target, replacing enclosed individual centers without deleting their saved labels. Extra detections inside are ignored. Requires a future category-expanded fine-tune.';}}
+      groupCircle.onclick=()=>setRegionMode(scene.scene_id,groupKind.value);
+      groupPolygon.onclick=()=>setRegionMode(scene.scene_id,groupKind.value+'-polygon');
+      const extraTools=document.createElement('details');extraTools.className='extra-tools';
+      const extraLabel=document.createElement('summary');extraLabel.textContent='Vegetation groups & peer imagery';
+      const extraBody=document.createElement('div');extraBody.append(groupKind,groupCircle,groupPolygon,peerCopy,peerRevert);
+      extraTools.append(extraLabel,extraBody);maskActions.append(acceptHint,extraTools);
       const streetViewPanel = document.createElement("section"); streetViewPanel.className = "street-view-panel";
       const streetViewHead = document.createElement("div"); streetViewHead.className = "street-view-head";
       const streetViewLocation = document.createElement("span"); streetViewLocation.className = "street-view-location";
@@ -2053,20 +2520,31 @@ def _render_grouped_registration_html(
       streetViewInteraction.className = "street-view-interaction"; streetViewInteraction.textContent = "Unlock";
       streetViewInteraction.title = "Enable panorama controls; the overhead cone shows only the initial view";
       streetViewInteraction.addEventListener("click", () => toggleStreetViewInteraction(card));
-      streetViewHead.append(streetViewLocation, streetViewExternal, streetViewInteraction);
+      const streetViewPause=document.createElement('button');streetViewPause.className='street-view-pause';
+      streetViewPause.textContent='Pause';streetViewPause.setAttribute('aria-pressed','false');
+      streetViewPause.title='Pause automatic Street View updates without resetting the current panorama or angle (G).';
+      streetViewPause.addEventListener('click',()=>toggleStreetViewPause(card));
+      streetViewHead.append(streetViewLocation, streetViewExternal, streetViewPause, streetViewInteraction);
       const streetViewFrameWrap = document.createElement("div"); streetViewFrameWrap.className = "street-view-frame-wrap";
       const streetViewFrame = document.createElement("iframe"); streetViewFrame.className = "street-view-frame";
       streetViewFrame.title = "Google Street View near selected tree"; streetViewFrame.loading = "lazy";
       streetViewFrame.allowFullscreen = true; streetViewFrame.referrerPolicy = "strict-origin-when-cross-origin";
       streetViewFrame.classList.add("locked"); streetViewFrameWrap.append(streetViewFrame);
       streetViewPanel.append(streetViewHead, streetViewFrameWrap);
-      const note = document.createElement("textarea"); note.placeholder = "Shadow, stale inventory, merged crowns, systematic shift…";
-      note.dataset.singlePlaceholder = note.placeholder;
-      note.addEventListener("change", () => {{
-        if (selectionFor(scene.scene_id).size !== 1) return;
-        const sampleId = activeByScene[scene.scene_id]; reviews[sampleId] = {{...(reviews[sampleId] || {{}}), note: note.value}}; persist();
-      }});
-      card.append(head, wrap, streetViewPanel, treeList, pixelZoom, details, actions, maskActions, note); return card;
+      if(mapillaryAvailable)card.streetExamples=mountStreetExamples(card,streetViewPanel,streetViewHead,streetViewFrameWrap,
+        target=>refreshStreetViewNow(card,target));
+      const observations = buildTreeObservations(scene.scene_id);
+      for(const [button,key,aria] of [
+        [previous,'←','ArrowLeft'],[next,'→','ArrowRight'],[expand,'Esc','Escape'],[confirmTree,'X','X'],
+        [moreDone,'Tab','Tab'],[isolateButton,'Space','Space'],[streetViewPause,'G','G'],
+        [addTree,'T','T'],[measureTree,'R','R'],[protect,'P','P'],[background,'B','B']
+      ]){{button.dataset.shortcut=key;button.setAttribute('aria-keyshortcuts',aria);}}
+      const aerial=document.createElement('div');aerial.className='editor-aerial';
+      aerial.style.setProperty('--image-ratio',scene.image_width/scene.image_height);aerial.append(frame);
+      const tools=document.createElement('aside');tools.className='editor-tools';tools.setAttribute('aria-label','Tree review controls');
+      const selection=document.createElement('div');selection.className='editor-selection';selection.append(treeList,details,pixelZoom);
+      tools.append(selection,actions,maskActions,observations);
+      card.append(head,aerial,streetViewPanel,tools); return card;
     }}
     [...new Set(samples.map(sample => sample.split))].forEach(value => {{
       const option = document.createElement("option"); option.value = value; option.textContent = value; splitFilter.append(option);
@@ -2085,9 +2563,9 @@ def _render_grouped_registration_html(
       return (!splitFilter.value||scene.splits.includes(splitFilter.value))
         && (!coverageFilter.value||(coverageFilter.value==='seam')===Boolean(scene.seam_priority))
         && matchesSceneReviewFilter(sceneStatusFilter.value,sceneReviews[scene.scene_id])
-        && scene.sample_ids.some(id=>{{const sample=samplesById[id];
+        && ((scene.anchor&&(!statusFilter.value||(statusFilter.value==='unreviewed'&&!sceneReviews[scene.scene_id]?.done))) || scene.sample_ids.some(id=>{{const sample=samplesById[id];
           return (showStacks.checked||!isStacked(sample))&&(!statusFilter.value
-            ||(statusFilter.value==='unreviewed'?!sceneReviews[scene.scene_id]?.done:statusOf(id)===statusFilter.value));}});
+            ||(statusFilter.value==='unreviewed'?!sceneReviews[scene.scene_id]?.done:statusOf(id)===statusFilter.value));}}));
     }}
     function matchingScenes() {{return scenes.filter(sceneMatches);}}
     function mountScenePage() {{
@@ -2123,6 +2601,7 @@ def _render_grouped_registration_html(
       const openCard = document.querySelector(".card.fullscreen");
       if (!openCard) return;
       if (event.key === "Escape") {{
+        clearIsolation();
         clearNudgeFocus();
         if (regionModeByScene[openCard.dataset.scene]) {{
           regionModeByScene[openCard.dataset.scene] = null;
@@ -2136,6 +2615,12 @@ def _render_grouped_registration_html(
       const editing = event.target.matches("textarea, input, select") || event.target.isContentEditable;
       if (editing) return;
       if(document.querySelector('dialog[open]'))return;
+      if(!event.ctrlKey&&!event.metaKey&&!event.altKey&&event.key.toLowerCase()==='g'){{
+        event.preventDefault();if(!event.repeat)toggleStreetViewPause(openCard);return;
+      }}
+      if(!event.ctrlKey&&!event.metaKey&&!event.altKey&&(event.code==='Space'||event.key===' ')){{
+        event.preventDefault();if(!event.repeat)isolateSelection(openCard);return;
+      }}
       if(!event.ctrlKey&&!event.metaKey&&!event.altKey&&event.key.toLowerCase()==='x'){{
         event.preventDefault();if(!event.repeat)await confirmSelection(openCard.dataset.scene);return;
       }}
@@ -2145,8 +2630,10 @@ def _render_grouped_registration_html(
       if((event.ctrlKey||event.metaKey)&&!event.altKey&&['c','v'].includes(event.key.toLowerCase())){{
         const sceneId=openCard.dataset.scene,scene=scenesById[sceneId];
         if(event.key.toLowerCase()==='c'){{
+          if(selectedEditableTrees(sceneId).length!==1)return;
           if(window.getSelection()?.toString())return;
           const added=maskRegions.find(r=>r.region_id===selectedAddedByScene[sceneId]);
+          if(added&&added.mode!=='confirmed-tree')return;
           if(added)copiedTree={{radius_m:added.radius_m,species:added.species||'',identification_source:added.identification_source||''}};
           else {{
             if(selectionFor(sceneId).size!==1)return;
@@ -2176,12 +2663,12 @@ def _render_grouped_registration_html(
         event.preventDefault();if(!event.repeat)await completeSecondPass(openCard,true);return;
       }}
       if (!event.ctrlKey && !event.metaKey && !event.altKey && event.key.toLowerCase() === "p") {{
-        event.preventDefault(); setRegionMode(openCard.dataset.scene, "protect"); return;
+        event.preventDefault(); if(metadata.curation_schema_version===2)setRegionMode(openCard.dataset.scene, "confirmed-woods"); return;
       }}
       if (!event.ctrlKey && !event.metaKey && !event.altKey && event.key.toLowerCase() === "b") {{
-        event.preventDefault(); setRegionMode(openCard.dataset.scene, "confirmed-background"); return;
+        event.preventDefault(); if(metadata.curation_schema_version===2)setRegionMode(openCard.dataset.scene, "confirmed-background"); return;
       }}
-      const reviewHotkeys = {{c: "aligned", f: "not-tree", q: "uncertain", e: "duplicate", o: "occluded"}};
+
       const reviewStatus = reviewHotkeys[event.key.toLowerCase()];
       if (reviewStatus && !event.ctrlKey && !event.metaKey && !event.altKey) {{
         event.preventDefault(); setStatus(openCard.dataset.scene, reviewStatus); return;
@@ -2195,45 +2682,23 @@ def _render_grouped_registration_html(
         if (regionModeByScene[sceneId]) return;
         const scene = scenesById[sceneId];
         const step = event.shiftKey ? 5 : 1;
-        const added=maskRegions.find(r=>r.region_id===selectedAddedByScene[sceneId]&&r.mode==='confirmed-tree'&&!r.tree_id);
+        if(nudgeEditableTrees(scene,delta,step,event.repeat)){{focusNudge(openCard,event.key);return;}}
+        const added=maskRegions.find(r=>r.region_id===selectedAddedByScene[sceneId]&&['confirmed-tree','confirmed-background','confirmed-woods','single-tree','copse','shrub-mass'].includes(r.mode)&&!r.tree_id);
         if(added){{
           const point=regionForScene(added,scene);if(!point)return;
           const anchor=samplesById[point.anchor_sample_id];if(!anchor)return;
           rememberMove(sceneId,[],added,event.repeat);focusNudge(openCard,event.key);
-          const x=Math.max(0,Math.min(scene.image_width-1,point.image_x+step*delta[0]));
-          const y=Math.max(0,Math.min(scene.image_height-1,point.image_y+step*delta[1]));
+          const {{x,y}}=clampScenePoint(scene,point.image_x+step*delta[0],point.image_y+step*delta[1]);
           const dx=x-point.image_x,dy=y-point.image_y;
           const east=anchor.transform_a*dx+anchor.transform_b*dy,north=anchor.transform_d*dx+anchor.transform_e*dy;
           if(added.world_x!=null){{added.world_x+=east;added.world_y+=north;delete added.longitude;delete added.latitude;}}
           else {{added.image_x=x;added.image_y=y;added.east_m=(added.east_m||0)+east;added.north_m=(added.north_m||0)+north;}}
-          zoomFocusByScene[sceneId]={{x,y,label:'Nudged added tree'}};
+          if(added.world_polygon)translateAreaPolygon(added,east,north);
+          zoomFocusByScene[sceneId]={{x,y,label:added.mode==='confirmed-background'?'Nudged background region':'Nudged added tree'}};
+          if(added.world_polygon)zoomFocusByScene[sceneId].label='Nudged curation area';
           persist(sceneId);return;
         }}
-        const selected = [...selectionFor(sceneId)].map(id => samplesById[id]).filter(s=>!isHiddenTree(s));
-        if(!selected.length)return;
-        rememberMove(sceneId,selected.map(s=>s.sample_id),null,event.repeat);
-        focusNudge(openCard,event.key);
-        let shiftX = step * delta[0], shiftY = step * delta[1];
-        // Clamp the shared translation, not each point, preserving relative positions.
-        selected.forEach(sample => {{
-          const review = reviews[sample.sample_id] || {{}};
-          const {{x, y}} = displayedPosition(sample);
-          shiftX = Math.max(-x, Math.min(scene.image_width - 1 - x, shiftX));
-          shiftY = Math.max(-y, Math.min(scene.image_height - 1 - y, shiftY));
-        }});
-        selected.forEach(sample => {{
-        const sampleId = sample.sample_id, review = reviews[sampleId] || {{}};
-        const position = displayedPosition(sample);
-        const x = position.x + shiftX;
-        const y = position.y + shiftY;
-        const dx = x - sample.target_x, dy = y - sample.target_y;
-        reviews[sampleId] = {{...review, status: "offset", source: "human", image_x: x, image_y: y,
-          east_m: sample.transform_a * dx + sample.transform_b * dy,
-          north_m: sample.transform_d * dx + sample.transform_e * dy}};
-        delete reviews[sampleId].heuristic_id;
-        zoomFocusByScene[sceneId] = {{x, y, label: "Nudged offset location"}};
-        }});
-        persist(sceneId);
+
       }}
     }});
     window.addEventListener('pagehide',()=>{{clearTimeout(localSaveTimer);storeLocalState();}});
@@ -2297,6 +2762,7 @@ def _render_grouped_registration_html(
         reviews = withAlignedDefaults(persisted.reviews || {{}});
         sceneReviews = persisted.scene_reviews || {{}};
         maskRegions = persisted.mask_regions || [];
+        borderInventory = persisted.border_inventory || {{trees:[],available:false}};
         savedSnapshot=JSON.parse(JSON.stringify({{reviews:persisted.reviews||{{}},scene_reviews:sceneReviews,mask_regions:maskRegions}}));
         if(metadata.editor_scene_id)savedVersion=editVersion;
         serverRevision = persisted.state_revision;
@@ -2320,7 +2786,7 @@ def _render_grouped_registration_html(
       }} finally {{
         retry.disabled=false;
         if(metadata.editor_scene_id)cards.inert=!serverRevision;
-        update();if(serverRevision)syncTimer = setTimeout(syncReviews, 250);
+        update();if(serverRevision){{syncTimer = setTimeout(syncReviews, 250);scheduleQueuePrefetch();}}
       }}
     }}
     window.studioViewState?.restore();
@@ -2633,8 +3099,8 @@ def append_validation_chip_to_registration_review(
     raster_path: str | Path,
     review_dir: str | Path,
     chip_id: str,
-    ground_truth: pd.DataFrame,
-    *, _manifest=None, _persist=True, _inventory=None,
+    ground_truth: pl.DataFrame | pd.DataFrame,
+    *, _manifest=None, _persist=True, _inventory=None, id_chip_pixels=None, _render_gallery=True, chip_split=None,
 ) -> dict[str, object]:
     """Add one model-validation chip to the existing registration review."""
     import re
@@ -2648,9 +3114,9 @@ def append_validation_chip_to_registration_review(
             "Install the imagery dependency group: uv sync --group imagery"
         ) from error
 
-    match = re.fullmatch(r"r(?P<row>\d{6})_c(?P<column>\d{6})", chip_id)
-    if match is None:
-        raise ValueError(f"invalid validation chip id {chip_id!r}")
+    from urban_tree_ml.chip_geometry import chip_offsets
+    row_offset, column_offset = chip_offsets(chip_id, config.imagery.chip_pixels,
+                                             id_chip_pixels=id_chip_pixels)
     directory = Path(review_dir).resolve()
     manifest_path = directory / "manifest.json"
     manifest = _manifest if _manifest is not None else json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -2666,42 +3132,45 @@ def append_validation_chip_to_registration_review(
     if tree_keyed:
         # Review actual inventory points, not a model's filtered/corrected target subset.
         from pyproj import Transformer
-        inventory = _inventory if _inventory is not None else pd.read_parquet(config.paths.root/'inventory'/config.inventory.city.lower()/'inventory.parquet')
+        inventory = _inventory if _inventory is not None else pl.read_parquet(
+            config.paths.root/'inventory'/config.inventory.city.lower()/'inventory.parquet')
+        if not isinstance(inventory, pl.DataFrame):
+            inventory = pl.from_pandas(inventory)
         if 'pixel_col' not in inventory:
             with rasterio.open(raster_path) as source:
-                projector=Transformer.from_crs('EPSG:4326',source.crs,always_xy=True)
-                xs,ys=projector.transform(inventory.longitude.to_numpy(),inventory.latitude.to_numpy())
-                cols,rows=(~source.transform)*(xs,ys)
-            inventory['pixel_col'],inventory['pixel_row']=cols,rows
-        cols,rows=inventory.pixel_col,inventory.pixel_row
-        size=config.imagery.chip_pixels
-        r0,c0=int(match.group('row'))*size,int(match.group('column'))*size
-        inventory['pixel_col'],inventory['pixel_row']=cols,rows
-        ground_truth=inventory[(cols>=c0)&(cols<c0+size)&(rows>=r0)&(rows<r0+size)
-                               & inventory['split'].isin(['train','validation'])].copy()
-        ground_truth['dbh_in']=ground_truth['diameter_at_breast_height']
+                projector = Transformer.from_crs('EPSG:4326', source.crs, always_xy=True)
+                xs, ys = projector.transform(inventory['longitude'].to_numpy(), inventory['latitude'].to_numpy())
+                cols, rows = (~source.transform) * (xs, ys)
+            inventory = inventory.with_columns(pl.Series('pixel_col', cols), pl.Series('pixel_row', rows))
+        size = config.imagery.chip_pixels
+        ground_truth = inventory.filter(
+            pl.col('pixel_col').is_between(column_offset, column_offset + size, closed='left') &
+            pl.col('pixel_row').is_between(row_offset, row_offset + size, closed='left') &
+            pl.col('split').is_in(['train', 'validation'])
+        ).with_columns(pl.col('diameter_at_breast_height').alias('dbh_in'))
+    elif not isinstance(ground_truth, pl.DataFrame):
+        # Offline preparation tools can supply their own retained targets.
+        ground_truth = pl.from_pandas(ground_truth)
     existing_scene_by_tree = {
         str(sample["tree_id"]): str(sample["scene_id"])
         for sample in samples
         if isinstance(sample, dict) and sample.get("tree_id") is not None
     }
-    requested_tree_ids = ground_truth["tree_id"].astype(str)
-    unreviewed_truth = ground_truth.copy() if tree_keyed else ground_truth[~requested_tree_ids.isin(existing_scene_by_tree)].copy()
-    if not tree_keyed and unreviewed_truth.empty and not ground_truth.empty:
-        first_tree_id = str(ground_truth.iloc[0]["tree_id"])
+    unreviewed_truth = ground_truth if tree_keyed else ground_truth.filter(
+        ~pl.col('tree_id').cast(pl.String).is_in(list(existing_scene_by_tree)))
+    if not tree_keyed and unreviewed_truth.is_empty() and not ground_truth.is_empty():
+        first_tree_id = str(ground_truth['tree_id'][0])
         return {
             "scene_id": existing_scene_by_tree[first_tree_id],
             "added": False,
             "already_reviewed": True,
         }
     ground_truth = unreviewed_truth
-    if ground_truth.empty:
+    if ground_truth.is_empty() and not tree_keyed:
         raise ValueError(f"validation chip {chip_id!r} has no retained inventory trees to curate")
 
     raster = Path(raster_path).resolve()
     chip_pixels = config.imagery.chip_pixels
-    row_offset = int(match.group("row")) * chip_pixels
-    column_offset = int(match.group("column")) * chip_pixels
     with rasterio.open(raster) as source:
         window = Window(column_offset, row_offset, chip_pixels, chip_pixels)
         masks = source.read_masks(config.imagery.bands, window=window)
@@ -2719,24 +3188,24 @@ def append_validation_chip_to_registration_review(
     scene_id = existing_scene['scene_id'] if existing_scene else f"scene-{len(scenes):03d}"
     existing_samples = {str(s['tree_id']):s for s in samples if s.get('scene_id')==scene_id}
     sample_ids: list[str] = []
-    ordered_truth = ground_truth.sort_values(["pixel_row", "pixel_col", "tree_id"])
-    for row in ordered_truth.itertuples(index=False):
-        previous=existing_samples.get(str(row.tree_id))
+    ordered_truth = ground_truth.sort(["pixel_row", "pixel_col", "tree_id"])
+    for row in ordered_truth.iter_rows(named=True):
+        previous=existing_samples.get(str(row["tree_id"]))
         sample_id = previous['sample_id'] if previous else f"sample-{len(samples):04d}"
         sample_ids.append(sample_id)
-        target_x = float(row.pixel_col - column_offset)
-        target_y = float(row.pixel_row - row_offset)
+        target_x = float(row["pixel_col"] - column_offset)
+        target_y = float(row["pixel_row"] - row_offset)
         new_sample = (
             {
                 "sample_id": sample_id,
                 "scene_id": scene_id,
-                "tree_id": str(row.tree_id),
-                "split": str(row.split),
-                "species": str(row.species) if pd.notna(row.species) else "Unknown species",
-                "genus": str(row.genus) if pd.notna(row.genus) else "Unknown genus",
-                "dbh_in": float(row.dbh_in) if pd.notna(row.dbh_in) else None,
-                "longitude": float(row.longitude),
-                "latitude": float(row.latitude),
+                "tree_id": str(row["tree_id"]),
+                "split": str(row["split"]),
+                "species": str(row["species"]) if row["species"] is not None else "Unknown species",
+                "genus": str(row["genus"]) if row["genus"] is not None else "Unknown genus",
+                "dbh_in": float(row["dbh_in"]) if row["dbh_in"] is not None and not np.isnan(row["dbh_in"]) else None,
+                "longitude": float(row["longitude"]),
+                "latitude": float(row["latitude"]),
                 "image": f"images/{image_name}",
                 "image_width": chip_pixels,
                 "image_height": chip_pixels,
@@ -2768,7 +3237,7 @@ def append_validation_chip_to_registration_review(
             "image_width": chip_pixels,
             "image_height": chip_pixels,
             "sample_ids": sample_ids,
-            "splits": sorted(ground_truth["split"].astype(str).unique()),
+            "splits": sorted(ground_truth["split"].cast(pl.String).unique()),
             "tree_count": len(sample_ids),
             "valid_fraction": valid_fraction,
             "seam_priority": False,
@@ -2777,6 +3246,25 @@ def append_validation_chip_to_registration_review(
             "validation_chip_id": chip_id,
         }
     )
+    if ground_truth.is_empty():
+        # A viewport anchor carries georeferencing, never a synthetic tree label.
+        # Keep it outside samples/sample_ids so it cannot become a review or target.
+        from pyproj import Transformer
+        with rasterio.open(raster) as source:
+            x, y = source.transform * (column_offset + chip_pixels/2, row_offset + chip_pixels/2)
+            longitude, latitude = Transformer.from_crs(source.crs, 'EPSG:4326', always_xy=True).transform(x,y)
+        new_scene['anchor'] = dict(sample_id=f'viewport-{chip_id}', scene_id=scene_id,
+            reference_only=True, longitude=longitude, latitude=latitude,
+            target_x=chip_pixels/2, target_y=chip_pixels/2,
+            transform_a=float(transform.a), transform_b=float(transform.b),
+            transform_d=float(transform.d), transform_e=float(transform.e),
+            species='Unlabeled viewport', genus='Unknown', dbh_in=None,
+            image_width=chip_pixels, image_height=chip_pixels)
+        new_scene['splits'] = ['train', 'validation']
+    if chip_split is not None:
+        # Admission uses the split of the tile even if all its inventory
+        # points are absent or were assigned to an adjacent spatial block.
+        new_scene['splits'] = sorted(set(new_scene['splits']) | {chip_split})
     if existing_scene is not None: existing_scene.update(new_scene)
     else: scenes.append(new_scene)
     coordinate_stack_groups, coordinate_stack_points = _attach_coordinate_stack_sizes(samples)
@@ -2796,10 +3284,11 @@ def append_validation_chip_to_registration_review(
     metadata["updated_at"] = datetime.now(UTC).isoformat()
     if _persist:
         _write_json_atomic(manifest_path, manifest)
-        (directory / "index.html").write_text(
-            _render_registration_html(samples, metadata, scenes),
-            encoding="utf-8",
-        )
+        if _render_gallery:
+            (directory / "index.html").write_text(
+                _render_registration_html(samples, metadata, scenes),
+                encoding="utf-8",
+            )
     return {"scene_id": scene_id, "added": True, "samples": len(sample_ids)}
 
 
@@ -2848,7 +3337,7 @@ def refresh_registration_heuristics(
         or not isinstance(scenes, list)
     ):
         raise ValueError("registration review manifest has an invalid shape")
-    if Path(str(metadata.get("source_raster", ""))).name != raster.name:
+    if not matches_catalog_imagery(config.paths.root, metadata.get("source_raster"), raster):
         raise ValueError("registration review was generated for a different raster")
 
     samples_by_id = {
@@ -2928,6 +3417,7 @@ def build_registration_review(
     output_dir: str | Path | None = None,
     extend_existing: bool = False,
 ) -> dict[str, object]:
+    import pandas as pd
     if samples < 1:
         raise ValueError("samples must be at least one")
     if window_pixels < 32 or window_pixels % 2:
@@ -2972,7 +3462,7 @@ def build_registration_review(
         if bool(existing_metadata.get("test_labels_included")) != include_test:
             raise ValueError("existing registration review uses a different test-label policy")
         existing_raster = existing_metadata.get("source_raster")
-        if existing_raster is None or Path(str(existing_raster)).name != source_path.name:
+        if not matches_catalog_imagery(config.paths.root, existing_raster, source_path):
             raise ValueError("existing registration review was generated for a different raster")
         generated = [dict(sample) for sample in existing_samples]
         generated_scenes = [dict(scene) for scene in existing_scenes]
