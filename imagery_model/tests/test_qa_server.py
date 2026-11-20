@@ -20,6 +20,7 @@ def test_review_context_rejects_a_city_config_mismatch(tmp_path: Path) -> None:
     review_dir.mkdir()
     (review_dir / "index.html").write_text("<html></html>", encoding="utf-8")
 
+    (review_dir / "manifest.json").write_text(json.dumps({"metadata": {"source_raster": str(raster)}}))
     context = _checked_review_context(
         "ussfo",
         "San Francisco",
@@ -123,6 +124,7 @@ def test_backup_status_exposes_running_and_failed_jobs(tmp_path, monkeypatch, jo
         def serve_forever(self):
             request = object.__new__(self.handler)
             request.path = '/api/backup-status?city=ussfo'
+            request.headers = {}
             request._json_response = lambda status, payload: responses.append((status, payload))
             request.do_GET()
 

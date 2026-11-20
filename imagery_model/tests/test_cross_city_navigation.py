@@ -3,6 +3,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from urban_tree_ml.all_review import combined_summary
+from urban_tree_ml.queue_prefetch import QUEUE_PREFETCH_JS
 
 
 def test_cross_city_summary_keeps_same_chip_ids_distinct(tmp_path):
@@ -28,15 +29,17 @@ def test_next_uses_current_url_not_queue_model_and_handles_city_collision():
     source = Path('src/urban_tree_ml/quality.py').read_text(encoding='utf-8')
     def extract(start, end):
         return source.split(start, 1)[1].split(end, 1)[0].replace('{{', '{').replace('}}', '}')
-    queue = 'function validationQueueContext() {' + extract('function validationQueueContext() {{', '    function updateValidationQueueNav')
+    queue = 'function isReviewChipId(chip) {' + extract('function isReviewChipId(chip) {{', '    function updateValidationQueueNav')
     move = 'async function moveScene(card, direction) {' + extract('async function moveScene(card, direction) {{', '    function update(')
+    destinations = QUEUE_PREFETCH_JS.split('function queueTarget(',1)[1].split('let queuePrefetchTimer',1)[0]
     script = '''
 const pageParameters=new URLSearchParams({city:'ussfo',queue:'q',queue_chip:'r000001_c000001',run:'new-model',compare_run:'comparison-model',threshold:'.4'});
 let stored={split:'all',version:3,city:'all',chips:['r000001_c000001','r000001_c000001'],routes:[[0,'ussfo'],[0,'usbos']]};
 const sessionStorage={getItem:()=>JSON.stringify(stored)};
 const location={origin:'http://localhost',href:''};let queueNavigating=false,curationReturn='/model?city=all&split=training-all';
 let save=true;const syncReviews=async()=>save;
-''' + queue + move + '''
+const preparedNext=()=>null;
+''' + 'function queueTarget(' + destinations + queue + move + '''
 (async()=>{
 await moveScene({},1);let u=new URL(location.href,location.origin);
 if(u.searchParams.get('run')!=='new-model'||u.searchParams.get('compare_run')!=='comparison-model'||u.searchParams.get('threshold')!=='.4'||u.searchParams.get('city')!=='usbos')throw Error('live parameters lost');

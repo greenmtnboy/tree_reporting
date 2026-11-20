@@ -1,0 +1,10 @@
+{
+  "name": "confirmed-background-double-v3",
+  "weights": {
+    "genus_loss_weight": 0.5,
+    "species_loss_weight": 0.5,
+    "single_tree_loss_weight": 1.0,
+    "confirmed_background_loss_weight": 2.0
+  },
+  "rationale": "User prioritizes reducing false detections in manually confirmed background. Double the negative center focal term only on explicit confirmed-background pixels. Preserve retained positive support, single-tree regions and vegetation-group exemptions. Revalidate the parent under this same objective."
+}

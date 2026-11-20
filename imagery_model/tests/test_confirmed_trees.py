@@ -56,7 +56,7 @@ def test_tree_tool_requires_draw_and_is_distinct_from_protection():
     assert 'Add tree crown (T)' in html
     assert "event.key.toLowerCase()==='t'" in html
     assert "if(!event.repeat)setRegionMode(openCard.dataset.scene,'confirmed-tree')" in html
-    assert 'mode === "confirmed-tree" && radiusPx < 1' in html
+    assert '(mode === "confirmed-tree" || isVegetationGroup(mode)) && radiusPx < 1' in html
     assert 'radius does not widen scoring tolerance' in html
     scripts = re.findall(r'<script[^>]*>(.*?)</script>', html, re.S)
     subprocess.run(['node', '-e', 'new Function(require("fs").readFileSync(0,"utf8"))'],
@@ -69,14 +69,14 @@ def test_crown_drag_moves_geographic_center_once_and_cancel_does_not_save():
     harness = r'''
 let saves=0, renders=0;
 const persist=()=>saves++, renderMaskRegions=()=>renders++;
-const rememberMove=()=>{};
+const rememberMove=()=>{},isVegetationGroup=()=>false,clampScenePoint=(scene,x,y)=>({x,y});
 const stored={region_id:'r',world_x:100,world_y:200,longitude:1,latitude:2,radius_m:4};
 const maskRegions=[stored];
 const handlers={}; let capture=false;
 const marker={style:{},classList:{add(){},remove(){}},
  addEventListener(name,fn){handlers[name]=fn},setPointerCapture(){capture=true},
  hasPointerCapture(){return capture},releasePointerCapture(){capture=false}};
-const card={dataset:{},querySelector(){return {getBoundingClientRect(){return {left:0,top:0,width:200,height:100}}}}};
+const card={dataset:{},querySelector(selector){if(selector==='.box-select')return null;return {getBoundingClientRect(){return {left:0,top:0,width:200,height:100}}}}};
 const scene={image_width:100,image_height:100};
 const region={...stored,image_x:20,image_y:30};
 const anchor={transform_a:.6,transform_b:.1,transform_d:.2,transform_e:-.6};
@@ -124,6 +124,7 @@ def test_selected_crown_sizing_arms_at_corrected_center_without_saving():
     html = _render_grouped_registration_html([], {}, [])
     code = html[html.index('function armCrownSizing('):html.index('function regionForScene(')]
     js = '''
+const selectedEditableTrees=()=>[{key:'s'}],selectedAddedByScene={};
 const selectionFor=()=>new Set(['s']),samplesById={s:{tree_id:'t'}},activeByScene={scene:'s'},reviews={};
 const displayedPosition=()=>({x:42,y:73}),maskRegions=[{mode:'confirmed-tree',tree_id:'t',radius_m:6}];
 const regionModeByScene={},regionDraftByScene={},regionPixelScaleM=()=>.6;
@@ -144,6 +145,7 @@ def test_radius_hotkey_saves_cursor_distance_without_dragging():
     code = html[html.index('function armCrownSizing('):html.index('function syncLinkedCrownCenters(')]
     js = r'''
 let selected=1;const selectionFor=()=>({size:selected});
+const selectedEditableTrees=()=>Array(selected).fill({key:"s"}),selectedAddedByScene={};
 const samplesById={s:{sample_id:'s',tree_id:'t'}},activeByScene={scene:'s'};
 const displayedPosition=()=>({x:20,y:30}),regionPixelScaleM=()=>.5;
 const regionModeByScene={},regionDraftByScene={},maskRegions=[],reviews={},window={};

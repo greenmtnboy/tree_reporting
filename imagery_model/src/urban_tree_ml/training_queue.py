@@ -8,7 +8,6 @@ from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 
 from urban_tree_ml.feedback import load_persisted_reviews
 
@@ -68,6 +67,7 @@ def select(chips, labels, done_trees, explicit_done, city):
 
 
 def build(root, output):
+    import pandas as pd
     result = {
         "version": 1,
         "source_run": "sf-boston-naip-vocab-v2-retry1",
@@ -125,11 +125,12 @@ def load_queue(root, city):
 
 def validate_training_image(context, chip):
     """Allow all catalogued training chips, never test or arbitrary raster windows."""
+    from urban_tree_ml.catalog_imagery import matching_catalog_summary
     candidates = []
     for path in (context.config.paths.root / 'chips').glob('*/summary.json'):
         try:
             summary = json.loads(path.read_text())
-            if str(summary.get('source_raster', '')).replace('\\', '/').split('/')[-1] == context.raster.name:
+            if matching_catalog_summary(context.config.paths.root, summary, context.raster):
                 manifest = path.parent / 'chips.parquet'
                 if manifest.exists():
                     candidates.append((path.stat().st_mtime, manifest))
@@ -145,9 +146,8 @@ def validate_training_image(context, chip):
 
 @lru_cache(maxsize=8)
 def _training_image_ids(path, modified):
-    import pandas as pd
-    frame = pd.read_parquet(path, columns=['chip_id', 'split'])
-    return frozenset(frame.loc[frame.split == 'train', 'chip_id'].astype(str))
+    from urban_tree_ml.queue_navigation import _split_ids
+    return _split_ids(path, modified, 'train')
 
 
 def training_image(context, chip):
@@ -158,13 +158,12 @@ def training_image(context, chip):
     from PIL import Image
     from rasterio.windows import Window
 
-    match = re.fullmatch(r'r(\d{6})_c(\d{6})', chip)
-    if not match:
-        raise ValueError('Invalid chip ID')
+    from urban_tree_ml.chip_geometry import chip_offsets
     size = context.config.imagery.chip_pixels
+    row, col = chip_offsets(chip, size)
     with rasterio.open(context.raster) as source:
         rgb = source.read([1, 2, 3], window=Window(
-            int(match[2]) * size, int(match[1]) * size, size, size))
+            col, row, size, size))
     output = io.BytesIO()
     Image.fromarray(np.moveaxis(rgb, 0, -1).clip(0, 255).astype('uint8')).save(output, 'PNG')
     return output.getvalue()
@@ -172,29 +171,32 @@ def training_image(context, chip):
 
 TRAINING_REVIEW_SCRIPT = r"""
 const splitControl=document.createElement('label');
-splitControl.innerHTML='Split <select id="review-split"><option value="all">All (training + validation)</option><option value="training-all">All training chips</option><option value="validation">Validation</option><option value="train">Training assignments</option></select>';
+splitControl.innerHTML='Split <select id="review-split"><option value="all">All (training + validation)</option><option value="training-all">All training chips</option><option value="validation">Validation</option><option value="train">Training assignments</option><option value="prediction-only">Prediction only (unlabeled)</option></select>';
 document.querySelector('header .controls').prepend(splitControl);
 const trainingMode=pageParams.get('split')==='train';
-$('review-split').value=['all','training-all'].includes(pageParams.get('split'))?pageParams.get('split'):trainingMode?'train':'validation';
+$('review-split').value=['all','training-all','prediction-only'].includes(pageParams.get('split'))?pageParams.get('split'):trainingMode?'train':'validation';
 $('review-split').onchange=()=>{const u=new URL(location.href);u.searchParams.set('split',$('review-split').value);for(const k of ['assignment','chip'])u.searchParams.delete(k);location.href=u.pathname+u.search};
 async function initTraining(){
  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  document.head.insertAdjacentHTML('beforeend','<style>[hidden]{display:none!important}</style>');
  document.title='Training chips · Chip review';document.querySelector('h1').textContent='Chip review';
  document.querySelector('header .lede').textContent='Training curation · test remains sealed · inference shown only when available';
+ // Assignment queues have their own data; loss still belongs to the selected model.
+ try{
+  const summary=await fetch(withRun('/api/model/summary'));
+  if(!summary.ok)throw Error('Loss data unavailable for the selected model');
+  chart(await summary.json());
+ }catch(error){$('curve').innerHTML='<text x="20" y="95" fill="#9eb2a4">Loss data unavailable for the selected model</text>';}
  const city=pageParams.get('city')||document.getElementById('studio-city')?.value||'ussfo';
  const response=await fetch('/api/training-queue?'+new URLSearchParams({city}));const payload=await response.json();
  if(!response.ok){$('gallery').textContent=payload.error||'Training assignments unavailable';return}
- document.querySelectorAll('.metrics,.workspace,.legend').forEach(e=>e.hidden=true);
+ document.querySelectorAll('.metrics,.legend').forEach(e=>e.hidden=true);
  for(const id of ['threshold','radius','sort'])$(id).closest('label')?.setAttribute('hidden','');
  $('run-detail').textContent=`${city} · ${payload.items.length} assigned training chips · ${payload.items.some(i=>i.inference_run)?'Prediction-guided offset candidates; not held-out scores':'Inference unavailable; no model scores'}`;
  const tags=[...new Set(payload.items.map(i=>i.tag))];
- $('assignment').innerHTML=['all',...tags].map(t=>`<option value="${esc(t)}">${esc(t==='all'?'All assignments':t)}</option>`).join('');
- $('assignment').value=tags.includes(pageParams.get('assignment'))?pageParams.get('assignment'):'all';
- $('review-status').value=pageParams.get('review-status')||(pageParams.get('unreviewed')==='1'?'pending':'all');
+ setReviewOptions('assignment',['all',...tags],v=>v==='all'?'All assignments':v);
  const statusResponse=await fetch('/api/curation-status?'+new URLSearchParams({city}));
  if(statusResponse.ok)curationStatus=(await statusResponse.json()).chips||{};
- window.studioViewState?.restore();
  function render(){
   const tag=$('assignment').value,items=payload.items.filter(i=>(tag==='all'||i.tag===tag)&&(matchesReviewStatus(curationStatus[i.chip_id]||i)));
   $('assignment-progress').textContent=`${payload.items.filter(i=>i.reviewed).length}/${payload.items.length} reviewed · ${items.length} match filters`;
@@ -208,13 +210,10 @@ async function initTraining(){
    return `<article class="card"><div class="card-head"><strong>${esc(i.chip_id)}</strong><span class="assignment-tag">${esc(i.tag)}</span>${i.reviewed?'<span>Reviewed</span>':''}<a class="action-link" href="${esc(url)}">Curate</a></div><div class="image"><a href="${esc(url)}"><img loading="lazy" src="${esc(image)}"></a></div><div class="facts">Training · ${i.trees} retained trees · ${i.large} large trees · ${i.collisions} collision exclusions · ${diagnosis}</div></article>`;
   }).join('')||'<div class="empty">No chips match these filters.</div>';
  }
- // Replace the validation-only assignment listener with the shared-view training renderer.
- const old=$('assignment'),replacement=old.cloneNode(true);replacement.value=old.value;old.replaceWith(replacement);
- for(const id of ['assignment','review-status','limit'])$(id).addEventListener('change',()=>{const u=new URL(location.href);u.searchParams.set('assignment',$('assignment').value);u.searchParams.set('review-status',$('review-status').value);u.searchParams.delete('unreviewed');u.searchParams.set('limit',$('limit').value);history.replaceState(null,'',u);render()});
- if(pageParams.has('limit'))$('limit').value=pageParams.get('limit');
+ reviewFiltersChanged=render;
  render();
 }
-if(['all','training-all'].includes(pageParams.get('split'))||pageParams.get('city')==='all')initAllReview();else if(trainingMode)initTraining();else init();
+if(['all','training-all','prediction-only'].includes(pageParams.get('split'))||pageParams.get('city')==='all')initAllReview().catch(reviewLoadError);else if(trainingMode)initTraining().then(reviewLoaded).catch(reviewLoadError);else init().catch(reviewLoadError);
 """
 
 

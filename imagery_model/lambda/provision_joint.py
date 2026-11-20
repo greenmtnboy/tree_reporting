@@ -3,6 +3,8 @@ import argparse
 import os
 import shlex
 import subprocess
+import time
+from datetime import datetime, UTC
 from pathlib import Path
 
 parser = argparse.ArgumentParser()
@@ -12,7 +14,8 @@ parser.add_argument("--ssh-key", required=True)
 parser.add_argument("--artifacts", type=Path, required=True)
 parser.add_argument("--experiment", required=True)
 parser.add_argument("--prepared-run", default="")
-parser.add_argument("--job", choices=["train", "drift", "train-inference", "ablation", "backbone-poc", "deepforest"], default="train")
+parser.add_argument("--hard-deadline-epoch", type=float)
+parser.add_argument("--job", choices=["train", "drift", "train-inference", "ablation", "backbone-poc", "deepforest", "prepared-finetune"], default="train")
 args = parser.parse_args()
 experiment = args.experiment
 if not experiment or any(c not in "abcdefghijklmnopqrstuvwxyz0123456789-" for c in experiment):
@@ -36,11 +39,23 @@ supervisor = (
     f"--key-file /home/ubuntu/.joint-lambda-key --status-file {root}/{experiment}-status.json"
 )
 job_hours = 2 if args.job == 'drift' else 8
+deadline_option = f'--on-active={job_hours + 1}h'
+training_env = ''
+if args.hard_deadline_epoch:
+    remaining = args.hard_deadline_epoch - time.time()
+    if remaining <= 7200:
+        raise TimeoutError('Too little allocation lifetime remains for this experiment')
+    # Stop optimization one hour before termination, bound the job 30 min before
+    # termination, and reserve the remaining half hour for verified collection.
+    job_hours = (remaining - 1800) / 3600
+    calendar = datetime.fromtimestamp(args.hard_deadline_epoch, UTC).strftime('%Y-%m-%d %H:%M:%S UTC')
+    deadline_option = '--on-calendar=' + shlex.quote(calendar)
+    training_env = f'--setenv=TREE_ML_TRAIN_UNTIL={args.hard_deadline_epoch - 3600} '
 supervisor += f' --timeout-hours {job_hours}'
 # A separate deadline survives failure of the training supervisor itself.
 subprocess.run(ssh + [supervisor + " --check-api"], check=True)
 subprocess.run(ssh + [
-    f"sudo systemd-run --unit=tree-joint-deadline --on-active={job_hours + 1}h "
+    f"sudo systemd-run --unit=tree-joint-deadline {deadline_option} "
     f"{supervisor} --terminate-only"
 ], check=True)
 subprocess.run(ssh + [
@@ -51,6 +66,7 @@ subprocess.run(ssh + [
     f"--setenv=TREE_ML_DATA_ROOT={root} --setenv=TREE_ML_EXPERIMENT={experiment} "
     f"--setenv=TREE_ML_PREPARED_RUN={shlex.quote(args.prepared_run)} "
     f"--setenv=TREE_ML_JOB={args.job} "
+    f"{training_env}"
     f"{supervisor} --handoff-seconds 1800 /usr/bin/bash lambda/joint.sh"
 ], check=True)
-print("Started tree-joint service with automatic termination and independent 9-hour deadline.")
+print("Started tree-joint with automatic termination and independent deadline:", deadline_option)

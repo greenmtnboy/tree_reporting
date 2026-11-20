@@ -127,7 +127,13 @@ jobs:
       run: |
         uv venv --python 3.13
         uv pip install torch==2.10.0 torchvision==0.25.0 --index-url https://download.pytorch.org/whl/cpu
-        uv pip install -e . pytest pillow rasterio pyproj==3.7.2 google-cloud-storage==3.17.1
+        uv pip install -e . pytest pillow rasterio pyproj==3.7.2 google-cloud-storage==3.17.1 shapely requests
+    # The curation server's review-state encoder and chip ranking are a Rust
+    # extension (native/review_native) the review modules import unconditionally;
+    # the runner image ships cargo.
+    - name: Build the native review extension
+      working-directory: ./imagery_model
+      run: .venv/bin/python native/build_review_native.py
     - name: Run all imagery and reviewer tests
       working-directory: ./imagery_model
       env:

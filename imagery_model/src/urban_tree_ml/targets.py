@@ -19,12 +19,13 @@ class PointLabel:
 
 @dataclass(frozen=True)
 class DetectionMaskRegion:
-    """A manual circular override in input-image pixel coordinates."""
+    """A polygon or legacy circular override in input-image pixel coordinates."""
 
     x: float
     y: float
     radius: float
     mode: str
+    polygon: tuple[tuple[float, float], ...] = ()
 
 
 def point_label_output_cell(
@@ -124,6 +125,7 @@ def build_targets(
     shape = (output_height, output_width)
     center = np.zeros(shape, dtype=np.float32)
     detection_mask = np.zeros(shape, dtype=np.float32)
+    confirmed_background_mask = np.zeros(shape, dtype=np.float32)
     dbh_mask = np.zeros(shape, dtype=np.float32)
     genus_mask = np.zeros(shape, dtype=np.float32)
     species_mask = np.zeros(shape, dtype=np.float32)
@@ -132,6 +134,7 @@ def build_targets(
     crown_mask = np.zeros(shape, dtype=np.float32)
     genus = np.full(shape, -1, dtype=np.int64)
     species = np.full(shape, -1, dtype=np.int64)
+    single_tree_groups = np.zeros(shape, dtype=np.int32)
 
     if valid_mask is None:
         downsampled_valid = np.ones(shape, dtype=bool)
@@ -140,6 +143,8 @@ def build_targets(
 
     if background_mode == "all":
         detection_mask[downsampled_valid] = 1.0
+    elif background_mode == 'curated_only':
+        pass  # Only retained positives and explicit regions enable supervision.
     elif background_mode == "ndvi_positive_unlabeled":
         if ndvi is None:
             raise ValueError("ndvi is required for ndvi_positive_unlabeled background mode")
@@ -208,32 +213,79 @@ def build_targets(
         ignored = (grid_x - x) ** 2 + (grid_y - y) ** 2 <= radius**2
         detection_mask[ignored] = 0.0
 
-    # Apply manual regions in creation order so a later, more specific annotation
-    # can replace an earlier one. Regions only alter center supervision; they do
-    # not manufacture or remove inventory labels.
+    # Woods provide the broad ignore mask; explicit background assertions take
+    # precedence regardless of serialization order. Preserve legacy ordering
+    # among other overrides. None manufacture or remove inventory labels.
+    from urban_tree_ml.single_tree import inside_polygon
     grid_y, grid_x = np.ogrid[:output_height, :output_width]
-    for region in mask_regions or []:
-        if region.mode not in {"protect", "confirmed-background"}:
+    for region in sorted(mask_regions or [], key=lambda r: r.mode != 'confirmed-woods'):
+        if region.mode == 'single-tree':
+            continue
+        if region.mode not in {"protect", "confirmed-background", "confirmed-woods", "copse", "shrub-mass"}:
             raise ValueError(f"unknown detection mask region mode: {region.mode}")
         if region.radius <= 0:
             raise ValueError("detection mask region radius must be positive")
+        if region.mode == 'confirmed-woods' and not region.polygon:
+            raise ValueError('Confirmed woods require a polygon')
         output_x = region.x / stride
         output_y = region.y / stride
         output_radius = region.radius / stride
-        local = (
+        local = inside_polygon(grid_x*stride, grid_y*stride, region.polygon) if region.polygon else (
             (grid_x - output_x) ** 2 + (grid_y - output_y) ** 2
             <= output_radius**2
         )
         local = np.logical_and(local, downsampled_valid)
-        detection_mask[local] = 0.0 if region.mode == "protect" else 1.0
+        detection_mask[local] = 1.0 if region.mode == "confirmed-background" else 0.0
+        confirmed_background_mask[local] = float(region.mode == 'confirmed-background')
+
+    # Explicit canopy assertions take precedence over generic protect/NDVI masks.
+    # Each retained labeled center owns its nearest part of the area: predictions
+    # and estimated crown circles never create an additional allowance.
+    from urban_tree_ml.single_tree import inside_polygon
+    next_group = 1
+    for region in mask_regions or []:
+        if region.mode != 'single-tree':
+            continue
+        local = inside_polygon(grid_x*stride, grid_y*stride, region.polygon) & downsampled_valid
+        detection_mask[local] = 1.0
+        confirmed_background_mask[local] = 0.0
+        single_tree_groups[local] = 0
+        cells = [point_label_output_cell(label, image_height=image_height, image_width=image_width, stride=stride)
+                 for index, label in enumerate(labels) if index not in collision_indices
+                 and inside_polygon(label.x, label.y, region.polygon)]
+        cells = [cell for cell in cells if cell is not None]
+        if cells:
+            distances = np.stack([(grid_x-x)**2+(grid_y-y)**2 for x,y in cells])
+            owners = distances.argmin(axis=0)
+            for i in range(len(cells)):
+                single_tree_groups[local & (owners == i)] = next_group
+                next_group += 1
 
     # A retained positive always wins if its center overlaps an exclusion or a
     # manual background region. Invalid background annotations therefore cannot
     # silently erase known trees.
     detection_mask[center > 0] = 1.0
+    # A group is one positive, not an assertion that its other pixels are empty.
+    # Clear competing single-tree/background penalties across the true footprint.
+    group_mask = np.zeros(shape, dtype=bool)
+    for region in mask_regions or []:
+        if region.mode not in {'copse', 'shrub-mass'}:
+            continue
+        local = inside_polygon(grid_x*stride, grid_y*stride, region.polygon) if region.polygon else (
+            (grid_x*stride-region.x)**2 + (grid_y*stride-region.y)**2 <= region.radius**2)
+        group_mask |= local & downsampled_valid
+    single_tree_groups[group_mask] = 0
+    detection_mask[group_mask] = 0
+    detection_mask[group_mask & (center == 1)] = 1  # ordinary positive weight
+    scoring_mask = detection_mask.copy()
+    scoring_mask[group_mask] = 0  # unmatched extras ignored, including near center
+    confirmed_background_mask[(center > 0) | group_mask | (detection_mask == 0)] = 0.0
     return {
         "center": center,
+        "confirmed_background_mask": confirmed_background_mask,
+        "single_tree_groups": single_tree_groups,
         "detection_mask": detection_mask,
+        "scoring_mask": scoring_mask,
         "dbh_mask": dbh_mask,
         "genus_mask": genus_mask,
         "species_mask": species_mask,

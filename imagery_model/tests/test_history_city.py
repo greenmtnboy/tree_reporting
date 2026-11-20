@@ -9,7 +9,8 @@ def test_shared_city_controls_history_and_all_cities_have_separate_charts():
 const label={hidden:false};
 const elements={'studio-city':{value:'ussfo'},'history-city':{value:'',closest:()=>label},dataset:{value:'boston'},chart:{innerHTML:''}};
 const $=id=>elements[id],esc=String,pct=v=>`${v*100}%`,f2=d=>d.f2;
-const catalog={runs:[{city:'USSFO',dataset:'sf',run_id:'sf',v:.4},{city:'USBOS',dataset:'boston',run_id:'bos',v:.2}]};
+const catalog={runs:[{city:'USSFO',dataset:'sf',imagery_key:'sf-2024',imagery_label:'San Francisco',run_id:'sf',v:.4},{city:'USBOS',dataset:'boston',imagery_key:'boston-2023',imagery_label:'Boston',run_id:'bos',v:.2}]};
+const scoreLabel=()=>"Fixed confidence";
 const metrics=r=>({detection:{f2:r.v,f1:r.v}});
 const compatible=()=>catalog.runs.filter(r=>!$('history-city').value||r.city===$('history-city').value);
 const location={search:'?city=ussfo'};

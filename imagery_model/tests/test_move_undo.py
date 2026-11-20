@@ -1,4 +1,5 @@
 from pathlib import Path
+from urban_tree_ml.editor_trees import EDITOR_TREES_JS
 import subprocess
 
 
@@ -9,7 +10,7 @@ def test_move_undo_groups_repeats_preserves_other_edits_and_saves():
     subprocess.run(['node','-e','''
 const reviews={a:{status:'aligned'},b:{status:'offset',image_x:4,image_y:6}},zoomFocusByScene={};
 let maskRegions=[],saves=0;const persist=()=>saves++;
-''' + code + '''
+''' + EDITOR_TREES_JS + code + '''
 rememberMove('s',['a','b']);
 reviews.a={status:'offset',image_x:10,image_y:12,crown_radius_m:7,note:'keep'};
 reviews.b.image_x=9;

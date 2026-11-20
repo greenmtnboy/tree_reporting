@@ -29,12 +29,14 @@ def reencode(frame, taxonomy, normalize):
 
 
 def validate_encoding(frame, taxonomy):
+    from urban_tree_ml.vegetation_groups import GROUP_CLASSES
     if len(set(taxonomy.species)) != len(taxonomy.species):
         raise ValueError("Duplicate species IDs")
     if len(set(taxonomy.genera)) != len(taxonomy.genera):
         raise ValueError("Duplicate genus IDs")
     if taxonomy.species_to_genus != [
-        taxonomy.genera.index(taxon_parts(s)[0]) for s in taxonomy.species
+        -1 if s in GROUP_CLASSES.values() else taxonomy.genera.index(taxon_parts(s)[0])
+        for s in taxonomy.species
     ]:
         raise ValueError("Species/genus mapping mismatch")
     for column, vocabulary in [("species", taxonomy.species), ("genus", taxonomy.genera)]:

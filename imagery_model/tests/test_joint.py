@@ -59,7 +59,7 @@ def test_warm_start_checks_hash_and_taxonomy(monkeypatch, tmp_path):
     output = tmp_path / "output"
     output.mkdir()
     train_and_evaluate([config], "new", output)
-    assert calls == [{"initial_checkpoint": str(checkpoint)}]
+    assert calls == [{"initial_checkpoint": str(checkpoint), "parent_taxonomy": None}]
     checkpoint.write_bytes(b"corrupt")
     with pytest.raises(ValueError, match="hash mismatch"):
         train_and_evaluate([config], "new", output)

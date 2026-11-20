@@ -4,8 +4,8 @@ from functools import lru_cache
 import json
 from pathlib import Path
 
-import numpy as np
-import pandas as pd
+import polars as pl
+from urban_tree_ml.review_tables import above_threshold, scan_predictions
 
 
 def detection(tp, fp, fn, ignored=0):
@@ -22,10 +22,16 @@ def ignored_ids(predictions, matched_ids):
     """Missing/nonfinite supervision means unavailable, not an inventory fallback."""
     if 'detection_mask_value' not in predictions:
         return None
-    if not np.isfinite(predictions.detection_mask_value).all():
+    if isinstance(predictions, pl.DataFrame):
+        frame = predictions if 'prediction_id' in predictions else predictions.with_row_index('prediction_id')
+    else:
+        # Offline callers may still pass a frame with an explicit saved index.
+        frame = pl.DataFrame({'prediction_id': predictions.index.to_numpy(),
+                              'detection_mask_value': predictions['detection_mask_value'].to_numpy()})
+    mask = pl.col('detection_mask_value')
+    if not frame.select(mask.is_finite().fill_null(False).all()).item():
         return None
-    return set(predictions.index[(predictions.detection_mask_value <= 0)
-                                 & ~predictions.index.isin(matched_ids)])
+    return set(frame.filter((mask <= 0) & ~pl.col('prediction_id').is_in(matched_ids))['prediction_id'])
 
 
 def goal_metrics(directory):
@@ -41,24 +47,25 @@ def goal_metrics(directory):
 def _cached(directory, version):
     directory = Path(directory)
     metrics = json.loads((directory/'metrics.json').read_text())
-    if metrics.get('split') == 'test':
+    if metrics.get('split') == 'test' or metrics.get('prediction_only'):
         return None
     import pyarrow.parquet as pq
     if 'detection_mask_value' not in pq.read_schema(directory/'predictions.parquet').names:
         return None
-    predictions = pd.read_parquet(directory/'predictions.parquet', columns=['score','detection_mask_value'])
-    predictions = predictions[predictions.score >= metrics['confidence_threshold']]
-    matches = pd.read_parquet(directory/'matches.parquet')
+    predictions = (scan_predictions(directory/'predictions.parquet').filter(above_threshold(metrics['confidence_threshold']))
+                   .select('prediction_id', 'detection_mask_value').collect())
+    if not predictions.select(pl.col('detection_mask_value').is_finite().fill_null(False).all()).item():
+        return None
+    matches = pl.read_parquet(directory/'matches.parquet', columns=['radius_m', 'prediction_index'])
     result = {}
     for radius, values in metrics['metrics_by_match_radius_m'].items():
-        ids = set(matches.loc[matches.radius_m == float(radius), 'prediction_index'].astype(int))
-        ignored = ignored_ids(predictions, ids)
-        if ignored is None:
-            return None
-        tp = len(set(predictions.index) & ids)
+        ids = matches.filter(pl.col('radius_m') == float(radius))['prediction_index']
+        matched = pl.col('prediction_id').is_in(ids.cast(pl.Int64).implode())
+        tp, ignored = predictions.select(
+            matched.sum(), ((pl.col('detection_mask_value') <= 0) & ~matched).sum()).row(0)
         # Bind the calculation to the same threshold and frozen matching export.
         if tp != values['detection']['true_positive']:
             return None
         fn = int(values['detection']['false_negative'])
-        result[radius] = {**values, 'detection': detection(tp, len(predictions)-tp-len(ignored), fn, len(ignored))}
+        result[radius] = {**values, 'detection': detection(tp, len(predictions)-tp-ignored, fn, ignored)}
     return result

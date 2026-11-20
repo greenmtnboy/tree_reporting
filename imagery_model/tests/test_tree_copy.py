@@ -32,6 +32,7 @@ const scenesById={s:{sample_ids:['t']}};
 const activeByScene={s:'t'}, samplesById={t:{target_x:10,target_y:20,world_x:100,world_y:200,transform_a:.6,transform_b:0,transform_d:0,transform_e:-.6}};
 const regionModeByScene={s:'confirmed-tree'},regionDraftByScene={},metadata={curation_schema_version:2},selectedAddedByScene={};
 const deselectedScenes=new Set();
+const checkNewTree=()=>true,isVegetationGroup=()=>false,selectStandaloneRegion=()=>{};
 let maskRegions=[],saved=0;
 const regionPixelScaleM=()=>.6,persist=()=>saved++,update=()=>{};
 ''' + code + '''

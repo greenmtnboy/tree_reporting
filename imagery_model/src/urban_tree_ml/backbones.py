@@ -1,8 +1,8 @@
 """Backbone adapters return NCHW features at strides 2, 4, 8, 16, 32."""
 import torch
 from torch import nn
-from torchvision.models import (ConvNeXt_Tiny_Weights, Swin_T_Weights,
-                                convnext_tiny, swin_t)
+from torchvision.models import (ConvNeXt_Tiny_Weights, Swin_T_Weights, Swin_S_Weights,
+                                convnext_tiny, swin_t, swin_s)
 
 
 def adapt_input(original, input_channels):
@@ -30,6 +30,8 @@ class HierarchicalEncoder(nn.Module):
             model = convnext_tiny(weights=ConvNeXt_Tiny_Weights.DEFAULT if pretrained else None)
         elif name == 'swin_tiny':
             model = swin_t(weights=Swin_T_Weights.DEFAULT if pretrained else None)
+        elif name == 'swin_small':
+            model = swin_s(weights=Swin_S_Weights.DEFAULT if pretrained else None)
         else:
             raise ValueError(f'Unsupported hierarchical backbone: {name}')
         self.features = model.features
@@ -45,5 +47,5 @@ class HierarchicalEncoder(nn.Module):
             feature = layer(feature)
             if index in (1, 3, 5, 7):
                 output.append(feature.permute(0,3,1,2).contiguous()
-                              if self.name == 'swin_tiny' else feature)
+                              if self.name in ('swin_tiny', 'swin_small') else feature)
         return output

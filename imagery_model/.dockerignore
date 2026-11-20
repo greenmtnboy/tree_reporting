@@ -8,4 +8,6 @@ lightning_logs
 wandb
 **/__pycache__
 **/*.pyc
+**/*.pyd
+**/target
 tests

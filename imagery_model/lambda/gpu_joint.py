@@ -56,4 +56,16 @@ assert losses['crown_loss'] > 0
 del model,image,prediction,batch,losses
 torch.cuda.empty_cache()
 print('Crown head CUDA forward/backward and weighted supervision passed.',flush=True)
-runpy.run_module('urban_tree_ml.joint', run_name='__main__')
+import os
+import sys
+from pathlib import Path
+experiment = sys.argv[sys.argv.index('--experiment') + 1]
+resolution_policy = Path(os.environ['TREE_ML_DATA_ROOT'])/'run-inputs'/experiment/'resolution-policy.json'
+if resolution_policy.exists():
+    from urban_tree_ml.gpu_preflight import run as high_resolution_preflight
+    high_resolution_preflight(Path(os.environ['TREE_ML_DATA_ROOT']), experiment)
+prepared = resolution_policy.parent/'prepared-finetune.json'
+frozen_pair = resolution_policy.parent/'frozen-parent.json'
+module = ('urban_tree_ml.frozen_pair_finetune' if frozen_pair.exists() else
+          'urban_tree_ml.prepared_finetune' if prepared.exists() else 'urban_tree_ml.joint')
+runpy.run_module(module, run_name='__main__')

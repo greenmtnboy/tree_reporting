@@ -28,7 +28,7 @@ def test_assignment_excludes_holdouts_and_done():
 def test_shared_template_has_single_entrypoint():
     assert MODEL_DEBUG_HTML.count("}init();") == 1
     html = MODEL_DEBUG_HTML.replace("}init();", "}" + TRAINING_REVIEW_SCRIPT)
-    assert "if(trainingMode)initTraining();else init();" in html
+    assert "if(trainingMode)initTraining().then(reviewLoaded).catch(reviewLoadError);else init().catch(reviewLoadError);" in html
     assert "Inference unavailable" in html
     assert "chips:items.map(i=>i.chip_id)" in html
     assert "queue:queueId" in html

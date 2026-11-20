@@ -10,12 +10,13 @@ from urban_tree_ml.chip_catalog import training_chip_catalog
 
 def test_tree_coverage_weights_density_deduplicates_and_requires_done(tmp_path):
     dataset=tmp_path/'chips'/'fixture';dataset.mkdir(parents=True)
-    (dataset/'summary.json').write_text(json.dumps({'source_raster':'fixture.vrt'}))
+    (tmp_path/'fixture.vrt').touch()
+    (dataset/'summary.json').write_text(json.dumps({'source_raster':str(tmp_path/'fixture.vrt')}))
     pd.DataFrame({'chip_id':['dense','sparse','heldout'],'split':['train','train','validation']}).to_parquet(dataset/'chips.parquet')
     pd.DataFrame([{'chip_id':'dense','tree_id':str(i),'split':'train'} for i in range(9)] +
                  [{'chip_id':'sparse','tree_id':'9','split':'train'},
                   {'chip_id':'heldout','tree_id':'v','split':'validation'}]).to_parquet(dataset/'labels.parquet')
-    context=SimpleNamespace(config=SimpleNamespace(paths=SimpleNamespace(root=tmp_path)),raster=Path('fixture.vrt'))
+    context=SimpleNamespace(config=SimpleNamespace(paths=SimpleNamespace(root=tmp_path)),raster=tmp_path/'fixture.vrt')
     manifest={'scenes':[{'scene_id':'done','sample_ids':['a','b'],'splits':['train']},
                         {'scene_id':'overlap','sample_ids':['a2'],'splits':['train']},
                         {'scene_id':'pending','sample_ids':['c'],'splits':['train']},

@@ -15,6 +15,7 @@ from urban_tree_ml.feedback import (
 
 def _write_review_manifest(review_dir: Path, raster: Path) -> None:
     review_dir.mkdir(parents=True)
+    raster.touch()
     samples = [
         {"sample_id": "train-aligned", "tree_id": "a", "split": "train"},
         {"sample_id": "train-offset", "tree_id": "b", "split": "train"},

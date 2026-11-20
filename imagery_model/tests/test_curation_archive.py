@@ -4,7 +4,7 @@ import zipfile
 
 import pytest
 
-from urban_tree_ml.curation_archive import acquisition, capture, restore, status
+from urban_tree_ml.curation_archive import acquisition, capture, restore, status, _read_revision
 from urban_tree_ml.feedback import _json_sha256, _review_state_sha256
 
 
@@ -40,10 +40,10 @@ def test_immutable_snapshot_and_inconsistent_bundle(tmp_path):
     raster, review, bundle = fixture(tmp_path)
     first = capture(tmp_path, bundle, review, raster)
     assert capture(tmp_path, bundle, review, raster) == first
-    packet = tmp_path / "curation-archive/revisions" / (first["revision"] + ".zip")
-    with zipfile.ZipFile(packet) as archive:
-        assert json.loads(archive.read("archive.json"))["acquisition_id"]
-        assert archive.read("reviews.json") == (bundle / "reviews.json").read_bytes()
+    packet = tmp_path / "curation-archive/revisions-v2" / (first["revision"] + ".json")
+    files = _read_revision(tmp_path / "curation-archive", first["revision"])
+    assert json.loads(files["archive.json"])["acquisition_id"]
+    assert files["reviews.json"] == (bundle / "reviews.json").read_bytes()
     (bundle / "reviews.json").write_text("{}")
     with pytest.raises(ValueError, match="changing"):
         capture(tmp_path, bundle, review, raster)
@@ -81,17 +81,18 @@ def test_restore_verifies_remote_pixels_and_never_overwrites(tmp_path, monkeypat
     root = tmp_path / "curation-archive"
     asset = acquisition(tmp_path, raster)["assets"][0]
 
-    def transfer(*args):
-        source, target = str(args[3]), Path(args[4])
-        key = source.removeprefix("gs://test/")
-        if args[2] == "rsync":
-            for path in (root / "images").iterdir():
-                (target / path.name).write_bytes(b"bad pixels" if corrupt else path.read_bytes())
-        elif key.startswith("objects/"):
-            assert key == "objects/" + asset["sha256"]
-            target.write_bytes(raster.read_bytes())
-        else:
-            target.write_bytes((root / key).read_bytes())
+    def transfer(*args, input=None):
+        target = Path(args[4])
+        sources = input.splitlines() if input is not None else [str(args[3])]
+        for source in sources:
+            key = source.removeprefix("gs://test/")
+            output = target / Path(key).name if input is not None else target
+            if key.startswith("objects/"):
+                assert key == "objects/" + asset["sha256"]
+                content = raster.read_bytes()
+            else:
+                content = (root / key).read_bytes()
+            output.write_bytes(b"bad pixels" if corrupt and key.startswith("images/") else content)
         return ""
 
     monkeypatch.setattr("urban_tree_ml.curation_archive.command", transfer)

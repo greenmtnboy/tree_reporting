@@ -1,8 +1,18 @@
 """Image-scoped, tree-keyed corrections and geographic area masks (schema 2)."""
-from copy import deepcopy
+from urban_tree_ml.review_native import copy_json
 from functools import lru_cache
 
 from pyproj import Transformer
+
+
+def peer_split_provenance(record):
+    """Record import history without changing a sample's geographic split."""
+    fields = ('peer_source_split', 'peer_target_split')
+    if not any(key in record for key in fields):
+        return {}
+    if any(record.get(key) not in {'train', 'validation'} for key in fields):
+        raise ValueError('Invalid peer development split provenance')
+    return {key: record[key] for key in fields}
 
 
 @lru_cache(maxsize=16)
@@ -38,10 +48,10 @@ def tree_records(reviews, manifest):
 
 def expand_tree_records(records, manifest):
     result={}
-    projector=Transformer.from_crs('EPSG:4326',manifest['metadata']['curation_crs'],always_xy=True) if manifest['metadata'].get('curation_crs') else None
+    projector=transformers(manifest['metadata']['curation_crs'])[0] if manifest['metadata'].get('curation_crs') else None
     for sample in manifest['samples']:
         if str(sample['tree_id']) not in records:continue
-        record=deepcopy(records[str(sample['tree_id'])])
+        record=copy_json(records[str(sample['tree_id'])])
         if 'corrected_longitude' in record:
             x,y=projector.transform(record.pop('corrected_longitude'),record.pop('corrected_latitude'))
             ox,oy=projector.transform(sample['longitude'],sample['latitude'])
@@ -52,9 +62,8 @@ def expand_tree_records(records, manifest):
 
 def geographic_regions(regions, manifest):
     crs = manifest['metadata']['curation_crs']
-    forward = Transformer.from_crs('EPSG:4326', crs, always_xy=True)
-    inverse = Transformer.from_crs(crs, 'EPSG:4326', always_xy=True)
-    samples = {str(s['sample_id']): s for s in manifest['samples']}
+    forward, inverse = transformers(crs)
+    samples = None
     result = []
     for region in regions:
         if 'longitude' in region and 'latitude' in region:
@@ -62,6 +71,8 @@ def geographic_regions(regions, manifest):
         elif 'world_x' in region and 'world_y' in region:
             lon, lat = inverse.transform(region['world_x'], region['world_y'])
         else:
+            if samples is None:
+                samples = {str(s['sample_id']): s for s in manifest['samples']}
             anchor = samples[region['anchor_sample_id']]
             x, y = forward.transform(anchor['longitude'], anchor['latitude'])
             lon, lat = inverse.transform(x + region['east_m'], y + region['north_m'])
@@ -70,6 +81,21 @@ def geographic_regions(regions, manifest):
                 raise ValueError(f'Invalid crown {field}')
         result.append({**{k: region[k] for k in ['region_id','mode','radius_m','source','created_at','tree_id','species','identification_source'] if k in region},
                        'longitude': lon, 'latitude': lat})
+        result[-1].update(peer_split_provenance(region))
+        if region.get('mode') == 'confirmed-tree':
+            from urban_tree_ml.tree_observations import normalize_observations
+            result[-1].update(normalize_observations(region))
+        if region.get('mode') in {'single-tree', 'confirmed-woods'} or 'polygon' in region or 'world_polygon' in region:
+            from urban_tree_ml.single_tree import polygon_points
+            points = region.get('polygon')
+            if points is None and 'world_polygon' in region:
+                world = polygon_points(region['world_polygon'])
+                xs, ys = inverse.transform(world[:, 0], world[:, 1])
+                points = list(map(list, zip(xs, ys)))
+            points = polygon_points(points)
+            if (abs(points[:, 0]) > 180).any() or (abs(points[:, 1]) > 90).any():
+                raise ValueError('Invalid geographic polygon')
+            result[-1]['polygon'] = points.tolist()
     return result
 
 
@@ -90,7 +116,7 @@ def storage_payload(payload, manifest):
 
 def migrate_crown_storage(payload):
     """Lossless/idempotent schema-2 upgrade; never replace a tree's center."""
-    result = deepcopy(payload)
+    result = copy_json(payload)
     records = result.setdefault('tree_reviews', {})
     added = result.setdefault('added_trees', {})
     regions = []

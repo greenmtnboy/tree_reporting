@@ -38,6 +38,6 @@ def test_unknown_mask_is_not_credited_or_silently_penalized():
 
 
 def test_history_bests_and_chart_use_goal_metrics():
-    assert "run.goal_metrics?.[$('radius').value]?.detection||{}" in RUN_HISTORY_HTML
+    assert "run.goal_metrics?.[radius]?.detection||{}" in RUN_HISTORY_HTML
     assert "['Goal-aligned F2'" in RUN_HISTORY_HTML
     assert 'highest goal-aligned F2' in RUN_HISTORY_HTML

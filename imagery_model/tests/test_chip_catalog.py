@@ -9,7 +9,8 @@ from urban_tree_ml.chip_catalog import training_chip_catalog
 def test_training_progress_does_not_count_partial_or_validation_chips(tmp_path):
     directory = tmp_path / "chips" / "dataset"
     directory.mkdir(parents=True)
-    (directory / "summary.json").write_text(json.dumps({"source_raster": "/data/sf.vrt"}))
+    (tmp_path / "sf.vrt").touch()
+    (directory / "summary.json").write_text(json.dumps({"source_raster": str(tmp_path / "sf.vrt")}))
     pd.DataFrame({"chip_id": ["one", "two", "three"],
                   "split": ["train", "train", "validation"]}).to_parquet(
                       directory / "chips.parquet")
@@ -35,6 +36,7 @@ def test_explicit_review_keeps_previously_reviewed_targets(tmp_path):
     from urban_tree_ml.chip_catalog import next_training_truth
     directory = tmp_path/'chips'/'dataset'
     directory.mkdir(parents=True)
+    (tmp_path / "sf.vrt").touch()
     pd.DataFrame({'chip_id':['one','one'], 'split':['train','train'],
                   'tree_id':['a','b']}).to_parquet(directory/'labels.parquet')
     inventory = tmp_path/'inventory'/'usbos'
@@ -46,6 +48,6 @@ def test_explicit_review_keeps_previously_reviewed_targets(tmp_path):
     state={'scene_reviews':{'done':{'done':True}},'reviews':{'a':{'status':'aligned'}}}
     progress={'pending':['one'],'dataset':'dataset'}
     _,truth=next_training_truth(context,progress,manifest,state,include_reviewed=True)
-    assert set(truth.tree_id)=={'a','b'}
+    assert set(truth['tree_id'])=={'a','b'}
     _,pending=next_training_truth(context,progress,manifest,state)
-    assert set(pending.tree_id)=={'b'}
+    assert set(pending['tree_id'])=={'b'}
