@@ -147,7 +147,7 @@
 
           <h2>What we don't do</h2>
           <ul>
-            <li>We don't sell your data. Public contributor totals are anonymous unless you choose to share a name.</li>
+            <li>We don't sell your data. The public contributor list shows your own totals only if you choose to share a name; otherwise they are part of one combined anonymous total.</li>
             <li>We don't email you unless you explicitly contact us first.</li>
           </ul>
         </div>

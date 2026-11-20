@@ -52,9 +52,10 @@ onMounted(load)
   <form class="credit" @submit.prevent="save">
     <fieldset :disabled="!ready || busy">
       <legend>Public contributor credit</legend>
-      <p>The arborary.world contributor list shows your tree totals anonymously by default.</p>
+      <p>Unless you share a name, the arborary.world contributor list only counts your trees in one combined total for all anonymous contributors.</p>
       <label><input v-model="share" type="checkbox" @change="message = ''"> Share a name beside my totals</label>
-      <label v-if="share">Public name <input v-model="name" type="text" maxlength="60" required @input="message = ''"></label>
+      <label v-if="share">Public name <input v-model="name" type="text" maxlength="60" required aria-describedby="credit-name-hint" @input="message = ''"></label>
+      <p v-if="share" id="credit-name-hint" class="hint">Shown publicly beside your own totals. Use a nickname or first name, not an email address.</p>
       <button type="submit" :disabled="share && !name.trim()">Save preference</button>
     </fieldset>
     <p v-if="message" role="status">{{ message }}</p>
@@ -66,6 +67,7 @@ onMounted(load)
 .credit fieldset { display: grid; gap: .7rem; margin: 0; padding: 1rem; border: 1px solid var(--color-moss); }
 .credit legend { padding: 0 .3rem; font-weight: 600; }
 .credit p { margin: 0; }
+.credit .hint { font-size: .85em; opacity: .8; }
 .credit button { justify-self: start; padding: .4rem .7rem; cursor: pointer; }
 .credit input[type="text"] { max-width: 100%; padding: .3rem; }
 </style>

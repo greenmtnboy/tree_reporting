@@ -25,21 +25,51 @@ def trees_by_user(records):
     return result
 
 
-def contributor_rows(checkins, published_modifications, preferences):
+def public_name(preference):
+    """The name a contributor chose to show, or None without explicit consent."""
+    name = preference.get("publicName")
+    if preference.get("shareName") is not True or not isinstance(name, str):
+        return None
+    name = name.strip()
+    return name if 0 < len(name) <= 60 else None
+
+
+def contributor_feed(checkins, published_modifications, preferences):
+    """Named contributors get a row each; everyone else is one combined total.
+
+    An anonymous row of its own would still be a fingerprint: its counts are
+    unique near the top, move by one with each public tree check-in count, and
+    keep the numbers a withdrawn name had the day before. So contributors who
+    have not chosen a name only add to `anonymous`, whose counts are distinct
+    trees across the whole group.
+    """
     visits = trees_by_user(checkins)
     updates = trees_by_user(published_modifications)
     rows = []
+    anonymous = {"contributors": 0, "checked_in": set(), "updated": set()}
     for uid in visits.keys() | updates.keys():
-        preference = preferences.get(uid, {})
-        name = preference.get("publicName")
-        name = name.strip() if preference.get("shareName") is True and isinstance(name, str) else ""
+        name = public_name(preferences.get(uid, {}))
+        if name is None:
+            anonymous["contributors"] += 1
+            anonymous["checked_in"] |= visits[uid]
+            anonymous["updated"] |= updates[uid]
+            continue
         rows.append({
-            "name": name if 0 < len(name) <= 60 else None,
+            "name": name,
             "checked_in": len(visits[uid]),
             "updated": len(updates[uid]),
             "trees": len(visits[uid] | updates[uid]),
         })
-    return sorted(rows, key=lambda r: (-r["trees"], -r["checked_in"], -r["updated"], r["name"] or ""))
+    rows.sort(key=lambda r: (-r["trees"], -r["checked_in"], -r["updated"], r["name"]))
+    return {
+        "contributors": rows,
+        "anonymous": {
+            "contributors": anonymous["contributors"],
+            "checked_in": len(anonymous["checked_in"]),
+            "updated": len(anonymous["updated"]),
+            "trees": len(anonymous["checked_in"] | anonymous["updated"]),
+        },
+    }
 
 
 def publish():
@@ -63,15 +93,15 @@ def publish():
     visits = db.collection("checkins").select(fields)
     updates = db.collection("treeModifications").where(filter=FieldFilter("status", "==", "published")).select(fields)
     preferences = db.collection("contributorPreferences").select(["shareName", "publicName"])
-    rows = contributor_rows(
+    feed = contributor_feed(
         (doc.to_dict() for doc in visits.stream()),
         (doc.to_dict() for doc in updates.stream()),
         {doc.id: doc.to_dict() for doc in preferences.stream()},
     )
     body = json.dumps({
-        "schema_version": 1,
+        "schema_version": 2,
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "contributors": rows,
+        **feed,
     }, ensure_ascii=False).encode("utf-8")
     storage.put(BUCKET, OBJECT, body, if_generation_match=generation, cache_control="no-store")
     print(f"::trilogy-output name=contributor_feed kind=link value={PUBLIC_HOST}/{BUCKET}/{OBJECT}", flush=True)
