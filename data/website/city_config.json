@@ -116,5 +116,11 @@
   "GBEDI": { "name": "Edinburgh", "center": [-3.1883, 55.9533] },
   "GBBFS": { "name": "Belfast", "center": [-5.9301, 54.5973] },
   "CAGLP": { "name": "Guelph", "center": [-80.2482, 43.5448] },
-  "USPVD": { "name": "Providence", "center": [-71.4128, 41.824] }
+  "USPVD": { "name": "Providence", "center": [-71.4128, 41.824] },
+  "AUCKB": { "name": "Cockburn", "center": [115.83, -32.12] },
+  "AUBXG": { "name": "Bendigo", "center": [144.279, -36.757] },
+  "GBBSK": { "name": "Basingstoke", "center": [-1.087, 51.266] },
+  "GBYRK": { "name": "York", "center": [-1.082, 53.959] },
+  "NZHAS": { "name": "Hastings", "center": [176.84, -39.64] },
+  "CARED": { "name": "Red Deer", "center": [-113.81, 52.268] }
 }

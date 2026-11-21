@@ -2022,6 +2022,12 @@ def _sanitize_taxon(value: str | None) -> str | None:
 # Keyed by city code so `community_source_for` can derive the community label
 # and so tests can assert the two lists agree.
 MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
+    "CARED": ("RED_DEER_OPENDATA",),
+    "NZHAS": ("HASTINGS_OPENDATA",),
+    "GBYRK": ("YORK_OPENDATA",),
+    "GBBSK": ("BASINGSTOKE_OPENDATA",),
+    "AUBXG": ("BENDIGO_OPENDATA",),
+    "AUCKB": ("COCKBURN_OPENDATA",),
     "USPVD": ("PROVIDENCE_OPENDATA",),
     "CAGLP": ("GUELPH_OPENDATA",),
     "GBBFS": ("BELFAST_OPENDATA",),
@@ -2172,6 +2178,12 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # overlapping rows under one cluster id and publishes only the survivor — see
 # tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
+    "CARED": "OSM_CARED",
+    "NZHAS": "OSM_NZHAS",
+    "GBYRK": "OSM_GBYRK",
+    "GBBSK": "OSM_GBBSK",
+    "AUBXG": "OSM_AUBXG",
+    "AUCKB": "OSM_AUCKB",
     "USPVD": "OSM_USPVD",
     "CAGLP": "OSM_CAGLP",
     "GBBFS": "OSM_GBBFS",
@@ -2901,6 +2913,12 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
+    "CARED": (52.2, 52.34, -113.89, -113.7),
+    "NZHAS": (-39.85, -39.13, 176.54, 177.05),
+    "GBYRK": (53.87, 54.05, -1.21, -0.92),
+    "GBBSK": (51.15, 51.4, -1.45, -0.9),
+    "AUBXG": (-36.95, -36.55, 144.05, 144.5),
+    "AUCKB": (-32.2, -32.06, 115.73, 115.93),
     "USPVD": (41.77, 41.87, -71.48, -71.37),
     "CAGLP": (43.475, 43.61, -80.33, -80.15),
     "GBBFS": (54.53, 54.66, -6.05, -5.8),
@@ -3076,6 +3094,18 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "CARED": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "NZHAS": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "GBYRK": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "GBBSK": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "AUBXG": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "AUCKB": 10,
     # osm_dedup_validation 2026-11-21: 6m 1273/53 (4.2%), marginal 3.8; 8m 1.8.
     "USPVD": 6,
     # osm_dedup_validation 2026-11-21: 4m 9471/666 (7.0%), marginal 5.7; 6m 0.8.
@@ -3674,6 +3704,12 @@ DEDUP_CELL_METRES: dict[str, int] = {
 Box = tuple[float, float, float, float]
 
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
+    'CARED': ((52.2, 52.34, -113.89, -113.7),),
+    'NZHAS': ((-39.85, -39.13, 176.54, 177.05),),
+    'GBYRK': ((53.87, 54.05, -1.21, -0.92),),
+    'GBBSK': ((51.15, 51.4, -1.45, -0.9),),
+    'AUBXG': ((-36.95, -36.55, 144.05, 144.5),),
+    'AUCKB': ((-32.2, -32.06, 115.73, 115.93),),
     'USPVD': ((41.77, 41.87, -71.48, -71.37),),
     'CAGLP': ((43.475, 43.61, -80.33, -80.15),),
     'GBBFS': ((54.53, 54.66, -6.05, -5.8),),

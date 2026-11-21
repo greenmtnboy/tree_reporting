@@ -141,6 +141,12 @@ select * from (values
     ('GBEDI', 651),
     ('GBBFS', 651),
     ('CAGLP', 334),
-    ('USPVD', 339)
+    ('USPVD', 339),
+    ('AUCKB', 206),
+    ('AUBXG', 176),
+    ('GBBSK', 663),
+    ('GBYRK', 651),
+    ('NZHAS', 171),
+    ('CARED', 386)
 ) as t(city, ecoregion_id)
 ''';

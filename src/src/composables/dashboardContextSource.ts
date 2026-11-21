@@ -728,6 +728,42 @@ const CITY_DASHBOARD_CONTEXT: Record<
     biome: 'Temperate Broadleaf & Mixed Forests',
     realm: 'nearctic',
   },
+  AUCKB: {
+    ecoregionId: 206, // Southwest Australia woodlands
+    usdaZone: 11,
+    biome: 'Mediterranean Forests, Woodlands & Scrub',
+    realm: 'australasia',
+  },
+  AUBXG: {
+    ecoregionId: 176, // Southeast Australia temperate forests
+    usdaZone: 9,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'australasia',
+  },
+  GBBSK: {
+    ecoregionId: 663, // English Lowlands beech forests
+    usdaZone: 8,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'palearctic',
+  },
+  GBYRK: {
+    ecoregionId: 651, // Celtic broadleaf forests
+    usdaZone: 8,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'palearctic',
+  },
+  NZHAS: {
+    ecoregionId: 171, // New Zealand North Island temperate forests
+    usdaZone: 9,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'australasia',
+  },
+  CARED: {
+    ecoregionId: 386, // Canadian Aspen forests and parklands
+    usdaZone: 3,
+    biome: 'Temperate Grasslands, Savannas & Shrublands',
+    realm: 'nearctic',
+  },
 }
 
 function escapeStringLiteral(value: string) {

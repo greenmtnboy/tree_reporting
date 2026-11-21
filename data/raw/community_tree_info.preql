@@ -128,6 +128,12 @@ property <*>.gbedi_community_data_updated_through datetime; # when approved comm
 property <*>.gbbfs_community_data_updated_through datetime; # when approved community submissions for GBBFS are through
 property <*>.caglp_community_data_updated_through datetime; # when approved community submissions for CAGLP are through
 property <*>.uspvd_community_data_updated_through datetime; # when approved community submissions for USPVD are through
+property <*>.auckb_community_data_updated_through datetime; # when approved community submissions for AUCKB are through
+property <*>.aubxg_community_data_updated_through datetime; # when approved community submissions for AUBXG are through
+property <*>.gbbsk_community_data_updated_through datetime; # when approved community submissions for GBBSK are through
+property <*>.gbyrk_community_data_updated_through datetime; # when approved community submissions for GBYRK are through
+property <*>.nzhas_community_data_updated_through datetime; # when approved community submissions for NZHAS are through
+property <*>.cared_community_data_updated_through datetime; # when approved community submissions for CARED are through
 
 # The community *rows* are declared per city too, in each city's own tree model,
 # as a `complete where city = 'X' and {code}_source = 'COMMUNITY_X'` partition.

@@ -11,6 +11,12 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
+  { city: 'Red Deer', label: 'TODO: Red Deer tree inventory source', url: 'TODO' },
+  { city: 'Hastings', label: 'TODO: Hastings tree inventory source', url: 'TODO' },
+  { city: 'York', label: 'TODO: York tree inventory source', url: 'TODO' },
+  { city: 'Basingstoke', label: 'TODO: Basingstoke tree inventory source', url: 'TODO' },
+  { city: 'Bendigo', label: 'TODO: Bendigo tree inventory source', url: 'TODO' },
+  { city: 'Cockburn', label: 'TODO: Cockburn tree inventory source', url: 'TODO' },
   { city: 'Providence', label: 'City of Providence Parks Department, Forestry Division - Tree Inventory (TreeKeeper; no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://providenceri.treekeepersoftware.com/' },
   { city: 'Guelph', label: 'City of Guelph Open Data - Trees (Open Government Licence - City of Guelph; contains information licensed under the Open Government Licence - City of Guelph)', url: 'https://explore.guelph.ca/datasets/cityofguelph::trees' },
   { city: 'Belfast', label: 'Belfast City Council - Belfast Trees (Open Government Licence v3.0)', url: 'https://www.opendatani.gov.uk/dataset/belfast-trees' },
@@ -159,6 +165,12 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
+  { city: 'Red Deer', label: 'TODO: Red Deer landmark source' },
+  { city: 'Hastings', label: 'TODO: Hastings landmark source' },
+  { city: 'York', label: 'TODO: York landmark source' },
+  { city: 'Basingstoke', label: 'TODO: Basingstoke landmark source' },
+  { city: 'Bendigo', label: 'TODO: Bendigo landmark source' },
+  { city: 'Cockburn', label: 'TODO: Cockburn landmark source' },
   { city: 'Providence', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
   { city: 'Guelph', label: 'City of Guelph Heritage Register - Cultural Heritage Resources (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://explore.guelph.ca/apps/cityofguelph::cultural-heritage-resources' },
   { city: 'Belfast', label: 'Department for Communities NI, Historic Environment Division - listed buildings and scheduled monuments (Open Government Licence v3.0)', url: 'https://www.opendatani.gov.uk/dataset/historic-environment-division-esri-rest-api' },

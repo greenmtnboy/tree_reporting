@@ -2340,9 +2340,27 @@ timeout_seconds = 1800
 memory_mb = 2048
 
 [[cloud.job]]
+key = "derived-aubxg"
+name = "urban-tree-derived-aubxg"
+entrypoint = "raw/aubxg/bendigo_tree_derived.preql"
+operation = "refresh"
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
 key = "derived-aucbr"
 name = "urban-tree-derived-aucbr"
 entrypoint = "raw/aucbr/canberra_tree_derived.preql"
+operation = "refresh"
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "derived-auckb"
+name = "urban-tree-derived-auckb"
+entrypoint = "raw/auckb/cockburn_tree_derived.preql"
 operation = "refresh"
 schedule = "0 0 12 * * SUN,WED"
 timeout_seconds = 1800
@@ -2570,6 +2588,15 @@ name = "urban-tree-derived-caque"
 entrypoint = "raw/caque/quebec_tree_derived.preql"
 operation = "refresh"
 schedule = "0 40 17 * * WED,SAT"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "derived-cared"
+name = "urban-tree-derived-cared"
+entrypoint = "raw/cared/red_deer_tree_derived.preql"
+operation = "refresh"
+schedule = "0 0 12 * * SUN,WED"
 timeout_seconds = 1800
 memory_mb = 2048
 
@@ -2853,6 +2880,15 @@ timeout_seconds = 1800
 memory_mb = 2048
 
 [[cloud.job]]
+key = "derived-gbbsk"
+name = "urban-tree-derived-gbbsk"
+entrypoint = "raw/gbbsk/basingstoke_tree_derived.preql"
+operation = "refresh"
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
 key = "derived-gbedi"
 name = "urban-tree-derived-gbedi"
 entrypoint = "raw/gbedi/edinburgh_tree_derived.preql"
@@ -2876,6 +2912,15 @@ name = "urban-tree-derived-gbnot"
 entrypoint = "raw/gbnot/nottingham_tree_derived.preql"
 operation = "refresh"
 schedule = "0 30 19 * * SAT,TUE"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "derived-gbyrk"
+name = "urban-tree-derived-gbyrk"
+entrypoint = "raw/gbyrk/york_tree_derived.preql"
+operation = "refresh"
+schedule = "0 0 12 * * SUN,WED"
 timeout_seconds = 1800
 memory_mb = 2048
 
@@ -2973,6 +3018,15 @@ memory_mb = 2048
 key = "derived-nzchc"
 name = "urban-tree-derived-nzchc"
 entrypoint = "raw/nzchc/christchurch_tree_derived.preql"
+operation = "refresh"
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "derived-nzhas"
+name = "urban-tree-derived-nzhas"
+entrypoint = "raw/nzhas/hastings_tree_derived.preql"
 operation = "refresh"
 schedule = "0 0 12 * * SUN,WED"
 timeout_seconds = 1800
@@ -5643,6 +5697,210 @@ operation = "refresh"
 # The next free two-minute Sunday slot; every one must land before the 05:00
 # union (tests/test_cloud_jobs.py).
 schedule = "0 58 1 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "city-auckb"
+name = "urban-tree-city-auckb"
+entrypoint = "raw/auckb/cockburn_tree_info.preql"
+operation = "refresh"
+# Starts in the twice-weekly tier, placed the day after this city's OSM
+# extract. Measure before moving it: `portal_cadence.py --record --city AUCKB`.
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "osm-auckb"
+name = "urban-tree-osm-auckb"
+entrypoint = "osm_staging/auckb_osm_staging.preql"
+operation = "refresh"
+# Overpass allows two slots per client IP and answers an over-budget request
+# with HTTP 200 carrying an error remark, so a collision looks like a city with
+# no trees in OSM. This minute must be used by no other extract job.
+schedule = "0 15 11 * * MON"
+timeout_seconds = 1800
+memory_mb = 1024
+
+[[cloud.job]]
+key = "refresh-landmarks-auckb"
+name = "urban-tree-landmarks-refresh-auckb"
+entrypoint = "raw/auckb/cockburn_landmarks.preql"
+operation = "refresh"
+# The next free two-minute Sunday slot; every one must land before the 05:00
+# union (tests/test_cloud_jobs.py).
+schedule = "0 0 0 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "city-aubxg"
+name = "urban-tree-city-aubxg"
+entrypoint = "raw/aubxg/bendigo_tree_info.preql"
+operation = "refresh"
+# Starts in the twice-weekly tier, placed the day after this city's OSM
+# extract. Measure before moving it: `portal_cadence.py --record --city AUBXG`.
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "osm-aubxg"
+name = "urban-tree-osm-aubxg"
+entrypoint = "osm_staging/aubxg_osm_staging.preql"
+operation = "refresh"
+# Overpass allows two slots per client IP and answers an over-budget request
+# with HTTP 200 carrying an error remark, so a collision looks like a city with
+# no trees in OSM. This minute must be used by no other extract job.
+schedule = "0 15 11 * * TUE"
+timeout_seconds = 1800
+memory_mb = 1024
+
+[[cloud.job]]
+key = "refresh-landmarks-aubxg"
+name = "urban-tree-landmarks-refresh-aubxg"
+entrypoint = "raw/aubxg/bendigo_landmarks.preql"
+operation = "refresh"
+# The next free two-minute Sunday slot; every one must land before the 05:00
+# union (tests/test_cloud_jobs.py).
+schedule = "0 2 0 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "city-gbbsk"
+name = "urban-tree-city-gbbsk"
+entrypoint = "raw/gbbsk/basingstoke_tree_info.preql"
+operation = "refresh"
+# Starts in the twice-weekly tier, placed the day after this city's OSM
+# extract. Measure before moving it: `portal_cadence.py --record --city GBBSK`.
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "osm-gbbsk"
+name = "urban-tree-osm-gbbsk"
+entrypoint = "osm_staging/gbbsk_osm_staging.preql"
+operation = "refresh"
+# Overpass allows two slots per client IP and answers an over-budget request
+# with HTTP 200 carrying an error remark, so a collision looks like a city with
+# no trees in OSM. This minute must be used by no other extract job.
+schedule = "0 15 11 * * WED"
+timeout_seconds = 1800
+memory_mb = 1024
+
+[[cloud.job]]
+key = "refresh-landmarks-gbbsk"
+name = "urban-tree-landmarks-refresh-gbbsk"
+entrypoint = "raw/gbbsk/basingstoke_landmarks.preql"
+operation = "refresh"
+# The next free two-minute Sunday slot; every one must land before the 05:00
+# union (tests/test_cloud_jobs.py).
+schedule = "0 4 0 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "city-gbyrk"
+name = "urban-tree-city-gbyrk"
+entrypoint = "raw/gbyrk/york_tree_info.preql"
+operation = "refresh"
+# Starts in the twice-weekly tier, placed the day after this city's OSM
+# extract. Measure before moving it: `portal_cadence.py --record --city GBYRK`.
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "osm-gbyrk"
+name = "urban-tree-osm-gbyrk"
+entrypoint = "osm_staging/gbyrk_osm_staging.preql"
+operation = "refresh"
+# Overpass allows two slots per client IP and answers an over-budget request
+# with HTTP 200 carrying an error remark, so a collision looks like a city with
+# no trees in OSM. This minute must be used by no other extract job.
+schedule = "0 15 11 * * THU"
+timeout_seconds = 1800
+memory_mb = 1024
+
+[[cloud.job]]
+key = "refresh-landmarks-gbyrk"
+name = "urban-tree-landmarks-refresh-gbyrk"
+entrypoint = "raw/gbyrk/york_landmarks.preql"
+operation = "refresh"
+# The next free two-minute Sunday slot; every one must land before the 05:00
+# union (tests/test_cloud_jobs.py).
+schedule = "0 6 0 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "city-nzhas"
+name = "urban-tree-city-nzhas"
+entrypoint = "raw/nzhas/hastings_tree_info.preql"
+operation = "refresh"
+# Starts in the twice-weekly tier, placed the day after this city's OSM
+# extract. Measure before moving it: `portal_cadence.py --record --city NZHAS`.
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "osm-nzhas"
+name = "urban-tree-osm-nzhas"
+entrypoint = "osm_staging/nzhas_osm_staging.preql"
+operation = "refresh"
+# Overpass allows two slots per client IP and answers an over-budget request
+# with HTTP 200 carrying an error remark, so a collision looks like a city with
+# no trees in OSM. This minute must be used by no other extract job.
+schedule = "0 15 11 * * FRI"
+timeout_seconds = 1800
+memory_mb = 1024
+
+[[cloud.job]]
+key = "refresh-landmarks-nzhas"
+name = "urban-tree-landmarks-refresh-nzhas"
+entrypoint = "raw/nzhas/hastings_landmarks.preql"
+operation = "refresh"
+# The next free two-minute Sunday slot; every one must land before the 05:00
+# union (tests/test_cloud_jobs.py).
+schedule = "0 8 0 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+
+[[cloud.job]]
+key = "city-cared"
+name = "urban-tree-city-cared"
+entrypoint = "raw/cared/red_deer_tree_info.preql"
+operation = "refresh"
+# Starts in the twice-weekly tier, placed the day after this city's OSM
+# extract. Measure before moving it: `portal_cadence.py --record --city CARED`.
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
+key = "osm-cared"
+name = "urban-tree-osm-cared"
+entrypoint = "osm_staging/cared_osm_staging.preql"
+operation = "refresh"
+# Overpass allows two slots per client IP and answers an over-budget request
+# with HTTP 200 carrying an error remark, so a collision looks like a city with
+# no trees in OSM. This minute must be used by no other extract job.
+schedule = "0 15 11 * * SAT"
+timeout_seconds = 1800
+memory_mb = 1024
+
+[[cloud.job]]
+key = "refresh-landmarks-cared"
+name = "urban-tree-landmarks-refresh-cared"
+entrypoint = "raw/cared/red_deer_landmarks.preql"
+operation = "refresh"
+# The next free two-minute Sunday slot; every one must land before the 05:00
+# union (tests/test_cloud_jobs.py).
+schedule = "0 10 0 * * SUN"
 timeout_seconds = 900
 memory_mb = 2048
 
