@@ -63,7 +63,7 @@ root partial datasource aubxg_osm_tree_info extends tree_partition (
 )
 complete where city = 'AUBXG' and aubxg_source = 'OSM_AUBXG'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/aubxg_osm_staging.parquet`
-where (raw_latitude >= -36.95 and raw_latitude < -36.55 and raw_longitude >= 144.05 and raw_longitude < 144.5);
+where (raw_latitude >= -37.1 and raw_latitude < -36.4 and raw_longitude >= 143.95 and raw_longitude < 144.9);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

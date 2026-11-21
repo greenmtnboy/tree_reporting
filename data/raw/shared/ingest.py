@@ -895,6 +895,23 @@ SPECIES_SYNONYMS: dict[str, str] = {
 # `Malus`/`Taxus baccata`.  Add an entry only with that check behind it.
 SPECIES_MISSPELLINGS: dict[str, str] = {
     # Batch 12 (Cockburn, Bendigo, Basingstoke, York, Hastings, Red Deer): each key absent from WCVP, each value accepted there.
+    "Eucalyptus albans": "Eucalyptus albens",  # Bendigo
+    "Eucalyptus baxterii": "Eucalyptus baxteri",  # Bendigo
+    "Eucalyptus lansdowniana": "Eucalyptus lansdowneana",  # Bendigo
+    "Eucalytpus leucoxylon": "Eucalyptus leucoxylon",  # Bendigo
+    "Geijera parvifolia": "Geijera parviflora",  # Bendigo
+    "Genista monsplessulana": "Genista monspessulana",  # Bendigo
+    "Maculara pomifera": "Maclura pomifera",  # Bendigo
+    "Myoprum platycarpum": "Myoporum platycarpum",  # Bendigo
+    "Euonomys japonica": "Euonymus japonicus",  # Bendigo
+    "Exocarpus cupressiformis": "Exocarpos cupressiformis",  # Bendigo
+    "Acacia spectablis": "Acacia spectabilis",  # Bendigo
+    "Bouganvillea": "Bougainvillea",  # Bendigo
+    "Ceonothus": "Ceanothus",  # Bendigo
+    "Vibernum": "Viburnum",  # Bendigo
+    "Vibernum tinus": "Viburnum tinus",  # Bendigo
+    "Vibernum macrocephalum": "Viburnum macrocephalum",  # Bendigo
+    # Batch 12 (Cockburn, Bendigo, Basingstoke, York, Hastings, Red Deer): each key absent from WCVP, each value accepted there.
     "Acer daviddii": "Acer davidii",  # Hastings
     "Alnus jorrulensis": "Alnus jorullensis",  # Hastings
     "Carya cordiformus": "Carya cordiformis",  # Hastings
@@ -2961,7 +2978,7 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
     "NZHAS": (-39.85, -39.1, 176.5, 177.05),
     "GBYRK": (53.87, 54.06, -1.23, -0.91),
     "GBBSK": (51.13, 51.39, -1.47, -0.97),
-    "AUBXG": (-36.95, -36.55, 144.05, 144.5),
+    "AUBXG": (-37.1, -36.4, 143.95, 144.9),
     "AUCKB": (-32.2, -32.06, 115.73, 115.93),
     "USPVD": (41.77, 41.87, -71.48, -71.37),
     "CAGLP": (43.475, 43.61, -80.33, -80.15),
@@ -3761,7 +3778,7 @@ CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
     ),
     'GBYRK': ((53.87, 54.06, -1.23, -0.91),),
     'GBBSK': ((51.13, 51.39, -1.47, -0.97),),
-    'AUBXG': ((-36.95, -36.55, 144.05, 144.5),),
+    'AUBXG': ((-37.1, -36.4, 143.95, 144.9),),
     'AUCKB': ((-32.2, -32.06, 115.73, 115.93),),
     'USPVD': ((41.77, 41.87, -71.48, -71.37),),
     'CAGLP': ((43.475, 43.61, -80.33, -80.15),),
