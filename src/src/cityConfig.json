@@ -104,5 +104,11 @@
   "USGEG": { "name": "Spokane", "center": [-117.426, 47.6588] },
   "CAWAT": { "name": "Waterloo", "center": [-80.5204, 43.4643] },
   "FRNTE": { "name": "Nantes", "center": [-1.5536, 47.2184] },
-  "USSMO": { "name": "Santa Monica", "center": [-118.4912, 34.0195] }
+  "USSMO": { "name": "Santa Monica", "center": [-118.4912, 34.0195] },
+  "CAOAK": { "name": "Oakville", "center": [-79.6877, 43.4675] },
+  "USROC": { "name": "Rochester, NY", "center": [-77.6088, 43.1566] },
+  "USSYR": { "name": "Syracuse", "center": [-76.1474, 43.0481] },
+  "USLAS": { "name": "Las Vegas", "center": [-115.1398, 36.1699] },
+  "FRBES": { "name": "Brest", "center": [-4.4861, 48.3904] },
+  "NLGRQ": { "name": "Groningen", "center": [6.5665, 53.2194] }
 }

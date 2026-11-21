@@ -1,0 +1,31 @@
+import ..landmark_common;
+
+root datasource syracuse_landmarks_update_time (
+    data_updated_through: ussyr_landmark_data_updated_through
+)
+file `./syracuse_landmarks_probe.py`;
+
+# The National Park Service's National Register listings inside the City of
+# Syracuse's boundary (a US federal work), read live -- no Nominatim
+# geocoding, no committed CSV and no staging object.  The City's Landmark
+# Preservation Board list publishes parcels without names and is not read.
+# `lm_type` names the register and `register_number` the NRIS reference number.
+root partial datasource raw_syracuse_landmark_info extends landmark_partition (
+    address: ?address,
+    lm_type: ?lm_type,
+    register_number: ?register_number,
+    year_designated: ?year_designated,
+)
+complete where city = 'USSYR'
+file `./syracuse_landmarks.py`;
+
+partial datasource syracuse_landmark_info extends published_landmark_info (
+    ?address,
+    ?lm_type,
+    ?register_number,
+    ?year_designated,
+    ussyr_landmark_data_updated_through,
+)
+complete where city = 'USSYR'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/ussyr_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/ussyr_landmark_info_v{data_version}.parquet`
+freshness by ussyr_landmark_data_updated_through;

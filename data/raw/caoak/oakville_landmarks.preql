@@ -1,0 +1,28 @@
+import ..landmark_common;
+
+root datasource oakville_landmarks_update_time (
+    data_updated_through: caoak_landmark_data_updated_through
+)
+file `./oakville_landmarks_probe.py`;
+
+# Oakville's Municipal Heritage Register (Part IV and Part V designations,
+# listed non-designated properties and heritage easements), read live off the
+# Town's open-data map service -- an official register, so no geocoding and
+# nothing to stage.
+root partial datasource raw_oakville_landmark_info extends landmark_partition (
+    address: ?address,
+    year_built: ?year_built,
+    property_type: ?property_type,
+)
+complete where city = 'CAOAK'
+file `./oakville_landmarks.py`;
+
+partial datasource oakville_landmark_info extends published_landmark_info (
+    ?address,
+    ?year_built,
+    ?property_type,
+    caoak_landmark_data_updated_through,
+)
+complete where city = 'CAOAK'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/caoak_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/caoak_landmark_info_v{data_version}.parquet`
+freshness by caoak_landmark_data_updated_through;

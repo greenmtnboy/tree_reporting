@@ -129,6 +129,12 @@ select * from (values
     ('USGEG', 361),
     ('CAWAT', 334),
     ('FRNTE', 664),
-    ('USSMO', 422)
+    ('USSMO', 422),
+    ('CAOAK', 342),
+    ('USROC', 334),
+    ('USSYR', 334),
+    ('USLAS', 433),
+    ('FRBES', 664),
+    ('NLGRQ', 664)
 ) as t(city, ecoregion_id)
 ''';

@@ -1,0 +1,32 @@
+import ..landmark_common;
+
+root datasource groningen_landmarks_update_time (
+    data_updated_through: nlgrq_landmark_data_updated_through
+)
+file `./groningen_landmarks_probe.py`;
+
+# Groningen's municipal and national monument registers: the city's
+# gemeentelijke monumenten (maps.groningen.nl WFS `Monumenten_gemeente_Groningen`,
+# CC BY 4.0) and RCE's rijksmonumenten (PDOK Protected Sites, CC BY 4.0)
+# inside the municipality's boundary; only monuments the register names (a
+# church, a gasthuis, a bridge) publish, not those known only by an address.
+# See groningen_landmarks.py.  The register's attributes ride along in
+# existing landmark_common properties: the register (category), its number
+# and the address.
+root partial datasource raw_groningen_landmark_info extends landmark_partition (
+    category: ?category,
+    register_number: ?register_number,
+    address: ?address,
+)
+complete where city = 'NLGRQ'
+file `./groningen_landmarks.py`;
+
+partial datasource groningen_landmark_info extends published_landmark_info (
+    ?category,
+    ?register_number,
+    ?address,
+    nlgrq_landmark_data_updated_through,
+)
+complete where city = 'NLGRQ'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/nlgrq_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/nlgrq_landmark_info_v{data_version}.parquet`
+freshness by nlgrq_landmark_data_updated_through;

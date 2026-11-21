@@ -11,6 +11,12 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
+  { city: 'Groningen', label: 'Gemeente Groningen - Bomen (CC BY 4.0)', url: 'https://data.groningen.nl/dataset/bomen/04da3775-07f0-4388-bc12-7cd7536b04cd' },
+  { city: 'Brest', label: 'Brest métropole - Les arbres (Licence Ouverte v2.0; species and position only)', url: 'https://www.data.gouv.fr/datasets/les-arbres/' },
+  { city: 'Las Vegas', label: 'City of Las Vegas - Park Trees (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://www.arcgis.com/home/item.html?id=05622dec3c454882abf26c4e0ec8370f' },
+  { city: 'Syracuse', label: 'City of Syracuse Department of Parks & Recreation, Forestry - Tree Inventory (TreeKeeper; Open Data Syracuse Terms of Use). The City of Syracuse makes no representation, warranty or guarantee relating to the data or analyses derived from these data.', url: 'https://data.syr.gov/pages/termsofuse' },
+  { city: 'Rochester, NY', label: 'City of Rochester Department of Environmental Services, Forestry Division - Trees Open Data (DataROC Terms of Use). The data made available here has been modified for use from its original source, which is the official website of the City of Rochester, NY. The City of Rochester makes no claims as to the accuracy, timeliness, content, or completeness of any of the data provided in this application. The City of Rochester makes no warranty of the accuracy or fitness for any particular use; nor are any such warranties to be implied or inferred with respect to the information or data furnished herein. The data is subject to change as modifications and updates are complete.', url: 'https://www.arcgis.com/home/item.html?id=4c209944e2984b4a908a14b0cbe48075' },
+  { city: 'Oakville', label: 'Town of Oakville - Trees (Town of Oakville Open Data Licence; contains information licensed under the Open Government Licence - Town of Oakville)', url: 'https://www.arcgis.com/home/item.html?id=64fabcdb4feb40139ad20d728bfef2d4' },
   { city: 'Santa Monica', label: 'City of Santa Monica, Public Landscape Division - Trees (ODC-By 1.0)', url: 'https://www.arcgis.com/home/item.html?id=64f5db2cbb224f6d87387999a300b962' },
   { city: 'Nantes', label: 'Nantes Métropole - Patrimoine arboré de Nantes Métropole et de la Ville de Nantes (Licence Ouverte)', url: 'https://data.nantesmetropole.fr/explore/dataset/244400404_patrimoine-arbore-nantes-metropole/' },
   { city: 'Waterloo', label: 'City of Waterloo - Street Tree Inventory (Waterloo Open Data User Licence)', url: 'https://data.waterloo.ca/datasets/2447415303e74bb9acdf0f43c2236b72' },
@@ -147,6 +153,13 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
+  { city: 'Groningen', label: 'Gemeente Groningen - Monumenten (CC BY 4.0)', url: 'https://data.overheid.nl/dataset/groningen-monumenten-gemeente-groningen' },
+  { city: 'Groningen', label: 'Rijksdienst voor het Cultureel Erfgoed - Rijksmonumenten via PDOK (CC BY 4.0)', url: 'https://service.pdok.nl/rce/ps-ch/wfs/v1_0?request=GetCapabilities&service=WFS' },
+  { city: 'Brest', label: 'Ministère de la Culture - Immeubles protégés au titre des Monuments Historiques (Licence Ouverte)', url: 'https://www.data.gouv.fr/datasets/immeubles-proteges-au-titre-des-monuments-historiques-2' },
+  { city: 'Las Vegas', label: 'City of Las Vegas - Historic Property Register (no licence stated; displayed with attribution only, not licensed for reuse); National Park Service - National Register of Historic Places', url: 'https://services1.arcgis.com/F1v0ufATbBQScMtY/arcgis/rest/services/HistoricAreas/FeatureServer/163' },
+  { city: 'Syracuse', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
+  { city: 'Rochester, NY', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
+  { city: 'Oakville', label: 'Town of Oakville - Heritage Properties, Municipal Heritage Register (Town of Oakville Open Data Licence)', url: 'https://www.arcgis.com/home/item.html?id=6a57f4591e314fb5b5c88e067add8872' },
   { city: 'Santa Monica', label: 'City of Santa Monica - Historic Landmarks and Structures of Merit (ODC-By 1.0); National Park Service - National Register of Historic Places', url: 'https://www.arcgis.com/home/item.html?id=abe20ceaf96d4f8bbb5774d6aa230563' },
   { city: 'Nantes', label: 'Ministère de la Culture - Immeubles protégés au titre des Monuments Historiques (Licence Ouverte)', url: 'https://www.data.gouv.fr/datasets/immeubles-proteges-au-titre-des-monuments-historiques-2' },
   { city: 'Waterloo', label: 'City of Waterloo - Heritage Buildings, Municipal Heritage Register (Waterloo Open Data User Licence)', url: 'https://data.waterloo.ca/datasets/3822d7856d034f07a14e67e25c6ced4b' },

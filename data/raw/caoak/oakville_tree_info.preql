@@ -1,0 +1,128 @@
+import ..tree_common;
+import ..community_tree_info;
+import ..tree_dedup;
+
+auto caoak_published_data_updated_through <- greatest(caoak_data_updated_through, caoak_community_data_updated_through, caoak_osm_data_updated_through);
+
+key caoak_source enum<string>['OAKVILLE_OPENDATA', 'COMMUNITY_CAOAK', 'OSM_CAOAK']; # originating dataset for the row
+
+# Feed the shared cross-source merge (../tree_dedup.preql): it classifies rows
+# by the label's prefix and records provenance from it.
+auto caoak_source_label <- concat(caoak_source, '');
+merge caoak_source_label into source_label;
+
+root datasource oakville_update_time (
+    data_updated_through: caoak_data_updated_through
+)
+file `./oakville_update_time.py`;
+
+# Only this city's column, so an approval elsewhere does not mark CAOAK's
+# Parquet stale. Trilogy probes this as MAX over the one column.
+root datasource caoak_community_update_time (
+    caoak_community_data_updated_through: caoak_community_data_updated_through
+)
+file `../community_update_time.py`;
+
+# GCS publication time of the staged OSM parquet; it only moves when an
+# extraction is re-run and uploaded. Not a local mtime -- git does not preserve
+# it, so a committed staging file makes every fresh clone look like new data.
+root datasource caoak_osm_update_time (
+    data_updated_through: caoak_osm_data_updated_through
+)
+file `./oakville_osm_probe.py`;
+
+# Every partition extends ../tree_dedup.preql's `tree_partition`, which maps
+# the shared raw_* columns; a source that names a column differently re-binds
+# it here (`dbh: ?raw_dbh`).
+root partial datasource oakville_raw_tree_info extends tree_partition (
+    data_source: caoak_source,
+)
+complete where city = 'CAOAK' and caoak_source = 'OAKVILLE_OPENDATA'
+file `./oakville_tree_info.py`;
+
+
+# Approved community submissions for this city. The shared ingest script emits
+# every city's rows; the `complete where` clause narrows it to CAOAK and makes
+# it a disjoint partition, and the `where` clause is what actually filters --
+# `complete where` asserts, it does not promise a predicate.
+root partial datasource caoak_community_tree_info extends tree_partition (
+    data_source: caoak_source,
+)
+complete where city = 'CAOAK' and caoak_source = 'COMMUNITY_CAOAK'
+file `../community_tree_info.py`
+where city = 'CAOAK';
+
+
+# OpenStreetMap trees, read from the staged parquet in GCS rather than Overpass
+# -- extraction is decoupled from refresh. OSM overlaps the municipal inventory
+# by construction; the overlap is resolved by ../tree_dedup.preql. The `where`
+# is the city's CITY_TERRITORY (tools/sync_osm_territory.py keeps it so): a
+# staged extract keeps the territory it was cut with until its next firing.
+root partial datasource caoak_osm_tree_info extends tree_partition (
+    data_source: caoak_source,
+)
+complete where city = 'CAOAK' and caoak_source = 'OSM_CAOAK'
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/caoak_osm_staging.parquet`
+where (raw_latitude >= 43.36 and raw_latitude < 43.365 and raw_longitude >= -79.715 and raw_longitude < -79.713)
+    or (raw_latitude >= 43.365 and raw_latitude < 43.37 and raw_longitude >= -79.722 and raw_longitude < -79.709)
+    or (raw_latitude >= 43.37 and raw_latitude < 43.375 and raw_longitude >= -79.729 and raw_longitude < -79.705)
+    or (raw_latitude >= 43.375 and raw_latitude < 43.38 and raw_longitude >= -79.736 and raw_longitude < -79.701)
+    or (raw_latitude >= 43.38 and raw_latitude < 43.385 and raw_longitude >= -79.743 and raw_longitude < -79.697)
+    or (raw_latitude >= 43.385 and raw_latitude < 43.39 and raw_longitude >= -79.749 and raw_longitude < -79.693)
+    or (raw_latitude >= 43.39 and raw_latitude < 43.395 and raw_longitude >= -79.757 and raw_longitude < -79.689)
+    or (raw_latitude >= 43.395 and raw_latitude < 43.4 and raw_longitude >= -79.764 and raw_longitude < -79.684)
+    or (raw_latitude >= 43.4 and raw_latitude < 43.405 and raw_longitude >= -79.77 and raw_longitude < -79.68)
+    or (raw_latitude >= 43.405 and raw_latitude < 43.41 and raw_longitude >= -79.777 and raw_longitude < -79.676)
+    or (raw_latitude >= 43.41 and raw_latitude < 43.415 and raw_longitude >= -79.784 and raw_longitude < -79.672)
+    or (raw_latitude >= 43.415 and raw_latitude < 43.42 and raw_longitude >= -79.791 and raw_longitude < -79.668)
+    or (raw_latitude >= 43.42 and raw_latitude < 43.425 and raw_longitude >= -79.798 and raw_longitude < -79.664)
+    or (raw_latitude >= 43.425 and raw_latitude < 43.43 and raw_longitude >= -79.805 and raw_longitude < -79.66)
+    or (raw_latitude >= 43.43 and raw_latitude < 43.435 and raw_longitude >= -79.811 and raw_longitude < -79.656)
+    or (raw_latitude >= 43.435 and raw_latitude < 43.44 and raw_longitude >= -79.811 and raw_longitude < -79.652)
+    or (raw_latitude >= 43.44 and raw_latitude < 43.445 and raw_longitude >= -79.806 and raw_longitude < -79.647)
+    or (raw_latitude >= 43.445 and raw_latitude < 43.45 and raw_longitude >= -79.8 and raw_longitude < -79.643)
+    or (raw_latitude >= 43.45 and raw_latitude < 43.455 and raw_longitude >= -79.803 and raw_longitude < -79.639)
+    or (raw_latitude >= 43.455 and raw_latitude < 43.46 and raw_longitude >= -79.805 and raw_longitude < -79.635)
+    or (raw_latitude >= 43.46 and raw_latitude < 43.465 and raw_longitude >= -79.808 and raw_longitude < -79.631)
+    or (raw_latitude >= 43.465 and raw_latitude < 43.47 and raw_longitude >= -79.809 and raw_longitude < -79.627)
+    or (raw_latitude >= 43.47 and raw_latitude < 43.475 and raw_longitude >= -79.805 and raw_longitude < -79.623)
+    or (raw_latitude >= 43.475 and raw_latitude < 43.48 and raw_longitude >= -79.798 and raw_longitude < -79.619)
+    or (raw_latitude >= 43.48 and raw_latitude < 43.485 and raw_longitude >= -79.794 and raw_longitude < -79.622)
+    or (raw_latitude >= 43.485 and raw_latitude < 43.49 and raw_longitude >= -79.789 and raw_longitude < -79.629)
+    or (raw_latitude >= 43.49 and raw_latitude < 43.495 and raw_longitude >= -79.769 and raw_longitude < -79.636)
+    or (raw_latitude >= 43.495 and raw_latitude < 43.5 and raw_longitude >= -79.763 and raw_longitude < -79.643)
+    or (raw_latitude >= 43.5 and raw_latitude < 43.505 and raw_longitude >= -79.758 and raw_longitude < -79.65)
+    or (raw_latitude >= 43.505 and raw_latitude < 43.51 and raw_longitude >= -79.753 and raw_longitude < -79.657)
+    or (raw_latitude >= 43.51 and raw_latitude < 43.515 and raw_longitude >= -79.747 and raw_longitude < -79.664)
+    or (raw_latitude >= 43.515 and raw_latitude < 43.52 and raw_longitude >= -79.741 and raw_longitude < -79.671)
+    or (raw_latitude >= 43.52 and raw_latitude < 43.525 and raw_longitude >= -79.735 and raw_longitude < -79.677)
+    or (raw_latitude >= 43.525 and raw_latitude < 43.53 and raw_longitude >= -79.729 and raw_longitude < -79.719);
+
+
+# --- Cross-source dedup and attribute merge --------------------------------
+#
+# Shared: ../tree_dedup.preql groups the three partitions into one cluster per
+# tree and picks each canonical attribute across the cluster; this city's grid
+# cell size and its calibration live in DEDUP_CELL_METRES in shared/ingest.py.
+# The per-city lines are the dbh merge, because Boston imputes it, and the
+# position policy: a city with an Overture lookup imports ../tree_position.preql
+# instead of the two position merges (see that file).
+merge merged_dbh into diameter_at_breast_height;
+merge merged_latitude into latitude;
+merge merged_longitude into longitude;
+
+
+# The published target extends ../tree_dedup.preql's `published_tree_info`:
+# the canonical columns, the prune, and the guard that refuses a build which
+# lost a quarter of the city.  The two `@source_kept` lines are the same guard
+# per bulk source; add one for every municipal or OSM label in the enum
+# (`test_every_city_refuses_a_collapsed_build`).
+partial datasource oakville_tree_info extends published_tree_info (
+    data_source: caoak_source,
+    caoak_published_data_updated_through,
+)
+complete where city = 'CAOAK'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/caoak_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/caoak_tree_info_v{data_version}.parquet`
+freshness by caoak_published_data_updated_through
+assert @source_kept(tree_id, caoak_source, 'OAKVILLE_OPENDATA', 0.75)
+assert @source_kept(tree_id, caoak_source, 'OSM_CAOAK', 0.75);

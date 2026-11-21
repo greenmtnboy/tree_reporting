@@ -661,6 +661,10 @@ SENTINEL_ENRICHMENT: dict[str, dict[str, object]] = {
 # F. microcarpa, `Jacaranda acutifolia` for J. mimosifolia) is not a synonym
 # and is deliberately not here.
 SPECIES_SYNONYMS: dict[str, str] = {
+    # Batch 10 (Oakville, Rochester, Syracuse, Las Vegas, Brest, Groningen): WCVP synonyms and hybrid marks.
+    "Brugmansia candida": "Brugmansia x candida",  # Brest
+    "Betula verrucosa": "Betula pendula",  # Brest
+    "Myrtus apiculata": "Luma apiculata",  # Brest
     # Nomenclatural and taxonomic synonyms (POWO lists the key under the value).
     # Batch 9 (Madison, Richmond, Spokane, Waterloo, Nantes, Santa Monica): WCVP synonyms and hybrid marks.
     "Tilia x dasystyla": "Tilia dasystyla",  # Nantes
@@ -888,6 +892,85 @@ SPECIES_SYNONYMS: dict[str, str] = {
 # `Celtis`/`Cercis occidentalis`, `Pinus`/`Prunus nigra` and
 # `Malus`/`Taxus baccata`.  Add an entry only with that check behind it.
 SPECIES_MISSPELLINGS: dict[str, str] = {
+    # Batch 10 (Oakville, Rochester, Syracuse, Las Vegas, Brest, Groningen): each key absent from WCVP, each value accepted there.
+    "Acer plantanoides": "Acer platanoides",  # Oakville
+    "Aesculus hippocastinum": "Aesculus hippocastanum",  # Oakville
+    "Caltalpa speciosa": "Catalpa speciosa",  # Oakville
+    "Carya cordaformis": "Carya cordiformis",  # Oakville
+    "Gladitsia triacanthos": "Gleditsia triacanthos",  # Oakville
+    "Juglens cineria": "Juglans cinerea",  # Oakville
+    "Picea pungns": "Picea pungens",  # Oakville
+    "Populous tremuloides": "Populus tremuloides",  # Oakville
+    "Salix babylonia": "Salix babylonica",  # Oakville
+    "Salix discolour": "Salix discolor",  # Oakville
+    "Ulmus amaricana": "Ulmus americana",  # Oakville
+    "Halesia tetrapetera": "Halesia carolina",  # Syracuse
+    "Ailanthus altissimus": "Ailanthus altissima",  # Las Vegas
+    "Casuarinia cunninghamiana": "Casuarina cunninghamiana",  # Las Vegas
+    "Eriobotyra japonica": "Eriobotrya japonica",  # Las Vegas
+    "Quercus muhlenbergii": "Quercus muehlenbergii",  # Las Vegas
+    "Ulmus amaericana": "Ulmus americana",  # Las Vegas
+    "Albizzia julibrissin": "Albizia julibrissin",  # Brest
+    "Araucaria heterophylia": "Araucaria heterophylla",  # Brest
+    "Arbustus unedo": "Arbutus unedo",  # Brest
+    "Bettula utilis": "Betula utilis",  # Brest
+    "Bouginvillea": "Bougainvillea",  # Brest
+    "Buckinghamia celtissima": "Buckinghamia celsissima",  # Brest
+    "Caliandra": "Calliandra",  # Brest
+    "Caliandra surinamensis": "Calliandra surinamensis",  # Brest
+    "Camelia reticulata": "Camellia reticulata",  # Brest
+    "Camelia sasanqua": "Camellia sasanqua",  # Brest
+    "Catalpa bignioides": "Catalpa bignonioides",  # Brest
+    "Cerstrum nocturum": "Cestrum nocturnum",  # Brest
+    "Dodonea viscosa": "Dodonaea viscosa",  # Brest
+    "Draceana draco": "Dracaena draco",  # Brest
+    "Drymis winteri": "Drimys winteri",  # Brest
+    "Durancta erecta": "Duranta erecta",  # Brest
+    "Enkianthus perrulatus": "Enkianthus perulatus",  # Brest
+    "Eucalyptus dalrimpleana": "Eucalyptus dalrympleana",  # Brest
+    "Euomynus lucidus": "Euonymus lucidus",  # Brest
+    "Hoeria angustifolia": "Hoheria angustifolia",  # Brest
+    "Jubaea chiliensis": "Jubaea chilensis",  # Brest
+    "Lagerstomia indica": "Lagerstroemia indica",  # Brest
+    "Lagerstromia indiia": "Lagerstroemia indica",  # Brest
+    "Lagestroemia": "Lagerstroemia",  # Brest
+    "Linodendron tulipifera": "Liriodendron tulipifera",  # Brest
+    "Livistonia chinensis": "Livistona chinensis",  # Brest
+    "Magnolia campbelli": "Magnolia campbellii",  # Brest
+    "Malus bacatta": "Malus baccata",  # Brest
+    "Mangolia": "Magnolia",  # Brest
+    "Metasequoia glybtostroiboides": "Metasequoia glyptostroboides",  # Brest
+    "Metasequoia glyptostroboiies": "Metasequoia glyptostroboides",  # Brest
+    "Parotia persica": "Parrotia persica",  # Brest
+    "Phoenix canarienris": "Phoenix canariensis",  # Brest
+    "Phoenix roebellinii": "Phoenix roebelenii",  # Brest
+    "Pinus engelmanni": "Pinus engelmannii",  # Brest
+    "Populus yuana": "Populus wuana",  # Brest
+    "Prunus cerassus": "Prunus cerasus",  # Brest
+    "Prunus incisus": "Prunus incisa",  # Brest
+    "Pyrus pirifolia": "Pyrus pyrifolia",  # Brest
+    "Qercus suber": "Quercus suber",  # Brest
+    "Quercus casteneifolia": "Quercus castaneifolia",  # Brest
+    "Quercus petraena": "Quercus petraea",  # Brest
+    "Quercus sessifolia": "Quercus sessilifolia",  # Brest
+    "Shinus molle": "Schinus molle",  # Brest
+    "Siadopitys verticillata": "Sciadopitys verticillata",  # Brest
+    "Sorbus cachmiriana": "Sorbus cashmiriana",  # Brest
+    "Stewartia pseudocamilia": "Stewartia pseudocamellia",  # Brest
+    "Styrax obasia": "Styrax obassia",  # Brest
+    "Syagrus romanzoffina": "Syagrus romanzoffiana",  # Brest
+    "Syagrus rosmanzoffiana": "Syagrus romanzoffiana",  # Brest
+    "Syagrus rozmanzoffiana": "Syagrus romanzoffiana",  # Brest
+    "Tetracentron sinensis": "Tetracentron sinense",  # Brest
+    "Tracycarpus fortunei": "Trachycarpus fortunei",  # Brest
+    "Umbellaria californica": "Umbellularia californica",  # Brest
+    "Malus floribonda": "Malus x floribunda",  # Brest
+    "Abies balsemea": "Abies balsamea",  # Groningen
+    "Alnus glutinose": "Alnus glutinosa",  # Groningen
+    "Magnolia tripetata": "Magnolia tripetala",  # Groningen
+    "Pterostyrax corymbosa": "Pterostyrax corymbosus",  # Groningen
+    "Rhus typina": "Rhus typhina",  # Groningen
+    "Robinia x magaretta": "Robinia x margaretta",  # Groningen
     # Batch 9 (Madison, Richmond, Spokane, Waterloo, Nantes, Santa Monica): each key absent from WCVP, each value accepted there.
     "Prunus serotinia": "Prunus serotina",  # Richmond
     "Tillia x euchlora": "Tilia x euchlora",  # Richmond
@@ -1914,6 +1997,12 @@ def _sanitize_taxon(value: str | None) -> str | None:
 # Keyed by city code so `community_source_for` can derive the community label
 # and so tests can assert the two lists agree.
 MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
+    "NLGRQ": ("GRONINGEN_OPENDATA",),
+    "FRBES": ("BREST_OPENDATA",),
+    "USLAS": ("LAS_VEGAS_OPENDATA",),
+    "USSYR": ("SYRACUSE_OPENDATA",),
+    "USROC": ("ROCHESTER_OPENDATA",),
+    "CAOAK": ("OAKVILLE_OPENDATA",),
     "USSMO": ("SANTA_MONICA_OPENDATA",),
     "FRNTE": ("NANTES_OPENDATA",),
     "CAWAT": ("WATERLOO_OPENDATA",),
@@ -2052,6 +2141,12 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # overlapping rows under one cluster id and publishes only the survivor — see
 # tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
+    "NLGRQ": "OSM_NLGRQ",
+    "FRBES": "OSM_FRBES",
+    "USLAS": "OSM_USLAS",
+    "USSYR": "OSM_USSYR",
+    "USROC": "OSM_USROC",
+    "CAOAK": "OSM_CAOAK",
     "USSMO": "OSM_USSMO",
     "FRNTE": "OSM_FRNTE",
     "CAWAT": "OSM_CAWAT",
@@ -2769,6 +2864,12 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
+    "NLGRQ": (53.1, 53.32, 6.45, 6.8),
+    "FRBES": (48.32, 48.48, -4.65, -4.31),
+    "USLAS": (36.1, 36.35, -115.42, -115.05),
+    "USSYR": (42.98, 43.09, -76.21, -76.07),
+    "USROC": (43.1, 43.27, -77.7, -77.53),
+    "CAOAK": (43.36, 43.55, -79.815, -79.615),
     "USSMO": (33.99, 34.05, -118.52, -118.44),
     "FRNTE": (47.08, 47.35, -1.83, -1.37),
     "CAWAT": (43.43, 43.54, -80.63, -80.47),
@@ -2932,6 +3033,18 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
+    # osm_dedup_validation 2026-11-20: 6m 3170/46 (1.4%), marginal 5.0; 8m 1.6.
+    "NLGRQ": 6,
+    # osm_dedup_validation 2026-11-20: 8m 4037/107 (2.6%), marginal 2.1; 10m below 1.
+    "FRBES": 8,
+    # osm_dedup_validation 2026-11-20: 8m 392/19 (4.6%), marginal 4.4; 10m is 1:1.
+    "USLAS": 8,
+    # osm_dedup_validation 2026-11-20: 8m 731/41 (5.3%), marginal 2.5; 14m turns below 1.
+    "USSYR": 8,
+    # osm_dedup_validation 2026-11-20: thin OSM (56 matched); no false flags through 8m, 10m adds only a false one.
+    "USROC": 8,
+    # osm_dedup_validation 2026-11-20: 4m 179/3 (1.6% false), 6m adds +3/+4.
+    "CAOAK": 4,
     # Calibrated 2026-11-20: 8 m keeps 4.3 true per false at the margin;
     # 10 m drops below 1 (0.80).
     "USSMO": 8,
@@ -3506,6 +3619,52 @@ DEDUP_CELL_METRES: dict[str, int] = {
 Box = tuple[float, float, float, float]
 
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
+    'NLGRQ': ((53.1, 53.32, 6.45, 6.8),),
+    'FRBES': ((48.32, 48.48, -4.65, -4.31),),
+    'USLAS': ((36.1, 36.35, -115.42, -115.05),),
+    'USSYR': ((42.98, 43.09, -76.21, -76.07),),
+    'USROC': ((43.1, 43.27, -77.7, -77.53),),
+    # Oakville: 0.005-degree latitude bands, each the west-east extent of the
+    # Town's legal boundary (OSM relation 2407500) in that band; Burlington,
+    # Hamilton and Mississauga are cut around it.  No Burlington or
+    # Mississauga inventory tree lies inside the boundary; the band rounding
+    # along the two diagonal borders hands ~700 OSM rows to Oakville.
+    'CAOAK': (
+        (43.36, 43.365, -79.715, -79.713),
+        (43.365, 43.37, -79.722, -79.709),
+        (43.37, 43.375, -79.729, -79.705),
+        (43.375, 43.38, -79.736, -79.701),
+        (43.38, 43.385, -79.743, -79.697),
+        (43.385, 43.39, -79.749, -79.693),
+        (43.39, 43.395, -79.757, -79.689),
+        (43.395, 43.4, -79.764, -79.684),
+        (43.4, 43.405, -79.77, -79.68),
+        (43.405, 43.41, -79.777, -79.676),
+        (43.41, 43.415, -79.784, -79.672),
+        (43.415, 43.42, -79.791, -79.668),
+        (43.42, 43.425, -79.798, -79.664),
+        (43.425, 43.43, -79.805, -79.66),
+        (43.43, 43.435, -79.811, -79.656),
+        (43.435, 43.44, -79.811, -79.652),
+        (43.44, 43.445, -79.806, -79.647),
+        (43.445, 43.45, -79.8, -79.643),
+        (43.45, 43.455, -79.803, -79.639),
+        (43.455, 43.46, -79.805, -79.635),
+        (43.46, 43.465, -79.808, -79.631),
+        (43.465, 43.47, -79.809, -79.627),
+        (43.47, 43.475, -79.805, -79.623),
+        (43.475, 43.48, -79.798, -79.619),
+        (43.48, 43.485, -79.794, -79.622),
+        (43.485, 43.49, -79.789, -79.629),
+        (43.49, 43.495, -79.769, -79.636),
+        (43.495, 43.5, -79.763, -79.643),
+        (43.5, 43.505, -79.758, -79.65),
+        (43.505, 43.51, -79.753, -79.657),
+        (43.51, 43.515, -79.747, -79.664),
+        (43.515, 43.52, -79.741, -79.671),
+        (43.52, 43.525, -79.735, -79.677),
+        (43.525, 43.53, -79.729, -79.719),
+    ),
     # Santa Monica sits inside Los Angeles' box: a 0.01-degree latitude staircase drawn from its own inventory's extent; USLAX is cut around it.
     'USSMO': (
         (33.99, 34.0, -118.49, -118.47),
@@ -3578,9 +3737,9 @@ CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
     'NLUTC': ((52.02, 52.15, 4.96, 5.2),),
     'CAHAM': (
         (43.04, 43.25, -80.25, -79.62),
-        (43.25, 43.475, -80.25, -80.0),
-        (43.25, 43.475, -79.68, -79.62),
         (43.25, 43.275, -80.0, -79.68),
+        (43.25, 43.405, -79.68, -79.62),
+        (43.25, 43.475, -80.25, -80.0),
         (43.275, 43.28, -80.0, -79.69),
         (43.28, 43.285, -80.0, -79.745),
         (43.285, 43.29, -80.0, -79.875),
@@ -3608,13 +3767,27 @@ CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
         (43.39, 43.395, -80.0, -79.91),
         (43.395, 43.4, -79.925, -79.915),
         (43.395, 43.41, -80.0, -79.935),
+        (43.405, 43.41, -79.676, -79.62),
         (43.41, 43.415, -80.0, -79.955),
+        (43.41, 43.415, -79.672, -79.62),
         (43.415, 43.42, -80.0, -79.96),
+        (43.415, 43.42, -79.668, -79.62),
+        (43.42, 43.425, -79.664, -79.62),
         (43.42, 43.445, -80.0, -79.955),
+        (43.425, 43.43, -79.66, -79.62),
+        (43.43, 43.435, -79.656, -79.62),
+        (43.435, 43.44, -79.652, -79.62),
+        (43.44, 43.445, -79.647, -79.62),
         (43.445, 43.45, -80.0, -79.96),
+        (43.445, 43.45, -79.643, -79.62),
+        (43.45, 43.455, -79.639, -79.62),
         (43.45, 43.46, -80.0, -79.965),
+        (43.455, 43.46, -79.635, -79.62),
+        (43.46, 43.465, -79.631, -79.62),
         (43.46, 43.47, -80.0, -79.97),
+        (43.465, 43.47, -79.627, -79.62),
         (43.47, 43.475, -80.0, -79.975),
+        (43.47, 43.475, -79.623, -79.62),
     ),
     'GBBRS': ((51.39, 51.55, -2.73, -2.5),),
     'BEGNT': ((50.97, 51.19, 3.57, 3.85),),
@@ -3724,28 +3897,67 @@ CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
         (43.33, 43.335, -79.865, -79.68),
         (43.335, 43.345, -79.86, -79.68),
         (43.345, 43.35, -79.855, -79.68),
-        (43.35, 43.365, -79.87, -79.68),
+        (43.35, 43.36, -79.87, -79.68),
         (43.36, 43.365, -79.89, -79.88),
-        (43.365, 43.37, -79.89, -79.68),
+        (43.36, 43.365, -79.87, -79.715),
+        (43.36, 43.365, -79.713, -79.68),
+        (43.365, 43.37, -79.89, -79.722),
+        (43.365, 43.37, -79.709, -79.68),
         (43.37, 43.375, -79.91, -79.9),
-        (43.37, 43.375, -79.895, -79.68),
-        (43.375, 43.38, -79.91, -79.68),
-        (43.38, 43.39, -79.915, -79.68),
-        (43.39, 43.395, -79.91, -79.68),
+        (43.37, 43.375, -79.895, -79.729),
+        (43.37, 43.375, -79.705, -79.68),
+        (43.375, 43.38, -79.91, -79.736),
+        (43.375, 43.38, -79.701, -79.68),
+        (43.38, 43.385, -79.915, -79.743),
+        (43.38, 43.385, -79.697, -79.68),
+        (43.385, 43.39, -79.915, -79.749),
+        (43.385, 43.39, -79.693, -79.68),
+        (43.39, 43.395, -79.91, -79.757),
+        (43.39, 43.395, -79.689, -79.68),
         (43.395, 43.4, -79.935, -79.925),
-        (43.395, 43.4, -79.915, -79.68),
-        (43.4, 43.41, -79.935, -79.68),
-        (43.41, 43.415, -79.955, -79.68),
-        (43.415, 43.42, -79.96, -79.68),
-        (43.42, 43.445, -79.955, -79.68),
-        (43.445, 43.45, -79.96, -79.68),
-        (43.45, 43.46, -79.965, -79.68),
-        (43.46, 43.47, -79.97, -79.68),
-        (43.47, 43.475, -79.975, -79.68),
+        (43.395, 43.4, -79.915, -79.764),
+        (43.395, 43.4, -79.684, -79.68),
+        (43.4, 43.405, -79.935, -79.77),
+        (43.405, 43.41, -79.935, -79.777),
+        (43.41, 43.415, -79.955, -79.784),
+        (43.415, 43.42, -79.96, -79.791),
+        (43.42, 43.425, -79.955, -79.798),
+        (43.425, 43.43, -79.955, -79.805),
+        (43.43, 43.435, -79.955, -79.811),
+        (43.435, 43.44, -79.955, -79.811),
+        (43.44, 43.445, -79.955, -79.806),
+        (43.445, 43.45, -79.96, -79.8),
+        (43.45, 43.455, -79.965, -79.803),
+        (43.455, 43.46, -79.965, -79.805),
+        (43.46, 43.465, -79.97, -79.808),
+        (43.465, 43.47, -79.97, -79.809),
+        (43.47, 43.475, -79.975, -79.805),
     ),
     'CAOTT': ((44.92, 45.58, -76.4, -75.2),),
     'CAMIS': (
-        (43.475, 43.55, -79.88, -79.5),
+        (43.475, 43.48, -79.88, -79.798),
+        (43.475, 43.48, -79.619, -79.5),
+        (43.48, 43.485, -79.88, -79.794),
+        (43.48, 43.485, -79.622, -79.5),
+        (43.485, 43.49, -79.88, -79.789),
+        (43.485, 43.49, -79.629, -79.5),
+        (43.49, 43.495, -79.88, -79.769),
+        (43.49, 43.495, -79.636, -79.5),
+        (43.495, 43.5, -79.88, -79.763),
+        (43.495, 43.5, -79.643, -79.5),
+        (43.5, 43.505, -79.88, -79.758),
+        (43.5, 43.505, -79.65, -79.5),
+        (43.505, 43.51, -79.88, -79.753),
+        (43.505, 43.51, -79.657, -79.5),
+        (43.51, 43.515, -79.88, -79.747),
+        (43.51, 43.515, -79.664, -79.5),
+        (43.515, 43.52, -79.88, -79.741),
+        (43.515, 43.52, -79.671, -79.5),
+        (43.52, 43.525, -79.88, -79.735),
+        (43.52, 43.525, -79.677, -79.5),
+        (43.525, 43.53, -79.88, -79.729),
+        (43.525, 43.53, -79.719, -79.5),
+        (43.53, 43.55, -79.88, -79.5),
         (43.55, 43.62, -79.88, -79.55),
         (43.62, 43.64, -79.88, -79.575),
         (43.64, 43.68, -79.88, -79.6),

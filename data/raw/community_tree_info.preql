@@ -116,6 +116,12 @@ property <*>.usgeg_community_data_updated_through datetime; # when approved comm
 property <*>.cawat_community_data_updated_through datetime; # when approved community submissions for CAWAT are through
 property <*>.frnte_community_data_updated_through datetime; # when approved community submissions for FRNTE are through
 property <*>.ussmo_community_data_updated_through datetime; # when approved community submissions for USSMO are through
+property <*>.caoak_community_data_updated_through datetime; # when approved community submissions for CAOAK are through
+property <*>.usroc_community_data_updated_through datetime; # when approved community submissions for USROC are through
+property <*>.ussyr_community_data_updated_through datetime; # when approved community submissions for USSYR are through
+property <*>.uslas_community_data_updated_through datetime; # when approved community submissions for USLAS are through
+property <*>.frbes_community_data_updated_through datetime; # when approved community submissions for FRBES are through
+property <*>.nlgrq_community_data_updated_through datetime; # when approved community submissions for NLGRQ are through
 
 # The community *rows* are declared per city too, in each city's own tree model,
 # as a `complete where city = 'X' and {code}_source = 'COMMUNITY_X'` partition.
