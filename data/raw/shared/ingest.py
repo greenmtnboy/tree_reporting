@@ -3164,8 +3164,8 @@ DEDUP_CELL_METRES: dict[str, int] = {
     "GBYRK": 8,
     # osm_dedup_validation 2026-11-21: 8m 557/31 (5.6%), marginal 3.1; 10m 1.7.
     "GBBSK": 8,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "AUBXG": 10,
+    # osm_dedup_validation 2026-11-21: 8m 1074/36 (3.4%), marginal 3.8; 10m 1.9.
+    "AUBXG": 8,
     # Calibrated 2026-11-21 (osm_dedup_validation, 5.7k OSM vs 68.8k street trees):
     # 4 m keeps 59% recall at 1.8% false; 6 m adds 43 true for 18 false.
     "AUCKB": 4,
