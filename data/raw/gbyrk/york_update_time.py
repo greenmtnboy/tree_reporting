@@ -3,26 +3,27 @@
 # requires-python = ">=3.13"
 # dependencies = ["pyarrow", "pytrilogy", "requests"]
 # ///
-"""Freshness probe for York's tree inventory.  STUB -- point it at the portal.
+"""Freshness probe for York's tree inventory (council and private trees).
 
-Mandatory: without it the pipeline re-downloads the whole dataset on every
-tick.  Hit the lightest metadata endpoint the portal exposes:
+Both layers (`Public/EnvPlan/MapServer/3` and `/18`) are MapServer layers on
+the council's on-prem ArcGIS Server: no `editingInfo` and no date column
+(`Planted` is a year, on 1% of rows).  So this falls back to the catalogue:
+the council's ArcGIS Hub (`data-cyc.opendata.arcgis.com`) lists both layers,
+and the probe is the later of their DCAT `modified` stamps
+(`hub_last_modified`, matched on the REST endpoint).
 
-    ArcGIS     `shared.platforms.arcgis.layer_last_edit(LAYER)`, or `field_max` for a
-               layer with no editingInfo
-    OpenDataSoft  GET /api/explore/v2.1/catalog/datasets/{id} -> .metas.default.modified
-    CKAN       GET /api/3/action/resource_show?id={id} -> .result.last_modified
-    Socrata    `shared.platforms.socrata.rows_updated_at(DATASET)` -- reads
-               /api/views/{id}.json .rowsUpdatedAt (unix SECONDS, not
-               Esri's milliseconds)
+What that costs: it is the catalogue's stamp, not the data's.  It read
+2023-11-07 for both on 2026-11-21 -- the day the council re-saved every Hub
+item -- while the layers are "a live API link to CYC's GIS server", so the
+stamp does **not** move when the council edits or reloads its trees.  The
+city still rebuilds weekly: `gbyrk_published_data_updated_through` is the
+greatest of this, the community probe and the OSM staging probe, and the
+weekly OSM extract re-stamps its staging object every run (Vienna, `atvie/`,
+is wired the same way).  The layer itself offers nothing that is a time.
 
-Fetch with `get_json_with_retry`, never a bare `requests.get(...).json()`: a
-portal in maintenance answers every path with an HTML holding page and HTTP
-200, and every probe is a root datasource whose exception ends the whole
-refresh for every city.  `emit_freshness` turns an availability failure into
-the epoch so this city sits out the run; a *parse* failure still raises, because
-that means the portal changed its schema and degrading would freeze this city's
-Parquet silently and for ever.
+A layer the Hub no longer lists, or an unreadable stamp, raises -- our wiring
+or the catalogue changed shape -- and a transport failure degrades to the
+epoch through `emit_freshness`.
 """
 
 import sys
@@ -30,13 +31,16 @@ from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from shared.ingest import emit_freshness, get_json_with_retry
+from shared.platforms.arcgis import hub_last_modified
+from shared.ingest import emit_freshness
 
-METADATA_URL = "TODO: the portal's metadata endpoint"
+HUB = "data-cyc.opendata.arcgis.com"
+SERVICE = "https://maps.york.gov.uk/arcgis/rest/services/Public/EnvPlan/MapServer"
+LAYERS = (f"{SERVICE}/3", f"{SERVICE}/18")
 
 
 def fetch_modified_at() -> datetime:
-    raise NotImplementedError("TODO: read York's published-through timestamp")
+    return max(hub_last_modified(HUB, layer) for layer in LAYERS)
 
 
 if __name__ == "__main__":

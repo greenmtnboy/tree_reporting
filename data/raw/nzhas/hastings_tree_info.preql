@@ -63,7 +63,10 @@ root partial datasource nzhas_osm_tree_info extends tree_partition (
 )
 complete where city = 'NZHAS' and nzhas_source = 'OSM_NZHAS'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/nzhas_osm_staging.parquet`
-where (raw_latitude >= -39.85 and raw_latitude < -39.13 and raw_longitude >= 176.54 and raw_longitude < 177.05);
+where (raw_latitude >= -39.85 and raw_latitude < -39.56 and raw_longitude >= 176.5 and raw_longitude < 177.05)
+    or (raw_latitude >= -39.455 and raw_latitude < -39.1 and raw_longitude >= 176.5 and raw_longitude < 177.05)
+    or (raw_latitude >= -39.56 and raw_latitude < -39.455 and raw_longitude >= 176.5 and raw_longitude < 176.8)
+    or (raw_latitude >= -39.56 and raw_latitude < -39.455 and raw_longitude >= 176.96 and raw_longitude < 177.05);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

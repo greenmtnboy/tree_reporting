@@ -63,7 +63,7 @@ root partial datasource gbyrk_osm_tree_info extends tree_partition (
 )
 complete where city = 'GBYRK' and gbyrk_source = 'OSM_GBYRK'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/gbyrk_osm_staging.parquet`
-where (raw_latitude >= 53.87 and raw_latitude < 54.05 and raw_longitude >= -1.21 and raw_longitude < -0.92);
+where (raw_latitude >= 53.87 and raw_latitude < 54.06 and raw_longitude >= -1.23 and raw_longitude < -0.91);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

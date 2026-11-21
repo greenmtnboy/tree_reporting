@@ -30,6 +30,8 @@ COORDINATE_ID_CITIES = {
     "uspor/portland_tree_info.py": '"pdx-st"',
     "gbbfs/belfast_tree_info.py": '"belfast"',
     "usral/riverside_tree_info.py": "PARK_ID_PREFIX",
+    "gbyrk/york_tree_info.py": "ID_PREFIX",
+    "nzhas/hastings_tree_info.py": "ID_PREFIX",
 }
 
 
