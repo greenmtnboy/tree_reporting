@@ -132,6 +132,22 @@ describe('parquet schema', () => {
         `SELECT column_name FROM (DESCRIBE SELECT * FROM read_parquet('${url}'))`,
       )
       const cols = result.getRowObjects().map((r) => r.column_name as string)
+      // This is the per-city check. The dashboard query sweep compiles only a
+      // fixed set of cities (dashboard-queries.test.ts), so for every other
+      // city this is what proves it is published in the shape the rollup, the
+      // dashboards and the freshness readout read. Footer reads only.
+      const required = [
+        'tree_id', 'city', 'species', 'latitude', 'longitude', 'diameter_at_breast_height',
+        'data_source', 'submission_photo_url', 'cluster_id',
+        `${city.toLowerCase()}_published_data_updated_through`,
+      ]
+      for (const col of required) {
+        expect(cols, `${city}'s tree parquet is missing ${col}`).toContain(col)
+      }
+      const rowsResult = await conn.runAndReadAll(
+        `SELECT COALESCE(SUM(num_rows), 0) AS n FROM parquet_file_metadata('${url}')`,
+      )
+      expect(Number(rowsResult.getRowObjects()[0].n), `${city}'s tree parquet has no rows`).toBeGreaterThan(0)
       expect(
         cols,
         `${city}'s parquet still carries is_duplicate, so it predates the prune ` +
