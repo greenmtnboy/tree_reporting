@@ -1,0 +1,33 @@
+import ..landmark_common;
+
+root datasource oakland_landmarks_update_time (
+    data_updated_through: usoak_landmark_data_updated_through
+)
+file `./oakland_landmarks_probe.py`;
+
+# Oakland's designated City Landmarks (the city's own register, designated on
+# the Landmarks Preservation Advisory Board's recommendation and published by
+# the Bureau of Planning on gismaps.oaklandca.gov) and the National Park
+# Service's National Register listings in Oakland -- registers read live, so
+# no Nominatim geocoding, no committed CSV and no staging object.  `lm_type`
+# names the register and `register_number` the landmark number (LM014) or the
+# NRIS reference number.
+root partial datasource raw_oakland_landmark_info extends landmark_partition (
+    address: ?address,
+    lm_type: ?lm_type,
+    register_number: ?register_number,
+    year_designated: ?year_designated,
+)
+complete where city = 'USOAK'
+file `./oakland_landmarks.py`;
+
+partial datasource oakland_landmark_info extends published_landmark_info (
+    ?address,
+    ?lm_type,
+    ?register_number,
+    ?year_designated,
+    usoak_landmark_data_updated_through,
+)
+complete where city = 'USOAK'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/usoak_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/usoak_landmark_info_v{data_version}.parquet`
+freshness by usoak_landmark_data_updated_through;

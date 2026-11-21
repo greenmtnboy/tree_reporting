@@ -51,6 +51,18 @@ property <*>.usden_data_updated_through datetime; # when Denver data is through
 # community column with the staged OSM one and nothing else.
 property <*>.ustem_osm_data_updated_through datetime; # mtime of Tempe's committed OSM staging parquet
 property <*>.usbos_osm_data_updated_through datetime;
+property <*>.uspvd_data_updated_through datetime; # when Providence data is through
+property <*>.uspvd_osm_data_updated_through datetime; # GCS publication time of Providence's staged OSM parquet
+property <*>.caglp_data_updated_through datetime; # when Guelph data is through
+property <*>.caglp_osm_data_updated_through datetime; # GCS publication time of Guelph's staged OSM parquet
+property <*>.gbbfs_data_updated_through datetime; # when Belfast data is through
+property <*>.gbbfs_osm_data_updated_through datetime; # GCS publication time of Belfast's staged OSM parquet
+property <*>.gbedi_data_updated_through datetime; # when Edinburgh data is through
+property <*>.gbedi_osm_data_updated_through datetime; # GCS publication time of Edinburgh's staged OSM parquet
+property <*>.usoak_data_updated_through datetime; # when Oakland data is through
+property <*>.usoak_osm_data_updated_through datetime; # GCS publication time of Oakland's staged OSM parquet
+property <*>.usral_data_updated_through datetime; # when Riverside data is through
+property <*>.usral_osm_data_updated_through datetime; # GCS publication time of Riverside's staged OSM parquet
 property <*>.nlgrq_data_updated_through datetime; # when Groningen data is through
 property <*>.nlgrq_osm_data_updated_through datetime; # GCS publication time of Groningen's staged OSM parquet
 property <*>.frbes_data_updated_through datetime; # when Brest data is through

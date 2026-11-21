@@ -169,15 +169,21 @@ compile and still answer the wrong question.
   imports), so the model is hydrated once per batch. A query that cannot
   plan comes back inside a 200 with its own error; a batch that fails as a
   block is transport.
-- The default run covers the all-cities view, `REPRESENTATIVE_CITIES`
-  (London, Boston, Milos, San Francisco), the cities whose model files the
-  pull request touched (`DASHBOARD_QUERY_CITIES`, set by CI from the diff),
-  and the interactive states. Every push to main sweeps `all`. A city whose
-  parquet is not on GCS yet is skipped, not failed.
+- The default run, and the only one CI makes (pull requests and main
+  alike), covers the all-cities view, `REPRESENTATIVE_CITIES` (London,
+  Boston, Milos, San Francisco: the structurally distinct models),
+  `LARGEST_CITIES` (Boston, Bogotá, London, New York, Madrid) and the
+  interactive states: about a dozen requests, ~8 minutes. Every other city's
+  model is `new_city.py`'s template; its per-city check is
+  `parquetSchema.test.ts`, which asserts on every run that each city's
+  parquet is published with the columns the app reads. CI used to widen the
+  sweep to the cities a diff touched and to every city on main; at 112 cities
+  (~30s each) main's run overran its hour on every push. A city whose parquet
+  is not on GCS yet is skipped, not failed.
 
 ```bash
 pnpm test:queries                                            # the default sweep
-DASHBOARD_QUERY_CITIES=all pnpm test:queries                 # every city
+DASHBOARD_QUERY_CITIES=all DASHBOARD_QUERY_COMPILE_TIMEOUT_MS=7200000 pnpm test:queries   # every city, by hand
 DASHBOARD_QUERY_ALL_CITIES=1 pnpm test:queries               # every city, every interactive state
 DASHBOARD_QUERY_CROSS_FILTERS=all|pairs pnpm test:queries    # every cross-filter dimension, or every pair
 ```

@@ -1,0 +1,30 @@
+import ..landmark_common;
+
+root datasource edinburgh_landmarks_update_time (
+    data_updated_through: gbedi_landmark_data_updated_through
+)
+file `./edinburgh_landmarks_probe.py`;
+
+# Historic Environment Scotland's designations -- listed buildings, scheduled
+# monuments and gardens and designed landscapes -- with HES's own
+# LOCAL_AUTH = 'Edinburgh', read live from HES's INSPIRE map server, so no
+# Nominatim geocoding, no committed CSV and no staging object. `lm_type` names
+# the designation and its category, `register_number` the HES designation
+# reference (LB/SM/GDL), `year_designated` the year it was designated.
+root partial datasource raw_edinburgh_landmark_info extends landmark_partition (
+    lm_type: ?lm_type,
+    register_number: ?register_number,
+    year_designated: ?year_designated,
+)
+complete where city = 'GBEDI'
+file `./edinburgh_landmarks.py`;
+
+partial datasource edinburgh_landmark_info extends published_landmark_info (
+    ?lm_type,
+    ?register_number,
+    ?year_designated,
+    gbedi_landmark_data_updated_through,
+)
+complete where city = 'GBEDI'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/gbedi_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/gbedi_landmark_info_v{data_version}.parquet`
+freshness by gbedi_landmark_data_updated_through;

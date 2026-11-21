@@ -69,25 +69,22 @@ const CONCURRENCY = Number(process.env.DASHBOARD_QUERY_CONCURRENCY ?? 1)
 // The whole catalog is compiled once in beforeAll, so that is where the budget
 // lives; the it() blocks only execute SQL against an in-process DuckDB.
 //
-// 55 minutes, sized for the *wide* sweep rather than the default one. The
-// narrow run is eight batches and finishes in about twelve minutes; the wide
-// run is one request per city and **grows by roughly 66 seconds with every
-// city added**, which is the number to do arithmetic with before the next
-// batch of them.
+// 20 minutes, for a sweep that no longer grows with the fleet. CI compiles a
+// fixed set of cities (REPRESENTATIVE_CITIES and LARGEST_CITIES below), about
+// a dozen requests at ~30-70s each, so ~8 minutes; the rest is headroom for a
+// resolver that is slow because something else is hammering it.
 //
-// This has now overrun twice, at the same point both times, which is what a
-// budget sized to today's fleet does. At 21 cities it reached batch 22 of 25
-// at 866s against a 15-minute budget. At 31 cities -- the six Canadian ArcGIS
-// cities had just merged -- it reached batch 22 of 29 against this 25-minute
-// one, with every batch compiling healthily in 63-73s and nothing wrong except
-// that there were more of them than would fit. 36 cities is 34 batches, or
-// about 38 minutes of compiling, so the budget is set with room for another
-// eight or so rather than for exactly the fleet that exists today.
+// It used to be 55 minutes, sized for a *wide* sweep of one request per city
+// that every push to main ran. That grew with every city added and overran
+// three budgets in turn; at 112 cities main's run died at the hour mark on
+// every push. A wide sweep by hand (DASHBOARD_QUERY_CITIES=all) needs more:
+// set DASHBOARD_QUERY_COMPILE_TIMEOUT_MS (the hook passes this explicitly, so
+// it overrides the config's hookTimeout).
 //
-// Give it room, because a hook that times out never registers its tests: the
-// overrun is reported as "N tests skipped", which reads like a suite that
-// declined to run rather than one that ran out of budget.
-const COMPILE_TIMEOUT_MS = 3_300_000
+// A hook that times out never registers its tests: the overrun is reported as
+// "N tests skipped", which reads like a suite that declined to run rather than
+// one that ran out of budget.
+const COMPILE_TIMEOUT_MS = Number(process.env.DASHBOARD_QUERY_COMPILE_TIMEOUT_MS ?? 1_200_000)
 const EXECUTE_TIMEOUT_MS = 120_000
 
 type CompiledCase = { sql?: string; error?: string }
@@ -351,18 +348,24 @@ const INTERACTIVE_CITIES: Array<CityCode | null> = process.env.DASHBOARD_QUERY_A
 // the plan most likely to break on its own. Everything else is a city whose
 // model `new_city.py` generated from the same template.
 //
-// This is a coverage trade and it is worth naming: a city outside this set can
-// break its own model and go green here. Two things cover that. A change that
-// touches any city model or the city config widens the run to every city (see
-// the `dashboard-queries` job in ci.yml), which is exactly the city-addition
-// case where this suite earns its keep; and every push to main sweeps all of
-// them regardless. `DASHBOARD_QUERY_ALL_CITIES=1` forces the wide run by hand.
+// This is a coverage trade and it is worth naming: a city outside these sets
+// can break its own plan and go green here. What it cannot do is go
+// unpublished or lose a column the app reads, because parquetSchema.test.ts
+// checks every city's parquet on every run. CI no longer widens this set for
+// the cities a diff touches, or to every city on main: at 112 cities that
+// was an hour of requests proving one template's plan a hundred times.
+// `DASHBOARD_QUERY_CITIES=all` is the wide run, by hand.
 const REPRESENTATIVE_CITIES: CityCode[] = ['USSFO', 'USBOS', 'GBLON', 'GRMLO']
 
+// The largest inventories by tree count (the world manifest, November 2026:
+// Boston 3.0M with its predicted trees, Bogota 1.5M, London 1.3M, New York
+// 1.2M, Madrid 0.9M). Their plans are the template's, but they are the cities
+// where a plan that is merely slow becomes one that fails in the browser, and
+// the cities most people open. Boston and London are already representatives.
+const LARGEST_CITIES: CityCode[] = ['USBOS', 'COBOG', 'GBLON', 'USNYC', 'ESMAD']
+
 // `DASHBOARD_QUERY_CITIES` adds cities to that default: a comma-separated list
-// of codes, or `all`. CI fills it from the diff, so a pull request that edits
-// three city models sweeps those three plus the representatives rather than all
-// twenty-one -- the cities it changed are the ones whose plans could have moved.
+// of codes, or `all`. CI does not set it; it is for a run by hand.
 //
 // It is deliberately separate from DASHBOARD_QUERY_ALL_CITIES, which widens the
 // *interactive* states too (a species selection and a cross-filter per city) and
@@ -385,7 +388,7 @@ const BASE_CITIES: Array<CityCode | null> = process.env.DASHBOARD_QUERY_ALL_CITI
   : [
       null,
       ...new Set([
-        ...REPRESENTATIVE_CITIES.filter((city) => ALL_CITIES.includes(city)),
+        ...[...REPRESENTATIVE_CITIES, ...LARGEST_CITIES].filter((city) => ALL_CITIES.includes(city)),
         ...requestedCities(),
       ]),
     ]

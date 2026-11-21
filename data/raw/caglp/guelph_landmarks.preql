@@ -1,0 +1,27 @@
+import ..landmark_common;
+
+root datasource guelph_landmarks_update_time (
+    data_updated_through: caglp_landmark_data_updated_through
+)
+file `./guelph_landmarks_probe.py`;
+
+# Guelph's municipal Heritage Register (designated under Parts IV and V of the
+# Ontario Heritage Act, and listed non-designated properties) plus its
+# designated cultural heritage landscapes, read live off the City's own
+# ArcGIS Online layer -- an official register, so no geocoding and nothing to
+# stage.  No licence is stated; see guelph_landmarks.py.
+root partial datasource raw_guelph_landmark_info extends landmark_partition (
+    address: ?address,
+    property_type: ?property_type,
+)
+complete where city = 'CAGLP'
+file `./guelph_landmarks.py`;
+
+partial datasource guelph_landmark_info extends published_landmark_info (
+    ?address,
+    ?property_type,
+    caglp_landmark_data_updated_through,
+)
+complete where city = 'CAGLP'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/caglp_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/caglp_landmark_info_v{data_version}.parquet`
+freshness by caglp_landmark_data_updated_through;
