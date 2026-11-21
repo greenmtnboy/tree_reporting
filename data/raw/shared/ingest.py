@@ -892,6 +892,31 @@ SPECIES_SYNONYMS: dict[str, str] = {
 # `Celtis`/`Cercis occidentalis`, `Pinus`/`Prunus nigra` and
 # `Malus`/`Taxus baccata`.  Add an entry only with that check behind it.
 SPECIES_MISSPELLINGS: dict[str, str] = {
+    # Batch 11 (Riverside, Oakland, Edinburgh, Belfast, Guelph, Providence): each key absent from WCVP, each value accepted there.
+    "Acer pensylvanium": "Acer pensylvanicum",  # Edinburgh
+    "Magnifera indica": "Mangifera indica",  # Oakland
+    "Philladelphus coronarius": "Philadelphus coronarius",  # Oakland
+    # Batch 11 (Riverside, Oakland, Edinburgh, Belfast, Guelph, Providence): each key absent from WCVP, each value accepted there.
+    "Tilla cordata": "Tilia cordata",  # Belfast
+    "Tilla mongolica": "Tilia mongolica",  # Belfast
+    "Tilla platyphyllos": "Tilia platyphyllos",  # Belfast
+    "Tilla x euchlora": "Tilia x euchlora",  # Belfast
+    "Tilla x europaea": "Tilia x europaea",  # Belfast
+    "Tilla": "Tilia",  # Belfast
+    "Davidia involcrata": "Davidia involucrata",  # Belfast
+    "Ilex acqufolium": "Ilex aquifolium",  # Belfast
+    "Nothofagus dombeyii": "Nothofagus dombeyi",  # Belfast
+    "Populus x canesces": "Populus x canescens",  # Belfast
+    "Abies nornandiana": "Abies nordmanniana",  # Belfast
+    "Crataegus crus-gali": "Crataegus crus-galli",  # Providence
+    "Koelrenteria paniculata": "Koelreuteria paniculata",  # Providence
+    "Liquidambar syraciflua": "Liquidambar styraciflua",  # Providence
+    "Pinus artistata": "Pinus aristata",  # Providence
+    "Acacia retiniodes": "Acacia retinodes",  # Riverside
+    "Phoenix loureirii": "Phoenix loureiroi",  # Riverside
+    "Sambucus caerulea": "Sambucus cerulea",  # Riverside
+    "Cupresssus guadalupensis": "Cupressus guadalupensis",  # Riverside
+    "Rhamus cathartica": "Rhamnus cathartica",  # Guelph
     # Batch 10 (Oakville, Rochester, Syracuse, Las Vegas, Brest, Groningen): each key absent from WCVP, each value accepted there.
     "Acer plantanoides": "Acer platanoides",  # Oakville
     "Aesculus hippocastinum": "Aesculus hippocastanum",  # Oakville
@@ -2877,7 +2902,7 @@ def _check_tree_id_grain(
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
     "USPVD": (41.77, 41.87, -71.48, -71.37),
-    "CAGLP": (43.48, 43.61, -80.33, -80.15),
+    "CAGLP": (43.475, 43.61, -80.33, -80.15),
     "GBBFS": (54.53, 54.66, -6.05, -5.8),
     "GBEDI": (55.82, 56.0, -3.45, -3.07),
     "USOAK": (37.7, 37.89, -122.345, -122.11),
@@ -2976,7 +3001,7 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
     "CAWPG": (49.66, 50.03, -97.4, -96.9),
     "CAEDM": (53.3, 53.75, -113.8, -113.2),
     "CACAL": (50.8, 51.25, -114.35, -113.83),
-    "USSFO": (37.60, 37.90, -122.60, -122.30),
+    "USSFO": (37.60, 37.90, -122.60, -122.345),
     "USNYC": (40.45, 40.95, -74.30, -73.65),
     "USBOS": (42.15, 42.55, -71.25, -70.85),
     "FRPAR": (48.70, 49.05, 2.10, 2.60),
@@ -3051,18 +3076,18 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "USPVD": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "CAGLP": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "GBBFS": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "GBEDI": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "USOAK": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "USRAL": 10,
+    # osm_dedup_validation 2026-11-21: 6m 1273/53 (4.2%), marginal 3.8; 8m 1.8.
+    "USPVD": 6,
+    # osm_dedup_validation 2026-11-21: 4m 9471/666 (7.0%), marginal 5.7; 6m 0.8.
+    "CAGLP": 4,
+    # osm_dedup_validation 2026-11-21: 8m 5434/409 (7.5%), marginal 5.0; 10m 1.8.
+    "GBBFS": 8,
+    # osm_dedup_validation 2026-11-21: 6m 9371/1029 (11.0%), marginal 2.7; 8m 1.1.
+    "GBEDI": 6,
+    # osm_dedup_validation 2026-11-21: 6m 839/27 (3.2%), marginal 8.2; 8m 1.4.
+    "USOAK": 6,
+    # osm_dedup_validation 2026-11-21: 8m 503/35 (7.0%), marginal 3.4; 10m 0.6.
+    "USRAL": 8,
     # osm_dedup_validation 2026-11-20: 6m 3170/46 (1.4%), marginal 5.0; 8m 1.6.
     "NLGRQ": 6,
     # osm_dedup_validation 2026-11-20: 8m 4037/107 (2.6%), marginal 2.1; 10m below 1.
@@ -3650,7 +3675,7 @@ Box = tuple[float, float, float, float]
 
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
     'USPVD': ((41.77, 41.87, -71.48, -71.37),),
-    'CAGLP': ((43.48, 43.61, -80.33, -80.15),),
+    'CAGLP': ((43.475, 43.61, -80.33, -80.15),),
     'GBBFS': ((54.53, 54.66, -6.05, -5.8),),
     'GBEDI': ((55.82, 56.0, -3.45, -3.07),),
     'USOAK': ((37.7, 37.89, -122.345, -122.11),),
@@ -4034,7 +4059,7 @@ CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
     'CAWPG': ((49.66, 50.03, -97.4, -96.9),),
     'CAEDM': ((53.3, 53.75, -113.8, -113.2),),
     'CACAL': ((50.8, 51.25, -114.35, -113.83),),
-    'USSFO': ((37.6, 37.9, -122.6, -122.3),),
+    'USSFO': ((37.6, 37.9, -122.6, -122.345),),
     'USNYC': ((40.45, 40.95, -74.3, -73.65),),
     'USBOS': ((42.15, 42.55, -71.25, -70.85),),
     'FRPAR': ((48.7, 49.05, 2.1, 2.6),),

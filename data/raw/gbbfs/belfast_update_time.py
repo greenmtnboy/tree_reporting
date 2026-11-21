@@ -3,40 +3,39 @@
 # requires-python = ">=3.13"
 # dependencies = ["pyarrow", "pytrilogy", "requests"]
 # ///
-"""Freshness probe for Belfast's tree inventory.  STUB -- point it at the portal.
+"""Freshness probe for Belfast's tree inventory.
 
-Mandatory: without it the pipeline re-downloads the whole dataset on every
-tick.  Hit the lightest metadata endpoint the portal exposes:
+The watermark is the council CSV's own `Last-Modified` (2026-09-10 on
+2026-11-20), read with a HEAD on the download URL the OpenDataNI resource
+record names.  The CKAN stamps do not track the data: the resource's
+`last_modified` is null, its `created` is 2015, and the package's
+`metadata_modified` (2026-10-28) moves on any description edit.
 
-    ArcGIS     `shared.platforms.arcgis.layer_last_edit(LAYER)`, or `field_max` for a
-               layer with no editingInfo
-    OpenDataSoft  GET /api/explore/v2.1/catalog/datasets/{id} -> .metas.default.modified
-    CKAN       GET /api/3/action/resource_show?id={id} -> .result.last_modified
-    Socrata    `shared.platforms.socrata.rows_updated_at(DATASET)` -- reads
-               /api/views/{id}.json .rowsUpdatedAt (unix SECONDS, not
-               Esri's milliseconds)
-
-Fetch with `get_json_with_retry`, never a bare `requests.get(...).json()`: a
-portal in maintenance answers every path with an HTML holding page and HTTP
-200, and every probe is a root datasource whose exception ends the whole
-refresh for every city.  `emit_freshness` turns an availability failure into
-the epoch so this city sits out the run; a *parse* failure still raises, because
-that means the portal changed its schema and degrading would freeze this city's
-Parquet silently and for ever.
+A transport failure or a non-JSON catalogue answer degrades to the epoch
+through `emit_freshness`; a file served without `Last-Modified` raises (the
+host changed shape).
 """
 
 import sys
 from datetime import datetime
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from shared.ingest import emit_freshness, get_json_with_retry
+from shared.ingest import emit_freshness, head_with_retry
+from shared.platforms.ckan import CkanResource, resource_download_url
 
-METADATA_URL = "TODO: the portal's metadata endpoint"
+# Kept in step with belfast_tree_info.py.
+RESOURCE = CkanResource("admin.opendatani.gov.uk", "b501ba21-e26d-46d6-b854-26a95db78dd9")
 
 
 def fetch_modified_at() -> datetime:
-    raise NotImplementedError("TODO: read Belfast's published-through timestamp")
+    url = resource_download_url(RESOURCE)
+    response = head_with_retry(url, timeout=60)
+    stamp = response.headers.get("Last-Modified")
+    if not stamp:
+        raise RuntimeError(f"no Last-Modified header on {url}")
+    return parsedate_to_datetime(stamp)
 
 
 if __name__ == "__main__":

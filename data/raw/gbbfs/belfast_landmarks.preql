@@ -5,23 +5,25 @@ root datasource belfast_landmarks_update_time (
 )
 file `./belfast_landmarks_probe.py`;
 
-# STUB. Every city needs a landmarks model even if it yields zero rows -- a
-# missing file fails the landmark lane for every city, and the agent has no
-# geographic context for this one.
-#
-# Point the raw datasource at whichever source this city has, in preference
-# order: an official designation registry, the same portal as the trees, an
-# Overpass extract (STAGE it -- do not fetch at refresh time), or a curated CSV
-# geocoded via Nominatim (then add a `landmarks-gbbfs` job with NO cron).
-#
-# Both datasources extend ../landmark_common.preql's templates: add the
-# register's own attributes to both, mapped in one and stored in the other.
+# The Department for Communities' Historic Environment Division registers --
+# listed buildings (Historic Buildings Record, listed grades only) and
+# scheduled or state-care monuments (Sites and Monuments Record) -- cut to
+# HED's own `Council = 'Belfast'` attribution and read live from its public
+# FeatureServer (OGL), so no Nominatim geocoding, no committed CSV and no
+# staging object. `lm_type` names the designation and grade, `register_number`
+# the HED reference (HB or SMR number).
 root partial datasource raw_belfast_landmark_info extends landmark_partition (
+    address: ?address,
+    lm_type: ?lm_type,
+    register_number: ?register_number,
 )
 complete where city = 'GBBFS'
 file `./belfast_landmarks.py`;
 
 partial datasource belfast_landmark_info extends published_landmark_info (
+    ?address,
+    ?lm_type,
+    ?register_number,
     gbbfs_landmark_data_updated_through,
 )
 complete where city = 'GBBFS'

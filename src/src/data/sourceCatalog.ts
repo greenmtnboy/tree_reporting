@@ -11,12 +11,12 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
-  { city: 'Providence', label: 'TODO: Providence tree inventory source', url: 'TODO' },
-  { city: 'Guelph', label: 'TODO: Guelph tree inventory source', url: 'TODO' },
-  { city: 'Belfast', label: 'TODO: Belfast tree inventory source', url: 'TODO' },
-  { city: 'Edinburgh', label: 'TODO: Edinburgh tree inventory source', url: 'TODO' },
-  { city: 'Oakland', label: 'TODO: Oakland tree inventory source', url: 'TODO' },
-  { city: 'Riverside', label: 'TODO: Riverside tree inventory source', url: 'TODO' },
+  { city: 'Providence', label: 'City of Providence Parks Department, Forestry Division - Tree Inventory (TreeKeeper; no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://providenceri.treekeepersoftware.com/' },
+  { city: 'Guelph', label: 'City of Guelph Open Data - Trees (Open Government Licence - City of Guelph; contains information licensed under the Open Government Licence - City of Guelph)', url: 'https://explore.guelph.ca/datasets/cityofguelph::trees' },
+  { city: 'Belfast', label: 'Belfast City Council - Belfast Trees (Open Government Licence v3.0)', url: 'https://www.opendatani.gov.uk/dataset/belfast-trees' },
+  { city: 'Edinburgh', label: 'City of Edinburgh Council - Trees (Open Government Licence v3.0; Copyright City of Edinburgh Council, contains Ordnance Survey data © Crown copyright and database right; survey predates 2017)', url: 'https://www.arcgis.com/home/item.html?id=6c224ada230b4d349cfd739015c7846d' },
+  { city: 'Oakland', label: 'City of Oakland Public Works, Park & Tree Services - Oakland Public Tree Inventory, August 2023 (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://www.arcgis.com/home/item.html?id=1aeca241016e483cbfac4f2d1974692e' },
+  { city: 'Riverside', label: 'City of Riverside Open Data - Street, Park, Utility-Line and Miscellaneous Trees, April 2023 (no licence stated; the City Open Data Policy asks for the credit "Data provided by the City of Riverside")', url: 'https://www.arcgis.com/home/item.html?id=18ac0db05b7340d1b463d953fdc672fc' },
   { city: 'Groningen', label: 'Gemeente Groningen - Bomen (CC BY 4.0)', url: 'https://data.groningen.nl/dataset/bomen/04da3775-07f0-4388-bc12-7cd7536b04cd' },
   { city: 'Brest', label: 'Brest métropole - Les arbres (Licence Ouverte v2.0; species and position only)', url: 'https://www.data.gouv.fr/datasets/les-arbres/' },
   { city: 'Las Vegas', label: 'City of Las Vegas - Park Trees (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://www.arcgis.com/home/item.html?id=05622dec3c454882abf26c4e0ec8370f' },
@@ -159,12 +159,12 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
-  { city: 'Providence', label: 'TODO: Providence landmark source' },
-  { city: 'Guelph', label: 'TODO: Guelph landmark source' },
-  { city: 'Belfast', label: 'TODO: Belfast landmark source' },
-  { city: 'Edinburgh', label: 'TODO: Edinburgh landmark source' },
-  { city: 'Oakland', label: 'TODO: Oakland landmark source' },
-  { city: 'Riverside', label: 'TODO: Riverside landmark source' },
+  { city: 'Providence', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
+  { city: 'Guelph', label: 'City of Guelph Heritage Register - Cultural Heritage Resources (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://explore.guelph.ca/apps/cityofguelph::cultural-heritage-resources' },
+  { city: 'Belfast', label: 'Department for Communities NI, Historic Environment Division - listed buildings and scheduled monuments (Open Government Licence v3.0)', url: 'https://www.opendatani.gov.uk/dataset/historic-environment-division-esri-rest-api' },
+  { city: 'Edinburgh', label: 'Historic Environment Scotland - listed buildings, scheduled monuments, gardens and designed landscapes (Open Government Licence v3.0)', url: 'https://portal.historicenvironment.scot/' },
+  { city: 'Oakland', label: 'City of Oakland Bureau of Planning - Landmarks Board Designated properties (no licence stated; displayed with attribution only, not licensed for reuse); National Park Service - National Register of Historic Places', url: 'https://gismaps.oaklandca.gov/server/rest/services/Planning_and_Zoning_Controls/MapServer/35' },
+  { city: 'Riverside', label: 'City of Riverside - Historic Properties Designations, City Landmarks ("Data provided by the City of Riverside"); National Park Service - National Register of Historic Places', url: 'https://www.arcgis.com/home/item.html?id=c0310676be0b427d831b64e19d26c122' },
   { city: 'Groningen', label: 'Gemeente Groningen - Monumenten (CC BY 4.0)', url: 'https://data.overheid.nl/dataset/groningen-monumenten-gemeente-groningen' },
   { city: 'Groningen', label: 'Rijksdienst voor het Cultureel Erfgoed - Rijksmonumenten via PDOK (CC BY 4.0)', url: 'https://service.pdok.nl/rce/ps-ch/wfs/v1_0?request=GetCapabilities&service=WFS' },
   { city: 'Brest', label: 'Ministère de la Culture - Immeubles protégés au titre des Monuments Historiques (Licence Ouverte)', url: 'https://www.data.gouv.fr/datasets/immeubles-proteges-au-titre-des-monuments-historiques-2' },

@@ -3,26 +3,23 @@
 # requires-python = ">=3.13"
 # dependencies = ["pyarrow", "pytrilogy", "requests"]
 # ///
-"""Freshness probe for Guelph's tree inventory.  STUB -- point it at the portal.
+"""Freshness probe for Guelph's (Ontario) tree inventory.
 
-Mandatory: without it the pipeline re-downloads the whole dataset on every
-tick.  Hit the lightest metadata endpoint the portal exposes:
+The "Trees" layer (`OpenData/OpenData1/FeatureServer/7` on the City's own
+ArcGIS Server) publishes no `editingInfo` and has no edit-date column, so two
+weaker stamps are read and the **maximum** taken (the rule
+`hub_last_modified` documents -- the only combination that cannot freeze the
+city):
 
-    ArcGIS     `shared.platforms.arcgis.layer_last_edit(LAYER)`, or `field_max` for a
-               layer with no editingInfo
-    OpenDataSoft  GET /api/explore/v2.1/catalog/datasets/{id} -> .metas.default.modified
-    CKAN       GET /api/3/action/resource_show?id={id} -> .result.last_modified
-    Socrata    `shared.platforms.socrata.rows_updated_at(DATASET)` -- reads
-               /api/views/{id}.json .rowsUpdatedAt (unix SECONDS, not
-               Esri's milliseconds)
+* the Guelph GeoDataHub's DCAT `modified` for the dataset (explore.guelph.ca),
+  which follows the City's republish of the layer (2026-11-20 09:16Z when the
+  city was wired, while untouched datasets on the same hub sit at 2024-09);
+* MAX(`DT_PLANTED`), which moves whenever forestry records a new planting
+  (2026-10-29 at wiring), in case the hub stamp stops following the data.
 
-Fetch with `get_json_with_retry`, never a bare `requests.get(...).json()`: a
-portal in maintenance answers every path with an HTML holding page and HTTP
-200, and every probe is a root datasource whose exception ends the whole
-refresh for every city.  `emit_freshness` turns an availability failure into
-the epoch so this city sits out the run; a *parse* failure still raises, because
-that means the portal changed its schema and degrading would freeze this city's
-Parquet silently and for ever.
+Either read may be briefly unavailable and the other still answers; a schema
+question on either (the dataset gone from the feed, the field gone) raises,
+and only when both are unavailable does the probe degrade to the epoch.
 """
 
 import sys
@@ -30,13 +27,32 @@ from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from shared.ingest import emit_freshness, get_json_with_retry
+from shared.platforms.arcgis import FeatureLayer, field_max, hub_last_modified
+from shared.ingest import UpstreamUnavailable, emit_freshness
 
-METADATA_URL = "TODO: the portal's metadata endpoint"
+LAYER = FeatureLayer(
+    "https://gismaps.guelph.ca/hosting/rest/services/OpenData/OpenData1/"
+    "FeatureServer/7",
+    timeout=120,
+)
+HUB_HOST = "explore.guelph.ca"
 
 
 def fetch_modified_at() -> datetime:
-    raise NotImplementedError("TODO: read Guelph's published-through timestamp")
+    """The later of the hub's stamp and the newest planting date."""
+    stamps: list[datetime] = []
+    errors: list[Exception] = []
+    for read in (
+        lambda: hub_last_modified(HUB_HOST, LAYER.base, timeout=LAYER.timeout),
+        lambda: field_max(LAYER, "DT_PLANTED"),
+    ):
+        try:
+            stamps.append(read())
+        except UpstreamUnavailable as exc:
+            errors.append(exc)
+    if not stamps:
+        raise errors[0]
+    return max(stamps)
 
 
 if __name__ == "__main__":

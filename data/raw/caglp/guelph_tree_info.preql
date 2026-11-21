@@ -63,7 +63,7 @@ root partial datasource caglp_osm_tree_info extends tree_partition (
 )
 complete where city = 'CAGLP' and caglp_source = 'OSM_CAGLP'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/caglp_osm_staging.parquet`
-where (raw_latitude >= 43.48 and raw_latitude < 43.61 and raw_longitude >= -80.33 and raw_longitude < -80.15);
+where (raw_latitude >= 43.475 and raw_latitude < 43.61 and raw_longitude >= -80.33 and raw_longitude < -80.15);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

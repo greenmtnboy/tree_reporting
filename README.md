@@ -132,6 +132,12 @@ Currently has data from the following cities:
 - [Las Vegas, Nevada](https://greenmtnboy.github.io/tree_reporting/#/?city=USLAS)
 - [Brest, France](https://greenmtnboy.github.io/tree_reporting/#/?city=FRBES)
 - [Groningen, Netherlands](https://greenmtnboy.github.io/tree_reporting/#/?city=NLGRQ)
+- [Riverside, California](https://greenmtnboy.github.io/tree_reporting/#/?city=USRAL)
+- [Oakland, California](https://greenmtnboy.github.io/tree_reporting/#/?city=USOAK)
+- [Edinburgh, United Kingdom](https://greenmtnboy.github.io/tree_reporting/#/?city=GBEDI)
+- [Belfast, United Kingdom](https://greenmtnboy.github.io/tree_reporting/#/?city=GBBFS)
+- [Guelph, Ontario, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CAGLP)
+- [Providence, Rhode Island](https://greenmtnboy.github.io/tree_reporting/#/?city=USPVD)
 - [Lisbon, Portugal](https://greenmtnboy.github.io/tree_reporting/#/?city=PTLIS)
 - [Fingal (County Dublin), Ireland](https://greenmtnboy.github.io/tree_reporting/#/?city=IEFIN)
 - [Canberra, Australia](https://greenmtnboy.github.io/tree_reporting/#/?city=AUCBR)
@@ -284,6 +290,12 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 | Las Vegas | City of Las Vegas - Park Trees (no licence stated; displayed with attribution only, not licensed for reuse) | https://www.arcgis.com/home/item.html?id=05622dec3c454882abf26c4e0ec8370f |
 | Brest | Brest métropole - Les arbres (Licence Ouverte v2.0; species and position only) | https://www.data.gouv.fr/datasets/les-arbres/ |
 | Groningen | Gemeente Groningen - Bomen (CC BY 4.0) | https://data.groningen.nl/dataset/bomen/04da3775-07f0-4388-bc12-7cd7536b04cd |
+| Providence | City of Providence Parks Department, Forestry Division - Tree Inventory (TreeKeeper; no licence stated; displayed with attribution only, not licensed for reuse) | https://providenceri.treekeepersoftware.com/ |
+| Guelph | City of Guelph Open Data - Trees (Open Government Licence - City of Guelph; contains information licensed under the Open Government Licence - City of Guelph) | https://explore.guelph.ca/datasets/cityofguelph::trees |
+| Belfast | Belfast City Council - Belfast Trees (Open Government Licence v3.0) | https://www.opendatani.gov.uk/dataset/belfast-trees |
+| Edinburgh | City of Edinburgh Council - Trees (Open Government Licence v3.0; Copyright City of Edinburgh Council, contains Ordnance Survey data © Crown copyright and database right; survey predates 2017) | https://www.arcgis.com/home/item.html?id=6c224ada230b4d349cfd739015c7846d |
+| Oakland | City of Oakland Public Works, Park & Tree Services - Oakland Public Tree Inventory, August 2023 (no licence stated; displayed with attribution only, not licensed for reuse) | https://www.arcgis.com/home/item.html?id=1aeca241016e483cbfac4f2d1974692e |
+| Riverside | City of Riverside Open Data - Street, Park, Utility-Line and Miscellaneous Trees, April 2023 (no licence stated; the City Open Data Policy asks for the credit "Data provided by the City of Riverside") | https://www.arcgis.com/home/item.html?id=18ac0db05b7340d1b463d953fdc672fc |
 | Melbourne | Melbourne Open Data - Urban Forest Trees | https://data.melbourne.vic.gov.au/explore/dataset/trees-with-species-and-dimensions-urban-forest/ |
 | Melbourne (Port Phillip) | City of Port Phillip - Trees (CC BY 2.5 AU) | https://data.gov.au/data/dataset/city-of-port-phillip-trees |
 | Melbourne (Yarra) | City of Yarra - Street and Park Trees (CC BY 4.0) | https://data.gov.au/data/dataset/yarra-street-park-trees |
@@ -409,6 +421,12 @@ Every tree row carries a `data_source` column identifying which of the above it 
 | Brest | Ministère de la Culture - Immeubles protégés au titre des Monuments Historiques (Licence Ouverte) | https://www.data.gouv.fr/datasets/immeubles-proteges-au-titre-des-monuments-historiques-2 |
 | Groningen | Gemeente Groningen - Monumenten (CC BY 4.0) | https://data.overheid.nl/dataset/groningen-monumenten-gemeente-groningen |
 | Groningen | Rijksdienst voor het Cultureel Erfgoed - Rijksmonumenten via PDOK (CC BY 4.0) | https://service.pdok.nl/rce/ps-ch/wfs/v1_0?request=GetCapabilities&service=WFS |
+| Providence | National Park Service - National Register of Historic Places | https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer |
+| Guelph | City of Guelph Heritage Register - Cultural Heritage Resources (no licence stated; displayed with attribution only, not licensed for reuse) | https://explore.guelph.ca/apps/cityofguelph::cultural-heritage-resources |
+| Belfast | Department for Communities NI, Historic Environment Division - listed buildings and scheduled monuments (Open Government Licence v3.0) | https://www.opendatani.gov.uk/dataset/historic-environment-division-esri-rest-api |
+| Edinburgh | Historic Environment Scotland - listed buildings, scheduled monuments, gardens and designed landscapes (Open Government Licence v3.0) | https://portal.historicenvironment.scot/ |
+| Oakland | City of Oakland Bureau of Planning - Landmarks Board Designated properties (no licence stated; displayed with attribution only, not licensed for reuse); National Park Service - National Register of Historic Places | https://gismaps.oaklandca.gov/server/rest/services/Planning_and_Zoning_Controls/MapServer/35 |
+| Riverside | City of Riverside - Historic Properties Designations, City Landmarks ("Data provided by the City of Riverside"); National Park Service - National Register of Historic Places | https://www.arcgis.com/home/item.html?id=c0310676be0b427d831b64e19d26c122 |
 | Sydney | Sydney LEP 2012 heritage items (NSW DPHI, CC BY) | https://data.nsw.gov.au/data/dataset/environmental-planning-instrument-heritage-her |
 | Eindhoven | Rijksdienst voor het Cultureel Erfgoed - Rijksmonumenten via PDOK (CC BY 4.0) | https://service.pdok.nl/rce/ps-ch/wfs/v1_0?request=GetCapabilities&service=WFS |
 | Melbourne | Melbourne Open Data - Landmarks and Places of Interest | https://data.melbourne.vic.gov.au/explore/dataset/landmarks-and-places-of-interest-including-schools-theatres-health-services-spor/ |
