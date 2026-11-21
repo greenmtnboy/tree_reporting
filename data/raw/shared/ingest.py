@@ -3033,18 +3033,18 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "NLGRQ": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "FRBES": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "USLAS": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "USSYR": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "USROC": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "CAOAK": 10,
+    # osm_dedup_validation 2026-11-20: 6m 3170/46 (1.4%), marginal 5.0; 8m 1.6.
+    "NLGRQ": 6,
+    # osm_dedup_validation 2026-11-20: 8m 4037/107 (2.6%), marginal 2.1; 10m below 1.
+    "FRBES": 8,
+    # osm_dedup_validation 2026-11-20: 8m 392/19 (4.6%), marginal 4.4; 10m is 1:1.
+    "USLAS": 8,
+    # osm_dedup_validation 2026-11-20: 8m 731/41 (5.3%), marginal 2.5; 14m turns below 1.
+    "USSYR": 8,
+    # osm_dedup_validation 2026-11-20: thin OSM (56 matched); no false flags through 8m, 10m adds only a false one.
+    "USROC": 8,
+    # osm_dedup_validation 2026-11-20: 4m 179/3 (1.6% false), 6m adds +3/+4.
+    "CAOAK": 4,
     # Calibrated 2026-11-20: 8 m keeps 4.3 true per false at the margin;
     # 10 m drops below 1 (0.80).
     "USSMO": 8,
