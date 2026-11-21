@@ -764,6 +764,42 @@ const CITY_DASHBOARD_CONTEXT: Record<
     biome: 'Temperate Grasslands, Savannas & Shrublands',
     realm: 'nearctic',
   },
+  GBFAR: {
+    ecoregionId: 663, // English Lowlands beech forests
+    usdaZone: 9,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'palearctic',
+  },
+  CAFRE: {
+    ecoregionId: 335, // Gulf of St. Lawrence lowland forests
+    usdaZone: 5,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'nearctic',
+  },
+  CAMHT: {
+    ecoregionId: 396, // Northern Shortgrass prairie
+    usdaZone: 4,
+    biome: 'Temperate Grasslands, Savannas & Shrublands',
+    realm: 'nearctic',
+  },
+  AULST: {
+    ecoregionId: 178, // Tasmanian temperate forests
+    usdaZone: 9,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'australasia',
+  },
+  AUMRS: {
+    ecoregionId: 176, // Southeast Australia temperate forests
+    usdaZone: 9,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'australasia',
+  },
+  AUSHT: {
+    ecoregionId: 192, // Southeast Australia temperate savanna
+    usdaZone: 9,
+    biome: 'Temperate Grasslands, Savannas & Shrublands',
+    realm: 'australasia',
+  },
 }
 
 function escapeStringLiteral(value: string) {

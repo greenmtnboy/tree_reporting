@@ -132,6 +132,12 @@ import gbbsk.basingstoke_landmarks;
 import gbyrk.york_landmarks;
 import nzhas.hastings_landmarks;
 import cared.red_deer_landmarks;
+import gbfar.fareham_landmarks;
+import cafre.fredericton_landmarks;
+import camht.medicinehat_landmarks;
+import aulst.launceston_landmarks;
+import aumrs.macedon_landmarks;
+import ausht.shepparton_landmarks;
 
 # The cross-city union is NOT declared here. It lives in
 # `full_landmark_publish.preql`, which reads the parquets these imports publish

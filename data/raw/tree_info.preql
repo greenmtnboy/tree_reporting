@@ -123,6 +123,12 @@ import gbbsk.basingstoke_tree_info;
 import gbyrk.york_tree_info;
 import nzhas.hastings_tree_info;
 import cared.red_deer_tree_info;
+import gbfar.fareham_tree_info;
+import cafre.fredericton_tree_info;
+import camht.medicinehat_tree_info;
+import aulst.launceston_tree_info;
+import aumrs.macedon_tree_info;
+import ausht.shepparton_tree_info;
 
 # Each city models its originating dataset as its own enum key so Trilogy can
 # prove per-city partition coverage (see core.preql). Merging them here — and
@@ -253,6 +259,12 @@ merge gbbsk_source into data_source;
 merge gbyrk_source into data_source;
 merge nzhas_source into data_source;
 merge cared_source into data_source;
+merge gbfar_source into data_source;
+merge cafre_source into data_source;
+merge camht_source into data_source;
+merge aulst_source into data_source;
+merge aumrs_source into data_source;
+merge ausht_source into data_source;
 
 # The dedup columns (`merged_sources`, `merged_tree_ids`) are
 # the one shared derivation in tree_dedup.preql, computed inside each city's
@@ -392,7 +404,13 @@ aubxg_published_data_updated_through,
 gbbsk_published_data_updated_through,
 gbyrk_published_data_updated_through,
 nzhas_published_data_updated_through,
-cared_published_data_updated_through);
+cared_published_data_updated_through,
+gbfar_published_data_updated_through,
+cafre_published_data_updated_through,
+camht_published_data_updated_through,
+aulst_published_data_updated_through,
+aumrs_published_data_updated_through,
+ausht_published_data_updated_through);
 # --- Merged union datasource ---
 
 datasource tree_info (

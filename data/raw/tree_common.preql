@@ -51,6 +51,18 @@ property <*>.usden_data_updated_through datetime; # when Denver data is through
 # community column with the staged OSM one and nothing else.
 property <*>.ustem_osm_data_updated_through datetime; # mtime of Tempe's committed OSM staging parquet
 property <*>.usbos_osm_data_updated_through datetime;
+property <*>.ausht_data_updated_through datetime; # when Greater Shepparton data is through
+property <*>.ausht_osm_data_updated_through datetime; # GCS publication time of Greater Shepparton's staged OSM parquet
+property <*>.aumrs_data_updated_through datetime; # when Macedon Ranges data is through
+property <*>.aumrs_osm_data_updated_through datetime; # GCS publication time of Macedon Ranges's staged OSM parquet
+property <*>.aulst_data_updated_through datetime; # when Launceston data is through
+property <*>.aulst_osm_data_updated_through datetime; # GCS publication time of Launceston's staged OSM parquet
+property <*>.camht_data_updated_through datetime; # when Medicine Hat data is through
+property <*>.camht_osm_data_updated_through datetime; # GCS publication time of Medicine Hat's staged OSM parquet
+property <*>.cafre_data_updated_through datetime; # when Fredericton data is through
+property <*>.cafre_osm_data_updated_through datetime; # GCS publication time of Fredericton's staged OSM parquet
+property <*>.gbfar_data_updated_through datetime; # when Fareham data is through
+property <*>.gbfar_osm_data_updated_through datetime; # GCS publication time of Fareham's staged OSM parquet
 property <*>.cared_data_updated_through datetime; # when Red Deer data is through
 property <*>.cared_osm_data_updated_through datetime; # GCS publication time of Red Deer's staged OSM parquet
 property <*>.nzhas_data_updated_through datetime; # when Hastings data is through

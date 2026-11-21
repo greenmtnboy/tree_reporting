@@ -122,5 +122,11 @@
   "GBBSK": { "name": "Basingstoke", "center": [-1.087, 51.266] },
   "GBYRK": { "name": "York", "center": [-1.082, 53.959] },
   "NZHAS": { "name": "Hastings", "center": [176.84, -39.64] },
-  "CARED": { "name": "Red Deer", "center": [-113.81, 52.268] }
+  "CARED": { "name": "Red Deer", "center": [-113.81, 52.268] },
+  "GBFAR": { "name": "Fareham", "center": [-1.2, 50.855] },
+  "CAFRE": { "name": "Fredericton", "center": [-66.65, 45.96] },
+  "CAMHT": { "name": "Medicine Hat", "center": [-110.68, 50.04] },
+  "AULST": { "name": "Launceston", "center": [147.14, -41.435] },
+  "AUMRS": { "name": "Macedon Ranges", "center": [144.58, -37.4] },
+  "AUSHT": { "name": "Greater Shepparton", "center": [145.4, -36.38] }
 }

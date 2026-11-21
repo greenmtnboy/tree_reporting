@@ -1,0 +1,30 @@
+import ..landmark_common;
+
+root datasource launceston_landmarks_update_time (
+    data_updated_through: aulst_landmark_data_updated_through
+)
+file `./launceston_landmarks_probe.py`;
+
+# Launceston's places on the Tasmanian Heritage Register, read live from
+# Heritage Tasmania's layer on theLIST and cut to the city by the layer's own
+# MUNICIPALITY column (see launceston_landmarks.py) -- an official register,
+# so no geocoding, no committed CSV and no staging object.  `lm_type` names
+# the register, `register_number` carries the THR id and `address` the
+# register's location address.
+root partial datasource raw_launceston_landmark_info extends landmark_partition (
+    lm_type: ?lm_type,
+    register_number: ?register_number,
+    address: ?address,
+)
+complete where city = 'AULST'
+file `./launceston_landmarks.py`;
+
+partial datasource launceston_landmark_info extends published_landmark_info (
+    ?lm_type,
+    ?register_number,
+    ?address,
+    aulst_landmark_data_updated_through,
+)
+complete where city = 'AULST'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/aulst_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/aulst_landmark_info_v{data_version}.parquet`
+freshness by aulst_landmark_data_updated_through;
