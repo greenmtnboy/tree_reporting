@@ -20,7 +20,7 @@
         </button>
       </div>
       <div id="entry-feedback" class="entry-feedback">
-        <p v-if="locating" role="status">Finding your location… Allow access if your browser asks.</p>
+        <p v-if="locating" role="status">Finding your location… Allow access if prompted.</p>
         <p v-else-if="locationError" class="entry-error" role="alert">{{ locationError }}</p>
         <template v-else>
           <p id="nearby-help">Near Me uses your location to find local trees.</p>
@@ -98,7 +98,7 @@ let entryNavigation: Promise<unknown> = Promise.resolve()
 // a deadline of our own the entry sat on "Finding your location…" for good.
 // A fix that arrives after the deadline still opens the map.
 const LOCATION_DEADLINE_MS = 15_000
-const STALLED_MESSAGE = 'Finding your location is taking too long. Allow location access if your browser asked, try again, or choose Explore City.'
+const STALLED_MESSAGE = 'Finding your location is taking too long. Allow location access if prompted, try again, or choose Explore City.'
 
 async function locate() {
   const id = ++request
@@ -129,8 +129,8 @@ async function locate() {
     performance.measure('trees:location', 'trees:location:start', 'trees:location:ready')
   } catch (error) {
     if (id !== request) return
-    const code = (error as { code?: number }).code
-    locationError.value = code === 1 ? 'Location access is off. Allow location in your browser or choose Explore City.'
+    const code = (error as { code?: number | string }).code
+    locationError.value = code === 1 || code === 'OS-PLUG-GLOC-0003' ? 'Location access is off. Allow location in Settings or choose Explore City.'
       : code === 3 ? 'Finding your location took too long. Try again or choose Explore City.'
         : code === 2 ? 'Your location is unavailable. Try again or choose Explore City.'
           : (error as Error).message

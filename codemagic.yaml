@@ -1,0 +1,37 @@
+workflows:
+  explorer-testflight:
+    name: Arborary.World · internal TestFlight
+    instance_type: mac_mini_m2
+    working_directory: src
+    max_build_duration: 60
+    integrations:
+      app_store_connect: Arborary
+    environment:
+      xcode: latest
+      node: '22'
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: world.arborary.explorer
+    scripts:
+      - name: Bundle the explorer and sync native plugins
+        script: |
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+          pnpm install --frozen-lockfile
+          pnpm ios:sync
+      - name: Apply distribution profile
+        script: xcode-project use-profiles
+      - name: Archive signed app
+        script: |
+          cd ios/App
+          agvtool new-version -all "$PROJECT_BUILD_NUMBER"
+          xcode-project build-ipa --project App.xcodeproj --scheme App
+    artifacts:
+      - src/ios/App/build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        # Upload for internal testers. No external beta or App Store review.
+        submit_to_testflight: false
+        submit_to_app_store: false
