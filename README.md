@@ -158,6 +158,12 @@ Currently has data from the following cities:
 - [Hastings, New Zealand](https://greenmtnboy.github.io/tree_reporting/#/?city=NZHAS)
 - [Red Deer, Alberta, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CARED)
 - [Greater Bendigo, Victoria, Australia](https://greenmtnboy.github.io/tree_reporting/#/?city=AUBXG)
+- [Fareham, United Kingdom](https://greenmtnboy.github.io/tree_reporting/#/?city=GBFAR)
+- [Launceston, Tasmania, Australia](https://greenmtnboy.github.io/tree_reporting/#/?city=AULST)
+- [Macedon Ranges, Victoria, Australia](https://greenmtnboy.github.io/tree_reporting/#/?city=AUMRS)
+- [Fredericton, New Brunswick, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CAFRE)
+- [Medicine Hat, Alberta, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CAMHT)
+- [Greater Shepparton, Victoria, Australia](https://greenmtnboy.github.io/tree_reporting/#/?city=AUSHT)
 
 **[Live page](https://greenmtnboy.github.io/tree_reporting/)**
 
@@ -307,6 +313,12 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 | York | City of York Council - Council owned trees and Private trees (Open Government Licence v3.0; contains Ordnance Survey data © Crown copyright and database right) | https://data.yorkopendata.org/dataset/council-owned-trees |
 | Hastings | Hastings District Council - Hastings DC Trees (CC BY 4.0, per the council's open data portal) | https://hastings-dc-open-data-hdcgis.hub.arcgis.com/ |
 | Red Deer | City of Red Deer - PARK_Trees_inservice (no licence stated; displayed with attribution only, not licensed for reuse) | https://www.arcgis.com/home/item.html?id=4ede9512512a4d5187045a35e063a92d |
+| Fareham | Fareham Borough Council - Council Trees (Open Government Licence v3.0; contains OS data © Crown copyright and database right) | https://maps.fareham.gov.uk/server/rest/services/Corporate/Trees/MapServer/1 |
+| Launceston | City of Launceston - Trees (CC BY 4.0, per the council's copyright notice for its mapping data) | https://opendata.launceston.tas.gov.au |
+| Macedon Ranges | Macedon Ranges Shire Council - Macedon Ranges Shire Trees on data.gov.au (CC BY 2.5 AU) | https://data.gov.au/data/dataset/macedon-ranges-shire-trees |
+| Fredericton | City of Fredericton - Tree Inventory (Open Government License - City of Fredericton) | https://data-fredericton.opendata.arcgis.com/datasets/1778707bb5a44f72b40aebcb297da092_37 |
+| Medicine Hat | City of Medicine Hat - Park Tree Inventory (City of Medicine Hat Open Data Licence) | https://www.arcgis.com/home/item.html?id=af05aa132ad24367a7d32d46af50bb38 |
+| Greater Shepparton | Greater Shepparton City Council - Street and Park Trees on data.gov.au (CC BY 4.0) | https://data.gov.au/data/dataset/greater-shepparton-city-council-street-and-park-trees |
 | Bendigo | City of Greater Bendigo - Environment - Trees (CC BY 2.5 AU) | https://data.gov.au/data/dataset/city-of-greater-bendigo-environment-trees |
 | Melbourne | Melbourne Open Data - Urban Forest Trees | https://data.melbourne.vic.gov.au/explore/dataset/trees-with-species-and-dimensions-urban-forest/ |
 | Melbourne (Port Phillip) | City of Port Phillip - Trees (CC BY 2.5 AU) | https://data.gov.au/data/dataset/city-of-port-phillip-trees |
@@ -444,6 +456,12 @@ Every tree row carries a `data_source` column identifying which of the above it 
 | York | Historic England - National Heritage List for England (Open Government Licence) | https://historicengland.org.uk/listing/the-list/ |
 | Hastings | Hastings District Council - District Plan heritage features (no licence stated; displayed with attribution only, not licensed for reuse) | https://storymaps.arcgis.com/stories/0d80ff4cad20442282c4622bbbce3989 |
 | Red Deer | City of Red Deer - Zoning Bylaw historical sites (no licence stated; displayed with attribution only, not licensed for reuse) | https://arcgis.reddeer.ca/arcgis/rest/services/CoRD_View_Layers/LUB_HistoricalSite_approved/FeatureServer/0 |
+| Fareham | Historic England - National Heritage List for England (Open Government Licence) | https://historicengland.org.uk/listing/the-list/ |
+| Launceston | Heritage Tasmania - Tasmanian Heritage Register via theLIST © State of Tasmania (CC BY 3.0 AU) | https://services.thelist.tas.gov.au/arcgis/rest/services/HT/HT_Public/MapServer/0 |
+| Macedon Ranges | Department of Transport and Planning - Victorian Heritage Register via Vicmap (CC BY 4.0) | https://discover.data.vic.gov.au/dataset/victorian-heritage-register |
+| Fredericton | City of Fredericton - Heritage Preservation Areas (no licence stated; displayed with attribution only, not licensed for reuse) | https://www.arcgis.com/home/item.html?id=7a92b67c2593433196e35dc1f3e6e763 |
+| Medicine Hat | City of Medicine Hat - Historic Resources (no licence stated; displayed with attribution only, not licensed for reuse) | https://services3.arcgis.com/2gQ2Dv4Fb016qFVU/arcgis/rest/services/Historic_Map_Tour_layer/FeatureServer/0 |
+| Greater Shepparton | Department of Transport and Planning - Victorian Heritage Register via Vicmap (CC BY 4.0) | https://discover.data.vic.gov.au/dataset/victorian-heritage-register |
 | Bendigo | Heritage Victoria - Victorian Heritage Register via Vicmap (CC BY 4.0) | https://discover.data.vic.gov.au/dataset/victorian-heritage-register |
 | Sydney | Sydney LEP 2012 heritage items (NSW DPHI, CC BY) | https://data.nsw.gov.au/data/dataset/environmental-planning-instrument-heritage-her |
 | Eindhoven | Rijksdienst voor het Cultureel Erfgoed - Rijksmonumenten via PDOK (CC BY 4.0) | https://service.pdok.nl/rce/ps-ch/wfs/v1_0?request=GetCapabilities&service=WFS |

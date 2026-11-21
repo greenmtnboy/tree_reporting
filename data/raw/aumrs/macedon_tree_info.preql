@@ -63,7 +63,7 @@ root partial datasource aumrs_osm_tree_info extends tree_partition (
 )
 complete where city = 'AUMRS' and aumrs_source = 'OSM_AUMRS'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/aumrs_osm_staging.parquet`
-where (raw_latitude >= -37.55 and raw_latitude < -37.12 and raw_longitude >= 144.25 and raw_longitude < 144.9);
+where (raw_latitude >= -37.57 and raw_latitude < -37.1 and raw_longitude >= 144.3 and raw_longitude < 144.93);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

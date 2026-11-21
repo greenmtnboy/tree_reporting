@@ -139,7 +139,7 @@ property <*>.cafre_community_data_updated_through datetime; # when approved comm
 property <*>.camht_community_data_updated_through datetime; # when approved community submissions for CAMHT are through
 property <*>.aulst_community_data_updated_through datetime; # when approved community submissions for AULST are through
 property <*>.aumrs_community_data_updated_through datetime; # when approved community submissions for AUMRS are through
-property <*>.nzlht_community_data_updated_through datetime; # when approved community submissions for NZLHT are through
+property <*>.ausht_community_data_updated_through datetime; # when approved community submissions for AUSHT are through
 
 # The community *rows* are declared per city too, in each city's own tree model,
 # as a `complete where city = 'X' and {code}_source = 'COMMUNITY_X'` partition.

@@ -2,55 +2,55 @@ import ..tree_common;
 import ..community_tree_info;
 import ..tree_dedup;
 
-auto nzlht_published_data_updated_through <- greatest(nzlht_data_updated_through, nzlht_community_data_updated_through, nzlht_osm_data_updated_through);
+auto ausht_published_data_updated_through <- greatest(ausht_data_updated_through, ausht_community_data_updated_through, ausht_osm_data_updated_through);
 
-key nzlht_source enum<string>['LOWERHUTT_OPENDATA', 'COMMUNITY_NZLHT', 'OSM_NZLHT']; # originating dataset for the row
+key ausht_source enum<string>['SHEPPARTON_OPENDATA', 'COMMUNITY_AUSHT', 'OSM_AUSHT']; # originating dataset for the row
 
 # Feed the shared cross-source merge (../tree_dedup.preql): it classifies rows
 # by the label's prefix and records provenance from it.
-auto nzlht_source_label <- concat(nzlht_source, '');
-merge nzlht_source_label into source_label;
+auto ausht_source_label <- concat(ausht_source, '');
+merge ausht_source_label into source_label;
 
-root datasource lowerhutt_update_time (
-    data_updated_through: nzlht_data_updated_through
+root datasource shepparton_update_time (
+    data_updated_through: ausht_data_updated_through
 )
-file `./lowerhutt_update_time.py`;
+file `./shepparton_update_time.py`;
 
-# Only this city's column, so an approval elsewhere does not mark NZLHT's
+# Only this city's column, so an approval elsewhere does not mark AUSHT's
 # Parquet stale. Trilogy probes this as MAX over the one column.
-root datasource nzlht_community_update_time (
-    nzlht_community_data_updated_through: nzlht_community_data_updated_through
+root datasource ausht_community_update_time (
+    ausht_community_data_updated_through: ausht_community_data_updated_through
 )
 file `../community_update_time.py`;
 
 # GCS publication time of the staged OSM parquet; it only moves when an
 # extraction is re-run and uploaded. Not a local mtime -- git does not preserve
 # it, so a committed staging file makes every fresh clone look like new data.
-root datasource nzlht_osm_update_time (
-    data_updated_through: nzlht_osm_data_updated_through
+root datasource ausht_osm_update_time (
+    data_updated_through: ausht_osm_data_updated_through
 )
-file `./lowerhutt_osm_probe.py`;
+file `./shepparton_osm_probe.py`;
 
 # Every partition extends ../tree_dedup.preql's `tree_partition`, which maps
 # the shared raw_* columns; a source that names a column differently re-binds
 # it here (`dbh: ?raw_dbh`).
-root partial datasource lowerhutt_raw_tree_info extends tree_partition (
-    data_source: nzlht_source,
+root partial datasource shepparton_raw_tree_info extends tree_partition (
+    data_source: ausht_source,
 )
-complete where city = 'NZLHT' and nzlht_source = 'LOWERHUTT_OPENDATA'
-file `./lowerhutt_tree_info.py`;
+complete where city = 'AUSHT' and ausht_source = 'SHEPPARTON_OPENDATA'
+file `./shepparton_tree_info.py`;
 
 
 # Approved community submissions for this city. The shared ingest script emits
-# every city's rows; the `complete where` clause narrows it to NZLHT and makes
+# every city's rows; the `complete where` clause narrows it to AUSHT and makes
 # it a disjoint partition, and the `where` clause is what actually filters --
 # `complete where` asserts, it does not promise a predicate.
-root partial datasource nzlht_community_tree_info extends tree_partition (
-    data_source: nzlht_source,
+root partial datasource ausht_community_tree_info extends tree_partition (
+    data_source: ausht_source,
 )
-complete where city = 'NZLHT' and nzlht_source = 'COMMUNITY_NZLHT'
+complete where city = 'AUSHT' and ausht_source = 'COMMUNITY_AUSHT'
 file `../community_tree_info.py`
-where city = 'NZLHT';
+where city = 'AUSHT';
 
 
 # OpenStreetMap trees, read from the staged parquet in GCS rather than Overpass
@@ -58,12 +58,12 @@ where city = 'NZLHT';
 # by construction; the overlap is resolved by ../tree_dedup.preql. The `where`
 # is the city's CITY_TERRITORY (tools/sync_osm_territory.py keeps it so): a
 # staged extract keeps the territory it was cut with until its next firing.
-root partial datasource nzlht_osm_tree_info extends tree_partition (
-    data_source: nzlht_source,
+root partial datasource ausht_osm_tree_info extends tree_partition (
+    data_source: ausht_source,
 )
-complete where city = 'NZLHT' and nzlht_source = 'OSM_NZLHT'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/nzlht_osm_staging.parquet`
-where (raw_latitude >= -41.32 and raw_latitude < -41.14 and raw_longitude >= 174.85 and raw_longitude < 175.01);
+complete where city = 'AUSHT' and ausht_source = 'OSM_AUSHT'
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/ausht_osm_staging.parquet`
+where (raw_latitude >= -36.71 and raw_latitude < -36.03 and raw_longitude >= 145.03 and raw_longitude < 145.81);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------
@@ -84,12 +84,12 @@ merge merged_longitude into longitude;
 # lost a quarter of the city.  The two `@source_kept` lines are the same guard
 # per bulk source; add one for every municipal or OSM label in the enum
 # (`test_every_city_refuses_a_collapsed_build`).
-partial datasource lowerhutt_tree_info extends published_tree_info (
-    data_source: nzlht_source,
-    nzlht_published_data_updated_through,
+partial datasource shepparton_tree_info extends published_tree_info (
+    data_source: ausht_source,
+    ausht_published_data_updated_through,
 )
-complete where city = 'NZLHT'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/nzlht_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/nzlht_tree_info_v{data_version}.parquet`
-freshness by nzlht_published_data_updated_through
-assert @source_kept(tree_id, nzlht_source, 'LOWERHUTT_OPENDATA', 0.75)
-assert @source_kept(tree_id, nzlht_source, 'OSM_NZLHT', 0.75);
+complete where city = 'AUSHT'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ausht_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/ausht_tree_info_v{data_version}.parquet`
+freshness by ausht_published_data_updated_through
+assert @source_kept(tree_id, ausht_source, 'SHEPPARTON_OPENDATA', 0.75)
+assert @source_kept(tree_id, ausht_source, 'OSM_AUSHT', 0.75);

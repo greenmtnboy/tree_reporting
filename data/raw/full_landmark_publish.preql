@@ -228,7 +228,7 @@ file [
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/camht_landmark_info_v{data_version}.parquet`,
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/aulst_landmark_info_v{data_version}.parquet`,
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/aumrs_landmark_info_v{data_version}.parquet`,
-    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/nzlht_landmark_info_v{data_version}.parquet`
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/ausht_landmark_info_v{data_version}.parquet`
 ];
 
 

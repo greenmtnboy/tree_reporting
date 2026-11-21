@@ -153,6 +153,6 @@ select * from (values
     ('CAMHT', 396),
     ('AULST', 178),
     ('AUMRS', 176),
-    ('NZLHT', 171)
+    ('AUSHT', 192)
 ) as t(city, ecoregion_id)
 ''';

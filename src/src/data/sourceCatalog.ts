@@ -11,12 +11,12 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
-  { city: 'Lower Hutt', label: 'TODO: Lower Hutt tree inventory source', url: 'TODO' },
-  { city: 'Macedon Ranges', label: 'TODO: Macedon Ranges tree inventory source', url: 'TODO' },
-  { city: 'Launceston', label: 'TODO: Launceston tree inventory source', url: 'TODO' },
-  { city: 'Medicine Hat', label: 'TODO: Medicine Hat tree inventory source', url: 'TODO' },
-  { city: 'Fredericton', label: 'TODO: Fredericton tree inventory source', url: 'TODO' },
-  { city: 'Fareham', label: 'TODO: Fareham tree inventory source', url: 'TODO' },
+  { city: 'Greater Shepparton', label: 'Greater Shepparton City Council - Street and Park Trees on data.gov.au (CC BY 4.0)', url: 'https://data.gov.au/data/dataset/greater-shepparton-city-council-street-and-park-trees' },
+  { city: 'Macedon Ranges', label: 'Macedon Ranges Shire Council - Macedon Ranges Shire Trees on data.gov.au (CC BY 2.5 AU)', url: 'https://data.gov.au/data/dataset/macedon-ranges-shire-trees' },
+  { city: 'Launceston', label: 'City of Launceston - Trees (CC BY 4.0, per the council\'s copyright notice for its mapping data)', url: 'https://opendata.launceston.tas.gov.au' },
+  { city: 'Medicine Hat', label: 'City of Medicine Hat - Park Tree Inventory (City of Medicine Hat Open Data Licence)', url: 'https://www.arcgis.com/home/item.html?id=af05aa132ad24367a7d32d46af50bb38' },
+  { city: 'Fredericton', label: 'City of Fredericton - Tree Inventory (Open Government License - City of Fredericton)', url: 'https://data-fredericton.opendata.arcgis.com/datasets/1778707bb5a44f72b40aebcb297da092_37' },
+  { city: 'Fareham', label: 'Fareham Borough Council - Council Trees (Open Government Licence v3.0; contains OS data © Crown copyright and database right)', url: 'https://maps.fareham.gov.uk/server/rest/services/Corporate/Trees/MapServer/1' },
   { city: 'Red Deer', label: 'City of Red Deer - PARK_Trees_inservice (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://www.arcgis.com/home/item.html?id=4ede9512512a4d5187045a35e063a92d' },
   { city: 'Hastings', label: 'Hastings District Council - Hastings DC Trees (CC BY 4.0, per the council\'s open data portal)', url: 'https://hastings-dc-open-data-hdcgis.hub.arcgis.com/' },
   { city: 'York', label: 'City of York Council - Council owned trees and Private trees (Open Government Licence v3.0; contains Ordnance Survey data © Crown copyright and database right)', url: 'https://data.yorkopendata.org/dataset/council-owned-trees' },
@@ -171,12 +171,12 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
-  { city: 'Lower Hutt', label: 'TODO: Lower Hutt landmark source' },
-  { city: 'Macedon Ranges', label: 'TODO: Macedon Ranges landmark source' },
-  { city: 'Launceston', label: 'TODO: Launceston landmark source' },
-  { city: 'Medicine Hat', label: 'TODO: Medicine Hat landmark source' },
-  { city: 'Fredericton', label: 'TODO: Fredericton landmark source' },
-  { city: 'Fareham', label: 'TODO: Fareham landmark source' },
+  { city: 'Greater Shepparton', label: 'Department of Transport and Planning - Victorian Heritage Register via Vicmap (CC BY 4.0)', url: 'https://discover.data.vic.gov.au/dataset/victorian-heritage-register' },
+  { city: 'Macedon Ranges', label: 'Department of Transport and Planning - Victorian Heritage Register via Vicmap (CC BY 4.0)', url: 'https://discover.data.vic.gov.au/dataset/victorian-heritage-register' },
+  { city: 'Launceston', label: 'Heritage Tasmania - Tasmanian Heritage Register via theLIST © State of Tasmania (CC BY 3.0 AU)', url: 'https://services.thelist.tas.gov.au/arcgis/rest/services/HT/HT_Public/MapServer/0' },
+  { city: 'Medicine Hat', label: 'City of Medicine Hat - Historic Resources (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://services3.arcgis.com/2gQ2Dv4Fb016qFVU/arcgis/rest/services/Historic_Map_Tour_layer/FeatureServer/0' },
+  { city: 'Fredericton', label: 'City of Fredericton - Heritage Preservation Areas (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://www.arcgis.com/home/item.html?id=7a92b67c2593433196e35dc1f3e6e763' },
+  { city: 'Fareham', label: 'Historic England - National Heritage List for England (Open Government Licence)', url: 'https://historicengland.org.uk/listing/the-list/' },
   { city: 'Red Deer', label: 'City of Red Deer - Zoning Bylaw historical sites (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://arcgis.reddeer.ca/arcgis/rest/services/CoRD_View_Layers/LUB_HistoricalSite_approved/FeatureServer/0' },
   { city: 'Hastings', label: 'Hastings District Council - District Plan heritage features (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://storymaps.arcgis.com/stories/0d80ff4cad20442282c4622bbbce3989' },
   { city: 'York', label: 'Historic England - National Heritage List for England (Open Government Licence)', url: 'https://historicengland.org.uk/listing/the-list/' },

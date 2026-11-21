@@ -2403,6 +2403,15 @@ timeout_seconds = 1800
 memory_mb = 2048
 
 [[cloud.job]]
+key = "derived-ausht"
+name = "urban-tree-derived-ausht"
+entrypoint = "raw/ausht/shepparton_tree_derived.preql"
+operation = "refresh"
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
 key = "derived-ausyd"
 name = "urban-tree-derived-ausyd"
 entrypoint = "raw/ausyd/sydney_tree_derived.preql"
@@ -3072,15 +3081,6 @@ memory_mb = 2048
 key = "derived-nzhas"
 name = "urban-tree-derived-nzhas"
 entrypoint = "raw/nzhas/hastings_tree_derived.preql"
-operation = "refresh"
-schedule = "0 0 12 * * SUN,WED"
-timeout_seconds = 1800
-memory_mb = 2048
-
-[[cloud.job]]
-key = "derived-nzlht"
-name = "urban-tree-derived-nzlht"
-entrypoint = "raw/nzlht/lowerhutt_tree_derived.preql"
 operation = "refresh"
 schedule = "0 0 12 * * SUN,WED"
 timeout_seconds = 1800
@@ -6129,36 +6129,36 @@ timeout_seconds = 900
 memory_mb = 2048
 
 [[cloud.job]]
-key = "city-nzlht"
-name = "urban-tree-city-nzlht"
-entrypoint = "raw/nzlht/lowerhutt_tree_info.preql"
+key = "city-ausht"
+name = "urban-tree-city-ausht"
+entrypoint = "raw/ausht/shepparton_tree_info.preql"
 operation = "refresh"
 # Starts in the twice-weekly tier, placed the day after this city's OSM
-# extract. Measure before moving it: `portal_cadence.py --record --city NZLHT`.
+# extract. Measure before moving it: `portal_cadence.py --record --city AUSHT`.
 schedule = "0 0 12 * * SUN,WED"
 timeout_seconds = 1800
 memory_mb = 2048
 
 [[cloud.job]]
-key = "osm-nzlht"
-name = "urban-tree-osm-nzlht"
-entrypoint = "osm_staging/nzlht_osm_staging.preql"
+key = "osm-ausht"
+name = "urban-tree-osm-ausht"
+entrypoint = "osm_staging/ausht_osm_staging.preql"
 operation = "refresh"
 # Overpass allows two slots per client IP and answers an over-budget request
 # with HTTP 200 carrying an error remark, so a collision looks like a city with
 # no trees in OSM. This minute must be used by no other extract job.
-schedule = "0 30 11 * * SAT"
+schedule = "0 30 11 * * SUN"
 timeout_seconds = 1800
 memory_mb = 1024
 
 [[cloud.job]]
-key = "refresh-landmarks-nzlht"
-name = "urban-tree-landmarks-refresh-nzlht"
-entrypoint = "raw/nzlht/lowerhutt_landmarks.preql"
+key = "refresh-landmarks-ausht"
+name = "urban-tree-landmarks-refresh-ausht"
+entrypoint = "raw/ausht/shepparton_landmarks.preql"
 operation = "refresh"
 # The next free two-minute Sunday slot; every one must land before the 05:00
 # union (tests/test_cloud_jobs.py).
-schedule = "0 22 0 * * SUN"
+schedule = "0 24 0 * * SUN"
 timeout_seconds = 900
 memory_mb = 2048
 

@@ -894,6 +894,58 @@ SPECIES_SYNONYMS: dict[str, str] = {
 # `Celtis`/`Cercis occidentalis`, `Pinus`/`Prunus nigra` and
 # `Malus`/`Taxus baccata`.  Add an entry only with that check behind it.
 SPECIES_MISSPELLINGS: dict[str, str] = {
+    # Batch 13 (Fareham, Launceston, Macedon Ranges, Fredericton, Medicine Hat, Greater Shepparton): each key absent from WCVP, each value accepted there.
+    "Banksia spinosa": "Banksia spinulosa",  # Greater Shepparton
+    "Grevillea rosemarinifolia": "Grevillea rosmarinifolia",  # Greater Shepparton
+    "Koelreuteria paniculatum": "Koelreuteria paniculata",  # Greater Shepparton
+    "Ligustrum japonicus": "Ligustrum japonicum",  # Greater Shepparton
+    "Melaleuca salignus": "Melaleuca saligna",  # Greater Shepparton
+    "Metasequoia glypotostroboides": "Metasequoia glyptostroboides",  # Greater Shepparton
+    "Photinia x fraserii": "Photinia x fraseri",  # Greater Shepparton
+    "Pistacia chilensis": "Pistacia chinensis",  # Greater Shepparton
+    "Raphiolepis umbellata": "Rhaphiolepis umbellata",  # Greater Shepparton
+    "Thuja plicatum": "Thuja plicata",  # Greater Shepparton
+    "Westringea fruiticosa": "Westringia fruticosa",  # Greater Shepparton
+    "Woolemia nobilis": "Wollemia nobilis",  # Greater Shepparton
+    "Acer platinoides": "Acer platanoides",  # Fredericton
+    "Fraxinus pennnsylvanica": "Fraxinus pennsylvanica",  # Fredericton
+    "Phellodendron amurence": "Phellodendron amurense",  # Fredericton
+    "Amalanchier": "Amelanchier",  # Fredericton
+    "Gladitsia tricanthos": "Gleditsia triacanthos",  # Fredericton
+    "Acer compestre": "Acer campestre",  # Fredericton
+    "Celtis occcidentalis": "Celtis occidentalis",  # Fredericton
+    "Fraxinus pannsylvanica": "Fraxinus pennsylvanica",  # Fredericton
+    "Quercus imbracaria": "Quercus imbricaria",  # Fredericton
+    "Acer patanoides": "Acer platanoides",  # Fredericton
+    "Acer plantinoides": "Acer platanoides",  # Fredericton
+    "Acer platanoidess": "Acer platanoides",  # Fredericton
+    "Acer platnoides": "Acer platanoides",  # Fredericton
+    "Acer sacchrinum": "Acer saccharinum",  # Fredericton
+    "Acer sacchrum": "Acer saccharum",  # Fredericton
+    "Acer sacharum": "Acer saccharum",  # Fredericton
+    "Aesculus hippocastunum": "Aesculus hippocastanum",  # Fredericton
+    "Amelanchier candensis": "Amelanchier canadensis",  # Fredericton
+    "Larix larciana": "Larix laricina",  # Fredericton
+    "Phellodendrun amurense": "Phellodendron amurense",  # Fredericton
+    "Picea marianna": "Picea mariana",  # Fredericton
+    "Pinus rsinosa": "Pinus resinosa",  # Fredericton
+    "Prunus viginiana": "Prunus virginiana",  # Fredericton
+    "Pyrus callerana": "Pyrus calleryana",  # Fredericton
+    "Quercus palutris": "Quercus palustris",  # Fredericton
+    "Acuba japonica": "Aucuba japonica",  # Macedon Ranges
+    "Ceonothus papillosus": "Ceanothus papillosus",  # Macedon Ranges
+    "Cotoneaster dameri": "Cotoneaster dammeri",  # Macedon Ranges
+    "Crataegus coccineoides": "Crataegus coccinioides",  # Macedon Ranges
+    "Euonomys japonicus": "Euonymus japonicus",  # Macedon Ranges
+    "Angophera costata": "Angophora costata",  # Launceston
+    "Eucalyptus viminalus": "Eucalyptus viminalis",  # Launceston
+    "Virgillia": "Virgilia",  # Launceston
+    "Thuaj occidentalis": "Thuja occidentalis",  # Launceston
+    "Prunus blireiana": "Prunus x blireana",  # Launceston
+    "Acer psuedoplatanus": "Acer pseudoplatanus",  # Fareham
+    "Rhus typhrina": "Rhus typhina",  # Fareham
+    "Trachycarpus fortunii": "Trachycarpus fortunei",  # Fareham
+    "Betula papyrifica": "Betula papyrifera",  # Medicine Hat
     # Batch 12 (Cockburn, Bendigo, Basingstoke, York, Hastings, Red Deer): each key absent from WCVP, each value accepted there.
     "Eucalyptus albans": "Eucalyptus albens",  # Bendigo
     "Eucalyptus baxterii": "Eucalyptus baxteri",  # Bendigo
@@ -2083,7 +2135,7 @@ def _sanitize_taxon(value: str | None) -> str | None:
 # Keyed by city code so `community_source_for` can derive the community label
 # and so tests can assert the two lists agree.
 MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
-    "NZLHT": ("LOWERHUTT_OPENDATA",),
+    "AUSHT": ("SHEPPARTON_OPENDATA",),
     "AUMRS": ("MACEDON_OPENDATA",),
     "AULST": ("LAUNCESTON_OPENDATA",),
     "CAMHT": ("MEDICINEHAT_OPENDATA",),
@@ -2245,7 +2297,7 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # overlapping rows under one cluster id and publishes only the survivor — see
 # tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
-    "NZLHT": "OSM_NZLHT",
+    "AUSHT": "OSM_AUSHT",
     "AUMRS": "OSM_AUMRS",
     "AULST": "OSM_AULST",
     "CAMHT": "OSM_CAMHT",
@@ -2986,8 +3038,8 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
-    "NZLHT": (-41.32, -41.14, 174.85, 175.01),
-    "AUMRS": (-37.55, -37.12, 144.25, 144.9),
+    "AUSHT": (-36.71, -36.03, 145.03, 145.81),
+    "AUMRS": (-37.57, -37.10, 144.30, 144.93),
     "AULST": (-41.5, -41.17, 147.02, 147.51),
     "CAMHT": (49.98, 50.08, -110.8, -110.61),
     "CAFRE": (45.88, 46.03, -66.79, -66.56),
@@ -3173,18 +3225,23 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "NZLHT": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "AUMRS": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "AULST": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "CAMHT": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "CAFRE": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "GBFAR": 10,
+    # osm_dedup_validation (2026-11-21): 8 m flags 184, 2.2% false, 70.3% recall;
+    # 10 m adds 27 for 3 more false; stop at 8 like Bendigo.
+    "AUSHT": 8,
+    # osm_dedup_validation (2026-11-21): 8 m flags 86, 2.3% false, 57.1% recall;
+    # mutual-NN stays above 60% through 20 m (rural roadside trees), so stop at 8.
+    "AUMRS": 8,
+    # osm_dedup_validation (2026-11-21): 6 m flags 767, 3.0% false, 71.7% recall;
+    # 4 m is 1.3% false at 60%. Median planting spacing is wide.
+    "AULST": 6,
+    # osm_dedup_validation (2026-11-21): 6 m flags 181, 0.6% false, 96.3% recall.
+    "CAMHT": 6,
+    # osm_dedup_validation (2026-11-21): 4 m flags 1,088, 3.0% false, 51.5% recall;
+    # 6 m is 6.9% false; mutual-NN 39% in the 5-10 m band.
+    "CAFRE": 4,
+    # osm_dedup_validation (2026-11-21): 4 m flags 184, 1.1% false, 52.1% recall;
+    # 6 m triples the false rate for +40.
+    "GBFAR": 4,
     # Calibrated 2026-11-21 (osm_dedup_validation): only 76 OSM trees;
     # 6 m catches 28 of 32 duplicates with no false flags, 8 m starts flagging neighbours.
     "CARED": 6,
@@ -3797,8 +3854,12 @@ DEDUP_CELL_METRES: dict[str, int] = {
 Box = tuple[float, float, float, float]
 
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
-    'NZLHT': ((-41.32, -41.14, 174.85, 175.01),),
-    'AUMRS': ((-37.55, -37.12, 144.25, 144.9),),
+    'AUSHT': ((-36.71, -36.03, 145.03, 145.81),),
+    # The shire's own LGA boundary reaches -37.568 at Gisborne South, so
+    # Melbourne's territory stops at -37.57 (none of its five councils reach
+    # that far north).  North edge -37.10 is where Bendigo's (AUBXG) box ends;
+    # the shire's northernmost tree is at -37.108.
+    'AUMRS': ((-37.57, -37.1, 144.3, 144.93),),
     'AULST': ((-41.5, -41.17, 147.02, 147.51),),
     'CAMHT': ((49.98, 50.08, -110.8, -110.61),),
     'CAFRE': ((45.88, 46.03, -66.79, -66.56),),
@@ -4210,7 +4271,7 @@ CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
     'DEBER': ((52.3, 52.7, 13.05, 13.8),),
     'NLAMS': ((52.25, 52.45, 4.7, 5.1),),
     'GBLON': ((51.25, 51.75, -0.55, 0.35),),
-    'AUMEL': ((-38.1, -37.55, 144.55, 145.4),),
+    'AUMEL': ((-38.1, -37.57, 144.55, 145.4),),
     'ARBUE': ((-34.8, -34.45, -58.55, -58.3),),
     # Everything in the box except Santa Monica's staircase (see USSMO).
     'USLAX': (

@@ -137,7 +137,7 @@ import cafre.fredericton_landmarks;
 import camht.medicinehat_landmarks;
 import aulst.launceston_landmarks;
 import aumrs.macedon_landmarks;
-import nzlht.lowerhutt_landmarks;
+import ausht.shepparton_landmarks;
 
 # The cross-city union is NOT declared here. It lives in
 # `full_landmark_publish.preql`, which reads the parquets these imports publish

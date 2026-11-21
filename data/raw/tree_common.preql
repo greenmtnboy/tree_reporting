@@ -51,8 +51,8 @@ property <*>.usden_data_updated_through datetime; # when Denver data is through
 # community column with the staged OSM one and nothing else.
 property <*>.ustem_osm_data_updated_through datetime; # mtime of Tempe's committed OSM staging parquet
 property <*>.usbos_osm_data_updated_through datetime;
-property <*>.nzlht_data_updated_through datetime; # when Lower Hutt data is through
-property <*>.nzlht_osm_data_updated_through datetime; # GCS publication time of Lower Hutt's staged OSM parquet
+property <*>.ausht_data_updated_through datetime; # when Greater Shepparton data is through
+property <*>.ausht_osm_data_updated_through datetime; # GCS publication time of Greater Shepparton's staged OSM parquet
 property <*>.aumrs_data_updated_through datetime; # when Macedon Ranges data is through
 property <*>.aumrs_osm_data_updated_through datetime; # GCS publication time of Macedon Ranges's staged OSM parquet
 property <*>.aulst_data_updated_through datetime; # when Launceston data is through

@@ -171,6 +171,7 @@ CHIMERA_SPECIES: set[str] = {
     "Pinus excelsior",
     "Tamerix angelica",
     "Ulmus paradoxa",
+    "Ulmus platanoides",
 }
 
 

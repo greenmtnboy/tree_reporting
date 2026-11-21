@@ -10,7 +10,7 @@
  * gets round to naming it here.
  */
 export const DATA_SOURCE_LABELS: Record<string, string> = {
-  LOWERHUTT_OPENDATA: 'Lower Hutt Open Data',
+  SHEPPARTON_OPENDATA: 'Greater Shepparton Open Data',
   MACEDON_OPENDATA: 'Macedon Ranges Open Data',
   LAUNCESTON_OPENDATA: 'Launceston Open Data',
   MEDICINEHAT_OPENDATA: 'Medicine Hat Open Data',

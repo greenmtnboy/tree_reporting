@@ -794,10 +794,10 @@ const CITY_DASHBOARD_CONTEXT: Record<
     biome: 'Temperate Broadleaf & Mixed Forests',
     realm: 'australasia',
   },
-  NZLHT: {
-    ecoregionId: 171, // New Zealand North Island temperate forests
-    usdaZone: 10,
-    biome: 'Temperate Broadleaf & Mixed Forests',
+  AUSHT: {
+    ecoregionId: 192, // Southeast Australia temperate savanna
+    usdaZone: 9,
+    biome: 'Temperate Grasslands, Savannas & Shrublands',
     realm: 'australasia',
   },
 }

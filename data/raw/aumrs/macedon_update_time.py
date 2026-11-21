@@ -3,26 +3,19 @@
 # requires-python = ">=3.13"
 # dependencies = ["pyarrow", "pytrilogy", "requests"]
 # ///
-"""Freshness probe for Macedon Ranges's tree inventory.  STUB -- point it at the portal.
+"""Freshness probe for Macedon Ranges Shire's tree inventory.
 
-Mandatory: without it the pipeline re-downloads the whole dataset on every
-tick.  Hit the lightest metadata endpoint the portal exposes:
+The inventory is the shapefile resource of the data.gov.au dataset
+`macedon-ranges-shire-trees`; a re-upload moves the resource's
+`last_modified` (2026-11-10T05:32:28 on 2026-11-21, matching the file's HTTP
+Last-Modified).  `data_last_modified` reads that and the package's
+`last_refreshed` (absent on data.gov.au) and takes the later, the shared
+CKAN rule; the package's `metadata_modified` is only a fallback, so a
+description edit does not rebuild the city.  Greater Bendigo's probe.
 
-    ArcGIS     `shared.platforms.arcgis.layer_last_edit(LAYER)`, or `field_max` for a
-               layer with no editingInfo
-    OpenDataSoft  GET /api/explore/v2.1/catalog/datasets/{id} -> .metas.default.modified
-    CKAN       GET /api/3/action/resource_show?id={id} -> .result.last_modified
-    Socrata    `shared.platforms.socrata.rows_updated_at(DATASET)` -- reads
-               /api/views/{id}.json .rowsUpdatedAt (unix SECONDS, not
-               Esri's milliseconds)
-
-Fetch with `get_json_with_retry`, never a bare `requests.get(...).json()`: a
-portal in maintenance answers every path with an HTML holding page and HTTP
-200, and every probe is a root datasource whose exception ends the whole
-refresh for every city.  `emit_freshness` turns an availability failure into
-the epoch so this city sits out the run; a *parse* failure still raises, because
-that means the portal changed its schema and degrading would freeze this city's
-Parquet silently and for ever.
+An outage degrades through `get_json_with_retry` (inside the CKAN module);
+a payload with no timestamp at all raises, because that is data.gov.au
+changing its metadata shape.
 """
 
 import sys
@@ -30,13 +23,14 @@ from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from shared.ingest import emit_freshness, get_json_with_retry
+from shared.ingest import emit_freshness  # noqa: E402
+from shared.platforms.ckan import CkanResource, data_last_modified  # noqa: E402
 
-METADATA_URL = "TODO: the portal's metadata endpoint"
+RESOURCE = CkanResource("data.gov.au/data", "22a9c292-1351-4332-89da-0ff6e87f55e2")
 
 
 def fetch_modified_at() -> datetime:
-    raise NotImplementedError("TODO: read Macedon Ranges's published-through timestamp")
+    return data_last_modified(RESOURCE)
 
 
 if __name__ == "__main__":

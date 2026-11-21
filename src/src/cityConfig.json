@@ -128,5 +128,5 @@
   "CAMHT": { "name": "Medicine Hat", "center": [-110.68, 50.04] },
   "AULST": { "name": "Launceston", "center": [147.14, -41.435] },
   "AUMRS": { "name": "Macedon Ranges", "center": [144.58, -37.4] },
-  "NZLHT": { "name": "Lower Hutt", "center": [174.91, -41.21] }
+  "AUSHT": { "name": "Greater Shepparton", "center": [145.4, -36.38] }
 }

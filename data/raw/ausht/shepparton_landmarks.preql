@@ -1,0 +1,27 @@
+import ..landmark_common;
+
+root datasource shepparton_landmarks_update_time (
+    data_updated_through: ausht_landmark_data_updated_through
+)
+file `./shepparton_landmarks_probe.py`;
+
+# Greater Shepparton's places on the Victorian Heritage Register, read live from
+# Vicmap's open-data WFS and cut to the Greater Shepparton with the LGA's
+# own boundary (see shepparton_landmarks.py) -- an official register, so no
+# Nominatim geocoding, no committed CSV and no staging object.  `lm_type`
+# names the register and `register_number` carries the VHR number (H1234).
+root partial datasource raw_shepparton_landmark_info extends landmark_partition (
+    lm_type: ?lm_type,
+    register_number: ?register_number,
+)
+complete where city = 'AUSHT'
+file `./shepparton_landmarks.py`;
+
+partial datasource shepparton_landmark_info extends published_landmark_info (
+    ?lm_type,
+    ?register_number,
+    ausht_landmark_data_updated_through,
+)
+complete where city = 'AUSHT'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/ausht_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/ausht_landmark_info_v{data_version}.parquet`
+freshness by ausht_landmark_data_updated_through;
