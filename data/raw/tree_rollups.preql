@@ -36,12 +36,12 @@ import ecoregion_info_source;
 
 property <*>.rollup_inputs_published_through datetime;
 
-# The newer of the rollup's and the enrichment table's publication; only the
-# rollup matters here, and a rebuild on an enrichment change costs seconds.
+# Use the actual publication time so a city added after Monday reaches the
+# dashboards on the next daily core run. The fits use a weekly watermark.
 root datasource rollup_inputs_probe (
     data_updated_through: rollup_inputs_published_through
 )
-file `./prediction_inputs_probe.py`;
+file `./rollup_inputs_probe.py`;
 
 auto rollup_tree_count <- count(tree_id);
 

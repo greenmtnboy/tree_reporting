@@ -93,6 +93,22 @@ def test_the_summary_has_a_job_on_the_core_cron():
     assert job["schedule"] == by_entrypoint["raw/full_tree_publish.preql"]["schedule"]
 
 
+def test_midweek_city_publications_advance_the_dashboard_watermark(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+
+    import prediction_inputs_probe as inputs
+    import rollup_inputs_probe as rollups
+
+    assert "file `./rollup_inputs_probe.py`;" in statements(MODEL)
+    monday = datetime(2026, 11, 16, tzinfo=timezone.utc)
+    publications = {"enrichment": monday, "rollup": monday + timedelta(days=1)}
+    monkeypatch.setattr(inputs, "published_at", lambda label, url: publications[label])
+    first = rollups.newest_input_publication()
+    publications["rollup"] += timedelta(days=1)
+    assert rollups.newest_input_publication() == first + timedelta(days=1)
+    assert inputs.weekly_input_publication() == monday
+
+
 def test_the_models_parse():
     from trilogy import Environment
 
