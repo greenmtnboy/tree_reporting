@@ -11,6 +11,12 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
+  { city: 'Red Deer', label: 'City of Red Deer - PARK_Trees_inservice (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://www.arcgis.com/home/item.html?id=4ede9512512a4d5187045a35e063a92d' },
+  { city: 'Hastings', label: 'Hastings District Council - Hastings DC Trees (CC BY 4.0, per the council\'s open data portal)', url: 'https://hastings-dc-open-data-hdcgis.hub.arcgis.com/' },
+  { city: 'York', label: 'City of York Council - Council owned trees and Private trees (Open Government Licence v3.0; contains Ordnance Survey data © Crown copyright and database right)', url: 'https://data.yorkopendata.org/dataset/council-owned-trees' },
+  { city: 'Basingstoke', label: 'Basingstoke and Deane Borough Council - BDBC Trees (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://gis.basingstoke.gov.uk/server/rest/services/AGOL/TreesInspections/FeatureServer/6' },
+  { city: 'Bendigo', label: 'City of Greater Bendigo - Environment - Trees (CC BY 2.5 AU)', url: 'https://data.gov.au/data/dataset/city-of-greater-bendigo-environment-trees' },
+  { city: 'Cockburn', label: 'City of Cockburn - Street Trees (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://www.arcgis.com/home/item.html?id=4e25763b23fe47c1bb928920152789a9' },
   { city: 'Providence', label: 'City of Providence Parks Department, Forestry Division - Tree Inventory (TreeKeeper; no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://providenceri.treekeepersoftware.com/' },
   { city: 'Guelph', label: 'City of Guelph Open Data - Trees (Open Government Licence - City of Guelph; contains information licensed under the Open Government Licence - City of Guelph)', url: 'https://explore.guelph.ca/datasets/cityofguelph::trees' },
   { city: 'Belfast', label: 'Belfast City Council - Belfast Trees (Open Government Licence v3.0)', url: 'https://www.opendatani.gov.uk/dataset/belfast-trees' },
@@ -159,6 +165,12 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
+  { city: 'Red Deer', label: 'City of Red Deer - Zoning Bylaw historical sites (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://arcgis.reddeer.ca/arcgis/rest/services/CoRD_View_Layers/LUB_HistoricalSite_approved/FeatureServer/0' },
+  { city: 'Hastings', label: 'Hastings District Council - District Plan heritage features (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://storymaps.arcgis.com/stories/0d80ff4cad20442282c4622bbbce3989' },
+  { city: 'York', label: 'Historic England - National Heritage List for England (Open Government Licence)', url: 'https://historicengland.org.uk/listing/the-list/' },
+  { city: 'Basingstoke', label: 'Historic England - National Heritage List for England (Open Government Licence)', url: 'https://historicengland.org.uk/listing/the-list/' },
+  { city: 'Bendigo', label: 'Heritage Victoria - Victorian Heritage Register via Vicmap (CC BY 4.0)', url: 'https://discover.data.vic.gov.au/dataset/victorian-heritage-register' },
+  { city: 'Cockburn', label: 'City of Cockburn - Local Heritage Survey (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://www.arcgis.com/home/item.html?id=19b51e4ff02a4c32ad0c92d7f08e005a' },
   { city: 'Providence', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
   { city: 'Guelph', label: 'City of Guelph Heritage Register - Cultural Heritage Resources (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://explore.guelph.ca/apps/cityofguelph::cultural-heritage-resources' },
   { city: 'Belfast', label: 'Department for Communities NI, Historic Environment Division - listed buildings and scheduled monuments (Open Government Licence v3.0)', url: 'https://www.opendatani.gov.uk/dataset/historic-environment-division-esri-rest-api' },

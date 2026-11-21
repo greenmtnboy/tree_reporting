@@ -152,6 +152,12 @@ Currently has data from the following cities:
 - [Athens, Greece](https://greenmtnboy.github.io/tree_reporting/#/?city=GRATH)
 - [Milos, Greece](https://greenmtnboy.github.io/tree_reporting/#/?city=GRMLO)
 - [Santorini, Greece](https://greenmtnboy.github.io/tree_reporting/#/?city=GRSAN)
+- [Cockburn, Western Australia](https://greenmtnboy.github.io/tree_reporting/#/?city=AUCKB)
+- [Basingstoke, United Kingdom](https://greenmtnboy.github.io/tree_reporting/#/?city=GBBSK)
+- [York, United Kingdom](https://greenmtnboy.github.io/tree_reporting/#/?city=GBYRK)
+- [Hastings, New Zealand](https://greenmtnboy.github.io/tree_reporting/#/?city=NZHAS)
+- [Red Deer, Alberta, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CARED)
+- [Greater Bendigo, Victoria, Australia](https://greenmtnboy.github.io/tree_reporting/#/?city=AUBXG)
 
 **[Live page](https://greenmtnboy.github.io/tree_reporting/)**
 
@@ -296,6 +302,12 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 | Edinburgh | City of Edinburgh Council - Trees (Open Government Licence v3.0; Copyright City of Edinburgh Council, contains Ordnance Survey data © Crown copyright and database right; survey predates 2017) | https://www.arcgis.com/home/item.html?id=6c224ada230b4d349cfd739015c7846d |
 | Oakland | City of Oakland Public Works, Park & Tree Services - Oakland Public Tree Inventory, August 2023 (no licence stated; displayed with attribution only, not licensed for reuse) | https://www.arcgis.com/home/item.html?id=1aeca241016e483cbfac4f2d1974692e |
 | Riverside | City of Riverside Open Data - Street, Park, Utility-Line and Miscellaneous Trees, April 2023 (no licence stated; the City Open Data Policy asks for the credit "Data provided by the City of Riverside") | https://www.arcgis.com/home/item.html?id=18ac0db05b7340d1b463d953fdc672fc |
+| Cockburn | City of Cockburn - Street Trees (no licence stated; displayed with attribution only, not licensed for reuse) | https://www.arcgis.com/home/item.html?id=4e25763b23fe47c1bb928920152789a9 |
+| Basingstoke | Basingstoke and Deane Borough Council - BDBC Trees (no licence stated; displayed with attribution only, not licensed for reuse) | https://gis.basingstoke.gov.uk/server/rest/services/AGOL/TreesInspections/FeatureServer/6 |
+| York | City of York Council - Council owned trees and Private trees (Open Government Licence v3.0; contains Ordnance Survey data © Crown copyright and database right) | https://data.yorkopendata.org/dataset/council-owned-trees |
+| Hastings | Hastings District Council - Hastings DC Trees (CC BY 4.0, per the council's open data portal) | https://hastings-dc-open-data-hdcgis.hub.arcgis.com/ |
+| Red Deer | City of Red Deer - PARK_Trees_inservice (no licence stated; displayed with attribution only, not licensed for reuse) | https://www.arcgis.com/home/item.html?id=4ede9512512a4d5187045a35e063a92d |
+| Bendigo | City of Greater Bendigo - Environment - Trees (CC BY 2.5 AU) | https://data.gov.au/data/dataset/city-of-greater-bendigo-environment-trees |
 | Melbourne | Melbourne Open Data - Urban Forest Trees | https://data.melbourne.vic.gov.au/explore/dataset/trees-with-species-and-dimensions-urban-forest/ |
 | Melbourne (Port Phillip) | City of Port Phillip - Trees (CC BY 2.5 AU) | https://data.gov.au/data/dataset/city-of-port-phillip-trees |
 | Melbourne (Yarra) | City of Yarra - Street and Park Trees (CC BY 4.0) | https://data.gov.au/data/dataset/yarra-street-park-trees |
@@ -427,6 +439,12 @@ Every tree row carries a `data_source` column identifying which of the above it 
 | Edinburgh | Historic Environment Scotland - listed buildings, scheduled monuments, gardens and designed landscapes (Open Government Licence v3.0) | https://portal.historicenvironment.scot/ |
 | Oakland | City of Oakland Bureau of Planning - Landmarks Board Designated properties (no licence stated; displayed with attribution only, not licensed for reuse); National Park Service - National Register of Historic Places | https://gismaps.oaklandca.gov/server/rest/services/Planning_and_Zoning_Controls/MapServer/35 |
 | Riverside | City of Riverside - Historic Properties Designations, City Landmarks ("Data provided by the City of Riverside"); National Park Service - National Register of Historic Places | https://www.arcgis.com/home/item.html?id=c0310676be0b427d831b64e19d26c122 |
+| Cockburn | City of Cockburn - Local Heritage Survey (no licence stated; displayed with attribution only, not licensed for reuse) | https://www.arcgis.com/home/item.html?id=19b51e4ff02a4c32ad0c92d7f08e005a |
+| Basingstoke | Historic England - National Heritage List for England (Open Government Licence) | https://historicengland.org.uk/listing/the-list/ |
+| York | Historic England - National Heritage List for England (Open Government Licence) | https://historicengland.org.uk/listing/the-list/ |
+| Hastings | Hastings District Council - District Plan heritage features (no licence stated; displayed with attribution only, not licensed for reuse) | https://storymaps.arcgis.com/stories/0d80ff4cad20442282c4622bbbce3989 |
+| Red Deer | City of Red Deer - Zoning Bylaw historical sites (no licence stated; displayed with attribution only, not licensed for reuse) | https://arcgis.reddeer.ca/arcgis/rest/services/CoRD_View_Layers/LUB_HistoricalSite_approved/FeatureServer/0 |
+| Bendigo | Heritage Victoria - Victorian Heritage Register via Vicmap (CC BY 4.0) | https://discover.data.vic.gov.au/dataset/victorian-heritage-register |
 | Sydney | Sydney LEP 2012 heritage items (NSW DPHI, CC BY) | https://data.nsw.gov.au/data/dataset/environmental-planning-instrument-heritage-her |
 | Eindhoven | Rijksdienst voor het Cultureel Erfgoed - Rijksmonumenten via PDOK (CC BY 4.0) | https://service.pdok.nl/rce/ps-ch/wfs/v1_0?request=GetCapabilities&service=WFS |
 | Melbourne | Melbourne Open Data - Landmarks and Places of Interest | https://data.melbourne.vic.gov.au/explore/dataset/landmarks-and-places-of-interest-including-schools-theatres-health-services-spor/ |

@@ -51,6 +51,18 @@ property <*>.usden_data_updated_through datetime; # when Denver data is through
 # community column with the staged OSM one and nothing else.
 property <*>.ustem_osm_data_updated_through datetime; # mtime of Tempe's committed OSM staging parquet
 property <*>.usbos_osm_data_updated_through datetime;
+property <*>.cared_data_updated_through datetime; # when Red Deer data is through
+property <*>.cared_osm_data_updated_through datetime; # GCS publication time of Red Deer's staged OSM parquet
+property <*>.nzhas_data_updated_through datetime; # when Hastings data is through
+property <*>.nzhas_osm_data_updated_through datetime; # GCS publication time of Hastings's staged OSM parquet
+property <*>.gbyrk_data_updated_through datetime; # when York data is through
+property <*>.gbyrk_osm_data_updated_through datetime; # GCS publication time of York's staged OSM parquet
+property <*>.gbbsk_data_updated_through datetime; # when Basingstoke data is through
+property <*>.gbbsk_osm_data_updated_through datetime; # GCS publication time of Basingstoke's staged OSM parquet
+property <*>.aubxg_data_updated_through datetime; # when Bendigo data is through
+property <*>.aubxg_osm_data_updated_through datetime; # GCS publication time of Bendigo's staged OSM parquet
+property <*>.auckb_data_updated_through datetime; # when Cockburn data is through
+property <*>.auckb_osm_data_updated_through datetime; # GCS publication time of Cockburn's staged OSM parquet
 property <*>.uspvd_data_updated_through datetime; # when Providence data is through
 property <*>.uspvd_osm_data_updated_through datetime; # GCS publication time of Providence's staged OSM parquet
 property <*>.caglp_data_updated_through datetime; # when Guelph data is through

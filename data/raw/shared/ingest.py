@@ -236,7 +236,7 @@ _COMMON_NAME_NOUNS = frozenset(
 #
 # Nothing here is a judgement call about a *taxon* -- a value belongs in this
 # map only when it names no genus at all.  A misspelled binomial
-# ("Crateagus monogyna", "Sequioa sempervirens") is a real name badly typed and
+# ("Crataegus monogna", "Sequioa sempervirens") is a real name badly typed and
 # stays out: the enrichment step resolves those, and dropping them to Unknown
 # would lose a tree we can identify.
 _NON_TAXON_REWRITES: dict[str, str | None] = {
@@ -661,6 +661,8 @@ SENTINEL_ENRICHMENT: dict[str, dict[str, object]] = {
 # F. microcarpa, `Jacaranda acutifolia` for J. mimosifolia) is not a synonym
 # and is deliberately not here.
 SPECIES_SYNONYMS: dict[str, str] = {
+    # Batch 12 (Cockburn, Bendigo, Basingstoke, York, Hastings, Red Deer): WCVP synonyms and hybrid marks.
+    "Erythrina sykesii": "Erythrina x sykesii",  # Cockburn
     # Batch 10 (Oakville, Rochester, Syracuse, Las Vegas, Brest, Groningen): WCVP synonyms and hybrid marks.
     "Brugmansia candida": "Brugmansia x candida",  # Brest
     "Betula verrucosa": "Betula pendula",  # Brest
@@ -880,7 +882,7 @@ SPECIES_SYNONYMS: dict[str, str] = {
 # misspelling is a second enrichment row for a taxon already in the table (276
 # pairs were paid for twice), a second entry in every species rollup, and a
 # second dot colour on the map.  `docs/SPECIES_ENRICHMENT.md` rules a misspelling out of
-# `_NON_TAXON_REWRITES` because dropping `Crateagus monogyna` to `Unknown`
+# `_NON_TAXON_REWRITES` because dropping `Crataegus monogna` to `Unknown`
 # would lose a tree we can identify -- which is right, and is an argument for
 # resolving it to the name it meant, not for leaving it fragmented.
 #
@@ -892,6 +894,65 @@ SPECIES_SYNONYMS: dict[str, str] = {
 # `Celtis`/`Cercis occidentalis`, `Pinus`/`Prunus nigra` and
 # `Malus`/`Taxus baccata`.  Add an entry only with that check behind it.
 SPECIES_MISSPELLINGS: dict[str, str] = {
+    # Batch 12 (Cockburn, Bendigo, Basingstoke, York, Hastings, Red Deer): each key absent from WCVP, each value accepted there.
+    "Eucalyptus albans": "Eucalyptus albens",  # Bendigo
+    "Eucalyptus baxterii": "Eucalyptus baxteri",  # Bendigo
+    "Eucalyptus lansdowniana": "Eucalyptus lansdowneana",  # Bendigo
+    "Eucalytpus leucoxylon": "Eucalyptus leucoxylon",  # Bendigo
+    "Geijera parvifolia": "Geijera parviflora",  # Bendigo
+    "Genista monsplessulana": "Genista monspessulana",  # Bendigo
+    "Maculara pomifera": "Maclura pomifera",  # Bendigo
+    "Myoprum platycarpum": "Myoporum platycarpum",  # Bendigo
+    "Euonomys japonica": "Euonymus japonicus",  # Bendigo
+    "Exocarpus cupressiformis": "Exocarpos cupressiformis",  # Bendigo
+    "Acacia spectablis": "Acacia spectabilis",  # Bendigo
+    "Bouganvillea": "Bougainvillea",  # Bendigo
+    "Ceonothus": "Ceanothus",  # Bendigo
+    "Vibernum": "Viburnum",  # Bendigo
+    "Vibernum tinus": "Viburnum tinus",  # Bendigo
+    "Vibernum macrocephalum": "Viburnum macrocephalum",  # Bendigo
+    # Batch 12 (Cockburn, Bendigo, Basingstoke, York, Hastings, Red Deer): each key absent from WCVP, each value accepted there.
+    "Acer daviddii": "Acer davidii",  # Hastings
+    "Alnus jorrulensis": "Alnus jorullensis",  # Hastings
+    "Carya cordiformus": "Carya cordiformis",  # Hastings
+    "Chamaecyparis pisefera": "Chamaecyparis pisifera",  # Hastings
+    "Cornus capilata": "Cornus capitata",  # Hastings
+    "Fraxinus augustifolia": "Fraxinus angustifolia",  # Hastings
+    "Griselinea littoralis": "Griselinia littoralis",  # Hastings
+    "Leptospernum": "Leptospermum",  # Hastings
+    "Pinus pinastre": "Pinus pinaster",  # Hastings
+    "Pittosporum eugenoides": "Pittosporum eugenioides",  # Hastings
+    "Pterocarpa stenoptera": "Pterocarya stenoptera",  # Hastings
+    "Quercus bicolour": "Quercus bicolor",  # Hastings
+    "Quercus leucotricophora": "Quercus leucotrichophora",  # Hastings
+    "Quercus lusitanicus": "Quercus lusitanica",  # Hastings
+    "Quercus salicfolia": "Quercus salicifolia",  # Hastings
+    "Robinia psuedoacacia": "Robinia pseudoacacia",  # Hastings
+    "Shinus terebinthifolia": "Schinus terebinthifolia",  # Hastings
+    "Vergillia": "Virgilia",  # Hastings
+    "Acer platanoids": "Acer platanoides",  # Red Deer
+    "Alnus viridus": "Alnus alnobetula",  # Red Deer
+    "Brachychiton acerifolia": "Brachychiton acerifolius",  # Cockburn
+    "Citharexylem spinosum": "Citharexylum spinosum",  # Cockburn
+    "Cupaniopsis anacardiodes": "Cupaniopsis anacardioides",  # Cockburn
+    "Eucalyptus forrestianna": "Eucalyptus forrestiana",  # Cockburn
+    "Eucalyptus lanepoolei": "Eucalyptus lane-poolei",  # Cockburn
+    "Eucalyptus vitrix": "Eucalyptus victrix",  # Cockburn
+    "Melaleuca nesophylla": "Melaleuca nesophila",  # Cockburn
+    "Metrosiderous excelsa": "Metrosideros excelsa",  # Cockburn
+    "Tristanopsis laurina": "Tristaniopsis laurina",  # Cockburn
+    "Crateagus monogyna": "Crataegus monogyna",  # York
+    "Quercus robor": "Quercus robur",  # York
+    "Acer saccarhinum": "Acer saccharinum",  # York
+    "Acer japanicum": "Acer japonicum",  # York
+    "Auraucaria araucana": "Araucaria araucana",  # York
+    "Jugans regia": "Juglans regia",  # York
+    "Metasequoia glyptosroboides": "Metasequoia glyptostroboides",  # York
+    "Northofagus": "Nothofagus",  # York
+    "Acer saccerhinum": "Acer saccharinum",  # York
+    "Faxinus oxycarpa": "Fraxinus angustifolia",  # York
+    "Cornus mass": "Cornus mas",  # Basingstoke
+    "Gleditisia tricanthos": "Gleditsia triacanthos",  # Basingstoke
     # Batch 11 (Riverside, Oakland, Edinburgh, Belfast, Guelph, Providence): each key absent from WCVP, each value accepted there.
     "Acer pensylvanium": "Acer pensylvanicum",  # Edinburgh
     "Magnifera indica": "Mangifera indica",  # Oakland
@@ -2022,6 +2083,12 @@ def _sanitize_taxon(value: str | None) -> str | None:
 # Keyed by city code so `community_source_for` can derive the community label
 # and so tests can assert the two lists agree.
 MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
+    "CARED": ("RED_DEER_OPENDATA",),
+    "NZHAS": ("HASTINGS_OPENDATA",),
+    "GBYRK": ("YORK_OPENDATA",),
+    "GBBSK": ("BASINGSTOKE_OPENDATA",),
+    "AUBXG": ("BENDIGO_OPENDATA",),
+    "AUCKB": ("COCKBURN_OPENDATA",),
     "USPVD": ("PROVIDENCE_OPENDATA",),
     "CAGLP": ("GUELPH_OPENDATA",),
     "GBBFS": ("BELFAST_OPENDATA",),
@@ -2172,6 +2239,12 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # overlapping rows under one cluster id and publishes only the survivor — see
 # tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
+    "CARED": "OSM_CARED",
+    "NZHAS": "OSM_NZHAS",
+    "GBYRK": "OSM_GBYRK",
+    "GBBSK": "OSM_GBBSK",
+    "AUBXG": "OSM_AUBXG",
+    "AUCKB": "OSM_AUCKB",
     "USPVD": "OSM_USPVD",
     "CAGLP": "OSM_CAGLP",
     "GBBFS": "OSM_GBBFS",
@@ -2901,6 +2974,12 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
+    "CARED": (52.2, 52.34, -113.89, -113.7),
+    "NZHAS": (-39.85, -39.1, 176.5, 177.05),
+    "GBYRK": (53.87, 54.06, -1.23, -0.91),
+    "GBBSK": (51.13, 51.39, -1.47, -0.97),
+    "AUBXG": (-37.1, -36.4, 143.95, 144.9),
+    "AUCKB": (-32.2, -32.06, 115.73, 115.93),
     "USPVD": (41.77, 41.87, -71.48, -71.37),
     "CAGLP": (43.475, 43.61, -80.33, -80.15),
     "GBBFS": (54.53, 54.66, -6.05, -5.8),
@@ -3076,6 +3155,20 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
+    # Calibrated 2026-11-21 (osm_dedup_validation): only 76 OSM trees;
+    # 6 m catches 28 of 32 duplicates with no false flags, 8 m starts flagging neighbours.
+    "CARED": 6,
+    # osm_dedup_validation 2026-11-21: 8m 916/63 (6.9%), marginal 4.4; 10m 2.7.
+    "NZHAS": 8,
+    # osm_dedup_validation 2026-11-21: 8m 3519/146 (4.1%), marginal 4.0; 10m 1.4.
+    "GBYRK": 8,
+    # osm_dedup_validation 2026-11-21: 8m 557/31 (5.6%), marginal 3.1; 10m 1.7.
+    "GBBSK": 8,
+    # osm_dedup_validation 2026-11-21: 8m 1074/36 (3.4%), marginal 3.8; 10m 1.9.
+    "AUBXG": 8,
+    # Calibrated 2026-11-21 (osm_dedup_validation, 5.7k OSM vs 68.8k street trees):
+    # 4 m keeps 59% recall at 1.8% false; 6 m adds 43 true for 18 false.
+    "AUCKB": 4,
     # osm_dedup_validation 2026-11-21: 6m 1273/53 (4.2%), marginal 3.8; 8m 1.8.
     "USPVD": 6,
     # osm_dedup_validation 2026-11-21: 4m 9471/666 (7.0%), marginal 5.7; 6m 0.8.
@@ -3674,6 +3767,19 @@ DEDUP_CELL_METRES: dict[str, int] = {
 Box = tuple[float, float, float, float]
 
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
+    'CARED': ((52.2, 52.34, -113.89, -113.7),),
+    # Hastings District with Napier City cut out (no HDC tree or landmark
+    # falls in the hole), so Napier's OSM trees are not labelled Hastings.
+    'NZHAS': (
+        (-39.85, -39.56, 176.5, 177.05),
+        (-39.455, -39.1, 176.5, 177.05),
+        (-39.56, -39.455, 176.5, 176.8),
+        (-39.56, -39.455, 176.96, 177.05),
+    ),
+    'GBYRK': ((53.87, 54.06, -1.23, -0.91),),
+    'GBBSK': ((51.13, 51.39, -1.47, -0.97),),
+    'AUBXG': ((-37.1, -36.4, 143.95, 144.9),),
+    'AUCKB': ((-32.2, -32.06, 115.73, 115.93),),
     'USPVD': ((41.77, 41.87, -71.48, -71.37),),
     'CAGLP': ((43.475, 43.61, -80.33, -80.15),),
     'GBBFS': ((54.53, 54.66, -6.05, -5.8),),

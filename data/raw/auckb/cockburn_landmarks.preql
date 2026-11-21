@@ -1,0 +1,31 @@
+import ..landmark_common;
+
+root datasource cockburn_landmarks_update_time (
+    data_updated_through: auckb_landmark_data_updated_through
+)
+file `./cockburn_landmarks_probe.py`;
+
+# The City of Cockburn's Local Heritage Survey (its heritage inventory, with
+# the statutory Heritage List and State Register flags), read live from the
+# city's ArcGIS layer on the same organisation as the trees. An official
+# designation registry, so there is no curated CSV and no staging object; the
+# probe is the layer's own edit date.
+root partial datasource raw_cockburn_landmark_info extends landmark_partition (
+    protection_type: ?protection_type,
+    register_number: ?register_number,
+    category: ?category,
+    year_built: ?year_built,
+)
+complete where city = 'AUCKB'
+file `./cockburn_landmarks.py`;
+
+partial datasource cockburn_landmark_info extends published_landmark_info (
+    ?protection_type,
+    ?register_number,
+    ?category,
+    ?year_built,
+    auckb_landmark_data_updated_through,
+)
+complete where city = 'AUCKB'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/auckb_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/auckb_landmark_info_v{data_version}.parquet`
+freshness by auckb_landmark_data_updated_through;

@@ -282,7 +282,7 @@ class TestSanitizeSpecies:
         Dropping these to Unknown would lose a tree we can identify; the
         enrichment step resolves the spelling.
         """
-        assert sanitize_species("Crateagus monogyna") == "Crateagus monogyna"
+        assert sanitize_species("Crataegus monogna") == "Crataegus monogna"
         assert sanitize_species("Sequioa sempervirens") == "Sequioa sempervirens"
 
     def test_a_hyphenated_epithet_survives(self):

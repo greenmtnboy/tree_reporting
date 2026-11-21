@@ -117,6 +117,12 @@ import gbedi.edinburgh_tree_info;
 import gbbfs.belfast_tree_info;
 import caglp.guelph_tree_info;
 import uspvd.providence_tree_info;
+import auckb.cockburn_tree_info;
+import aubxg.bendigo_tree_info;
+import gbbsk.basingstoke_tree_info;
+import gbyrk.york_tree_info;
+import nzhas.hastings_tree_info;
+import cared.red_deer_tree_info;
 
 # Each city models its originating dataset as its own enum key so Trilogy can
 # prove per-city partition coverage (see core.preql). Merging them here — and
@@ -241,6 +247,12 @@ merge gbedi_source into data_source;
 merge gbbfs_source into data_source;
 merge caglp_source into data_source;
 merge uspvd_source into data_source;
+merge auckb_source into data_source;
+merge aubxg_source into data_source;
+merge gbbsk_source into data_source;
+merge gbyrk_source into data_source;
+merge nzhas_source into data_source;
+merge cared_source into data_source;
 
 # The dedup columns (`merged_sources`, `merged_tree_ids`) are
 # the one shared derivation in tree_dedup.preql, computed inside each city's
@@ -374,7 +386,13 @@ usoak_published_data_updated_through,
 gbedi_published_data_updated_through,
 gbbfs_published_data_updated_through,
 caglp_published_data_updated_through,
-uspvd_published_data_updated_through);
+uspvd_published_data_updated_through,
+auckb_published_data_updated_through,
+aubxg_published_data_updated_through,
+gbbsk_published_data_updated_through,
+gbyrk_published_data_updated_through,
+nzhas_published_data_updated_through,
+cared_published_data_updated_through);
 # --- Merged union datasource ---
 
 datasource tree_info (

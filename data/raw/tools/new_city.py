@@ -855,19 +855,20 @@ def next_landmark_slot(toml_text: str) -> str:
     after = max(minutes, default=178) + 2
     if after < 5 * 60:
         return f"0 {after % 60} {after // 60} * * SUN"
-    # 03:00-05:00 is full: take the first free two-minute slot from 01:00 whose
+    # 03:00-05:00 is full: take the first free two-minute slot from 00:00 whose
     # cron no other job uses (a shared cron string is one schedule row, so it
     # would fire as one tick with that job).  02:00-03:00 filled in Nov 2026,
-    # so the window now opens at 01:00; landmark refreshes read only their own
-    # portals, so nothing before them has to land first.
+    # so the window opened at 01:00, and 01:00-03:00 filled too, so it now opens
+    # at 00:00; landmark refreshes read only their own portals, so nothing
+    # before them has to land first.
     taken = set(minutes)
     used = set(re.findall(r'schedule = "([^"]+)"', toml_text))
-    for slot in range(1 * 60, 5 * 60, 2):
+    for slot in range(0, 5 * 60, 2):
         cron = f"0 {slot % 60} {slot // 60} * * SUN"
         if slot not in taken and cron not in used:
             return cron
     raise SystemExit(
-        "no landmark slot left between 01:00 and the 05:00 union; widen the "
+        "no landmark slot left between 00:00 and the 05:00 union; widen the "
         "window in tools/new_city.py"
     )
 

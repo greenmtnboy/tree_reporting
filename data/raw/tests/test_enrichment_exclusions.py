@@ -204,7 +204,7 @@ def test_sentinel_rows_match_the_frontend():
         "Quercus",
         # Badly typed is not the same as not a taxon -- the LLM resolves these,
         # and skipping them would lose a tree we can identify.
-        "Crateagus monogyna",
+        "Crataegus monogna",
         "Sequioa sempervirens",
     ],
 )
@@ -248,7 +248,7 @@ def test_the_queue_rule_and_the_ingest_cannot_drift():
     """
     from shared.ingest import sanitize_species
 
-    for value in ("Acer rubrum", "Oak", "Acer unidentified", "Crateagus monogyna"):
+    for value in ("Acer rubrum", "Oak", "Acer unidentified", "Crataegus monogna"):
         assert is_enrichable_species(value) is (sanitize_species(value) == value)
 
 

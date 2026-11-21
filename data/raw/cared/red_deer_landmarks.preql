@@ -1,0 +1,24 @@
+import ..landmark_common;
+
+root datasource red_deer_landmarks_update_time (
+    data_updated_through: cared_landmark_data_updated_through
+)
+file `./red_deer_landmarks_probe.py`;
+
+# Red Deer's historical sites as the Zoning Bylaw maps them (Historical
+# Preservation and Historically Significant buildings, sites, structures and
+# trees), read live off the City's own ArcGIS layer -- an official register,
+# so no geocoding and nothing to stage.
+root partial datasource raw_red_deer_landmark_info extends landmark_partition (
+    property_type: ?property_type,
+)
+complete where city = 'CARED'
+file `./red_deer_landmarks.py`;
+
+partial datasource red_deer_landmark_info extends published_landmark_info (
+    ?property_type,
+    cared_landmark_data_updated_through,
+)
+complete where city = 'CARED'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/cared_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/cared_landmark_info_v{data_version}.parquet`
+freshness by cared_landmark_data_updated_through;

@@ -1,0 +1,28 @@
+import ..landmark_common;
+
+root datasource hastings_landmarks_update_time (
+    data_updated_through: nzhas_landmark_data_updated_through
+)
+file `./hastings_landmarks_probe.py`;
+
+# The Hastings District Plan's scheduled heritage items, read live from the
+# council's ArcGIS Online layer behind its heritage story map (the same org as
+# the trees).  `register_number` is the plan reference (HB76), `lm_type` the
+# plan's heritage category and `address` the address the item describes.
+root partial datasource raw_hastings_landmark_info extends landmark_partition (
+    lm_type: ?lm_type,
+    register_number: ?register_number,
+    address: ?address,
+)
+complete where city = 'NZHAS'
+file `./hastings_landmarks.py`;
+
+partial datasource hastings_landmark_info extends published_landmark_info (
+    ?lm_type,
+    ?register_number,
+    ?address,
+    nzhas_landmark_data_updated_through,
+)
+complete where city = 'NZHAS'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/nzhas_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/nzhas_landmark_info_v{data_version}.parquet`
+freshness by nzhas_landmark_data_updated_through;
