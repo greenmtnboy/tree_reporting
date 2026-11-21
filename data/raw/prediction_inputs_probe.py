@@ -45,8 +45,12 @@ def week_of(moment: datetime) -> datetime:
 
 
 def newest_input_publication() -> datetime:
-    return week_of(max(published_at(label, url) for label, url in INPUTS.items()))
+    return max(published_at(label, url) for label, url in INPUTS.items())
+
+
+def weekly_input_publication() -> datetime:
+    return week_of(newest_input_publication())
 
 
 if __name__ == "__main__":
-    emit_freshness(None, newest_input_publication, label="fit inputs")
+    emit_freshness(None, weekly_input_publication, label="fit inputs")
