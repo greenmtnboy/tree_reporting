@@ -147,6 +147,12 @@ select * from (values
     ('GBBSK', 663),
     ('GBYRK', 651),
     ('NZHAS', 171),
-    ('CARED', 386)
+    ('CARED', 386),
+    ('GBFAR', 663),
+    ('CAFRE', 335),
+    ('CAMHT', 396),
+    ('AULST', 178),
+    ('AUMRS', 176),
+    ('NZLHT', 171)
 ) as t(city, ecoregion_id)
 ''';

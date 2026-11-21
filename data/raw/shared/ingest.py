@@ -2083,6 +2083,12 @@ def _sanitize_taxon(value: str | None) -> str | None:
 # Keyed by city code so `community_source_for` can derive the community label
 # and so tests can assert the two lists agree.
 MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
+    "NZLHT": ("LOWERHUTT_OPENDATA",),
+    "AUMRS": ("MACEDON_OPENDATA",),
+    "AULST": ("LAUNCESTON_OPENDATA",),
+    "CAMHT": ("MEDICINEHAT_OPENDATA",),
+    "CAFRE": ("FREDERICTON_OPENDATA",),
+    "GBFAR": ("FAREHAM_OPENDATA",),
     "CARED": ("RED_DEER_OPENDATA",),
     "NZHAS": ("HASTINGS_OPENDATA",),
     "GBYRK": ("YORK_OPENDATA",),
@@ -2239,6 +2245,12 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # overlapping rows under one cluster id and publishes only the survivor — see
 # tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
+    "NZLHT": "OSM_NZLHT",
+    "AUMRS": "OSM_AUMRS",
+    "AULST": "OSM_AULST",
+    "CAMHT": "OSM_CAMHT",
+    "CAFRE": "OSM_CAFRE",
+    "GBFAR": "OSM_GBFAR",
     "CARED": "OSM_CARED",
     "NZHAS": "OSM_NZHAS",
     "GBYRK": "OSM_GBYRK",
@@ -2974,6 +2986,12 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
+    "NZLHT": (-41.32, -41.14, 174.85, 175.01),
+    "AUMRS": (-37.55, -37.12, 144.25, 144.9),
+    "AULST": (-41.5, -41.17, 147.02, 147.51),
+    "CAMHT": (49.98, 50.08, -110.8, -110.61),
+    "CAFRE": (45.88, 46.03, -66.79, -66.56),
+    "GBFAR": (50.8, 50.9, -1.32, -1.1),
     "CARED": (52.2, 52.34, -113.89, -113.7),
     "NZHAS": (-39.85, -39.1, 176.5, 177.05),
     "GBYRK": (53.87, 54.06, -1.23, -0.91),
@@ -3155,6 +3173,18 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "NZLHT": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "AUMRS": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "AULST": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "CAMHT": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "CAFRE": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "GBFAR": 10,
     # Calibrated 2026-11-21 (osm_dedup_validation): only 76 OSM trees;
     # 6 m catches 28 of 32 duplicates with no false flags, 8 m starts flagging neighbours.
     "CARED": 6,
@@ -3767,6 +3797,12 @@ DEDUP_CELL_METRES: dict[str, int] = {
 Box = tuple[float, float, float, float]
 
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
+    'NZLHT': ((-41.32, -41.14, 174.85, 175.01),),
+    'AUMRS': ((-37.55, -37.12, 144.25, 144.9),),
+    'AULST': ((-41.5, -41.17, 147.02, 147.51),),
+    'CAMHT': ((49.98, 50.08, -110.8, -110.61),),
+    'CAFRE': ((45.88, 46.03, -66.79, -66.56),),
+    'GBFAR': ((50.8, 50.9, -1.32, -1.1),),
     'CARED': ((52.2, 52.34, -113.89, -113.7),),
     # Hastings District with Napier City cut out (no HDC tree or landmark
     # falls in the hole), so Napier's OSM trees are not labelled Hastings.

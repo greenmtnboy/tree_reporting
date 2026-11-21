@@ -11,6 +11,12 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
+  { city: 'Lower Hutt', label: 'TODO: Lower Hutt tree inventory source', url: 'TODO' },
+  { city: 'Macedon Ranges', label: 'TODO: Macedon Ranges tree inventory source', url: 'TODO' },
+  { city: 'Launceston', label: 'TODO: Launceston tree inventory source', url: 'TODO' },
+  { city: 'Medicine Hat', label: 'TODO: Medicine Hat tree inventory source', url: 'TODO' },
+  { city: 'Fredericton', label: 'TODO: Fredericton tree inventory source', url: 'TODO' },
+  { city: 'Fareham', label: 'TODO: Fareham tree inventory source', url: 'TODO' },
   { city: 'Red Deer', label: 'City of Red Deer - PARK_Trees_inservice (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://www.arcgis.com/home/item.html?id=4ede9512512a4d5187045a35e063a92d' },
   { city: 'Hastings', label: 'Hastings District Council - Hastings DC Trees (CC BY 4.0, per the council\'s open data portal)', url: 'https://hastings-dc-open-data-hdcgis.hub.arcgis.com/' },
   { city: 'York', label: 'City of York Council - Council owned trees and Private trees (Open Government Licence v3.0; contains Ordnance Survey data © Crown copyright and database right)', url: 'https://data.yorkopendata.org/dataset/council-owned-trees' },
@@ -165,6 +171,12 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
+  { city: 'Lower Hutt', label: 'TODO: Lower Hutt landmark source' },
+  { city: 'Macedon Ranges', label: 'TODO: Macedon Ranges landmark source' },
+  { city: 'Launceston', label: 'TODO: Launceston landmark source' },
+  { city: 'Medicine Hat', label: 'TODO: Medicine Hat landmark source' },
+  { city: 'Fredericton', label: 'TODO: Fredericton landmark source' },
+  { city: 'Fareham', label: 'TODO: Fareham landmark source' },
   { city: 'Red Deer', label: 'City of Red Deer - Zoning Bylaw historical sites (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://arcgis.reddeer.ca/arcgis/rest/services/CoRD_View_Layers/LUB_HistoricalSite_approved/FeatureServer/0' },
   { city: 'Hastings', label: 'Hastings District Council - District Plan heritage features (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://storymaps.arcgis.com/stories/0d80ff4cad20442282c4622bbbce3989' },
   { city: 'York', label: 'Historic England - National Heritage List for England (Open Government Licence)', url: 'https://historicengland.org.uk/listing/the-list/' },
