@@ -11,6 +11,12 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
+  { city: 'Providence', label: 'TODO: Providence tree inventory source', url: 'TODO' },
+  { city: 'Guelph', label: 'TODO: Guelph tree inventory source', url: 'TODO' },
+  { city: 'Belfast', label: 'TODO: Belfast tree inventory source', url: 'TODO' },
+  { city: 'Edinburgh', label: 'TODO: Edinburgh tree inventory source', url: 'TODO' },
+  { city: 'Oakland', label: 'TODO: Oakland tree inventory source', url: 'TODO' },
+  { city: 'Riverside', label: 'TODO: Riverside tree inventory source', url: 'TODO' },
   { city: 'Groningen', label: 'Gemeente Groningen - Bomen (CC BY 4.0)', url: 'https://data.groningen.nl/dataset/bomen/04da3775-07f0-4388-bc12-7cd7536b04cd' },
   { city: 'Brest', label: 'Brest métropole - Les arbres (Licence Ouverte v2.0; species and position only)', url: 'https://www.data.gouv.fr/datasets/les-arbres/' },
   { city: 'Las Vegas', label: 'City of Las Vegas - Park Trees (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://www.arcgis.com/home/item.html?id=05622dec3c454882abf26c4e0ec8370f' },
@@ -153,6 +159,12 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
+  { city: 'Providence', label: 'TODO: Providence landmark source' },
+  { city: 'Guelph', label: 'TODO: Guelph landmark source' },
+  { city: 'Belfast', label: 'TODO: Belfast landmark source' },
+  { city: 'Edinburgh', label: 'TODO: Edinburgh landmark source' },
+  { city: 'Oakland', label: 'TODO: Oakland landmark source' },
+  { city: 'Riverside', label: 'TODO: Riverside landmark source' },
   { city: 'Groningen', label: 'Gemeente Groningen - Monumenten (CC BY 4.0)', url: 'https://data.overheid.nl/dataset/groningen-monumenten-gemeente-groningen' },
   { city: 'Groningen', label: 'Rijksdienst voor het Cultureel Erfgoed - Rijksmonumenten via PDOK (CC BY 4.0)', url: 'https://service.pdok.nl/rce/ps-ch/wfs/v1_0?request=GetCapabilities&service=WFS' },
   { city: 'Brest', label: 'Ministère de la Culture - Immeubles protégés au titre des Monuments Historiques (Licence Ouverte)', url: 'https://www.data.gouv.fr/datasets/immeubles-proteges-au-titre-des-monuments-historiques-2' },

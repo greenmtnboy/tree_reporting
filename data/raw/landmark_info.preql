@@ -120,6 +120,12 @@ import ussyr.syracuse_landmarks;
 import uslas.las_vegas_landmarks;
 import frbes.brest_landmarks;
 import nlgrq.groningen_landmarks;
+import usral.riverside_landmarks;
+import usoak.oakland_landmarks;
+import gbedi.edinburgh_landmarks;
+import gbbfs.belfast_landmarks;
+import caglp.guelph_landmarks;
+import uspvd.providence_landmarks;
 
 # The cross-city union is NOT declared here. It lives in
 # `full_landmark_publish.preql`, which reads the parquets these imports publish

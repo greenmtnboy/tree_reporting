@@ -110,5 +110,11 @@
   "USSYR": { "name": "Syracuse", "center": [-76.1474, 43.0481] },
   "USLAS": { "name": "Las Vegas", "center": [-115.1398, 36.1699] },
   "FRBES": { "name": "Brest", "center": [-4.4861, 48.3904] },
-  "NLGRQ": { "name": "Groningen", "center": [6.5665, 53.2194] }
+  "NLGRQ": { "name": "Groningen", "center": [6.5665, 53.2194] },
+  "USRAL": { "name": "Riverside", "center": [-117.3962, 33.9533] },
+  "USOAK": { "name": "Oakland", "center": [-122.2712, 37.8044] },
+  "GBEDI": { "name": "Edinburgh", "center": [-3.1883, 55.9533] },
+  "GBBFS": { "name": "Belfast", "center": [-5.9301, 54.5973] },
+  "CAGLP": { "name": "Guelph", "center": [-80.2482, 43.5448] },
+  "USPVD": { "name": "Providence", "center": [-71.4128, 41.824] }
 }
