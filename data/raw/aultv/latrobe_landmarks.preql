@@ -1,0 +1,27 @@
+import ..landmark_common;
+
+root datasource latrobe_landmarks_update_time (
+    data_updated_through: aultv_landmark_data_updated_through
+)
+file `./latrobe_landmarks_probe.py`;
+
+# Latrobe City's places on the Victorian Heritage Register, read live from
+# Vicmap's open-data WFS and cut to Latrobe City with the LGA's
+# own boundary (see latrobe_landmarks.py) -- an official register, so no
+# Nominatim geocoding, no committed CSV and no staging object.  `lm_type`
+# names the register and `register_number` carries the VHR number (H1234).
+root partial datasource raw_latrobe_landmark_info extends landmark_partition (
+    lm_type: ?lm_type,
+    register_number: ?register_number,
+)
+complete where city = 'AULTV'
+file `./latrobe_landmarks.py`;
+
+partial datasource latrobe_landmark_info extends published_landmark_info (
+    ?lm_type,
+    ?register_number,
+    aultv_landmark_data_updated_through,
+)
+complete where city = 'AULTV'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/aultv_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/aultv_landmark_info_v{data_version}.parquet`
+freshness by aultv_landmark_data_updated_through;

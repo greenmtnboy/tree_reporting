@@ -661,6 +661,8 @@ SENTINEL_ENRICHMENT: dict[str, dict[str, object]] = {
 # F. microcarpa, `Jacaranda acutifolia` for J. mimosifolia) is not a synonym
 # and is deliberately not here.
 SPECIES_SYNONYMS: dict[str, str] = {
+    # Batch 14 (Sioux Falls, Surrey, Latrobe City, Barrie, Langley Township, Maple Ridge): WCVP synonyms and hybrid marks.
+    "Acer x truncatum": "Acer truncatum",  # Surrey
     # Batch 12 (Cockburn, Bendigo, Basingstoke, York, Hastings, Red Deer): WCVP synonyms and hybrid marks.
     "Erythrina sykesii": "Erythrina x sykesii",  # Cockburn
     # Batch 10 (Oakville, Rochester, Syracuse, Las Vegas, Brest, Groningen): WCVP synonyms and hybrid marks.
@@ -894,6 +896,36 @@ SPECIES_SYNONYMS: dict[str, str] = {
 # `Celtis`/`Cercis occidentalis`, `Pinus`/`Prunus nigra` and
 # `Malus`/`Taxus baccata`.  Add an entry only with that check behind it.
 SPECIES_MISSPELLINGS: dict[str, str] = {
+    # Batch 14 (Sioux Falls, Surrey, Latrobe City, Barrie, Langley Township, Maple Ridge): each key absent from WCVP, each value accepted there.
+    "Crataegus persimillis": "Crataegus persimilis",  # Surrey
+    "Fraxinus exelsior": "Fraxinus excelsior",  # Surrey
+    "Pinus tabulaeformis": "Pinus tabuliformis",  # Surrey
+    "Ulmus pumilo": "Ulmus pumila",  # Surrey
+    "Aesculus hippocasanum": "Aesculus hippocastanum",  # Langley Township
+    "Cladastis kentukea": "Cladrastis kentukea",  # Langley Township
+    "Pinus flexis": "Pinus flexilis",  # Langley Township
+    "Ulmas davidiana": "Ulmus davidiana",  # Langley Township
+    "Acer palmatun": "Acer palmatum",  # Latrobe City
+    "Chamaecytisus prolifera": "Chamaecytisus proliferus",  # Latrobe City
+    "Darcrycarpus darcrydioides": "Dacrycarpus dacrydioides",  # Latrobe City
+    "Gleditisia": "Gleditsia",  # Barrie
+    "Gleditisia triancanthos": "Gleditsia triacanthos",  # Barrie
+    "Gymnocladus diocia": "Gymnocladus dioicus",  # Barrie
+    "Quercus rubrum": "Quercus rubra",  # Barrie
+    "Tilia flavenscens": "Tilia x flavescens",  # Barrie
+    "Acer saccherinum": "Acer saccharinum",  # Barrie
+    "Acer nigra": "Acer nigrum",  # Barrie
+    "Amerlanchier": "Amelanchier",  # Barrie
+    "Euonymous": "Euonymus",  # Barrie
+    "Crataegus x mordenenis": "Crataegus x mordenensis",  # Barrie
+    "Cladastis lutea": "Cladrastis kentukea",  # Barrie
+    "Ulmus globra": "Ulmus glabra",  # Barrie
+    "Saphora": "Sophora",  # Barrie
+    "Cladrastis kentuckea": "Cladrastis kentukea",  # Sioux Falls
+    "Prunus maacki": "Prunus maackii",  # Sioux Falls
+    "Rhamns cathartica": "Rhamnus cathartica",  # Sioux Falls
+    "Cartaegus ambigua": "Crataegus ambigua",  # Sioux Falls
+    "Quercus muehlenvergii": "Quercus muehlenbergii",  # Sioux Falls
     # Batch 13 (Fareham, Launceston, Macedon Ranges, Fredericton, Medicine Hat, Greater Shepparton): each key absent from WCVP, each value accepted there.
     "Banksia spinosa": "Banksia spinulosa",  # Greater Shepparton
     "Grevillea rosemarinifolia": "Grevillea rosmarinifolia",  # Greater Shepparton
@@ -2135,6 +2167,12 @@ def _sanitize_taxon(value: str | None) -> str | None:
 # Keyed by city code so `community_source_for` can derive the community label
 # and so tests can assert the two lists agree.
 MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
+    "CAMPR": ("MAPLERIDGE_OPENDATA",),
+    "CALNG": ("LANGLEY_OPENDATA",),
+    "CABAR": ("BARRIE_OPENDATA",),
+    "AULTV": ("LATROBE_OPENDATA",),
+    "CASRY": ("SURREY_OPENDATA",),
+    "USFSD": ("SIOUXFALLS_OPENDATA",),
     "AUSHT": ("SHEPPARTON_OPENDATA",),
     "AUMRS": ("MACEDON_OPENDATA",),
     "AULST": ("LAUNCESTON_OPENDATA",),
@@ -2297,6 +2335,12 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # overlapping rows under one cluster id and publishes only the survivor — see
 # tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
+    "CAMPR": "OSM_CAMPR",
+    "CALNG": "OSM_CALNG",
+    "CABAR": "OSM_CABAR",
+    "AULTV": "OSM_AULTV",
+    "CASRY": "OSM_CASRY",
+    "USFSD": "OSM_USFSD",
     "AUSHT": "OSM_AUSHT",
     "AUMRS": "OSM_AUMRS",
     "AULST": "OSM_AULST",
@@ -3038,6 +3082,12 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
+    "CAMPR": (49.17, 49.33, -122.67, -122.4),
+    "CALNG": (49.0, 49.21, -122.681, -122.4),
+    "CABAR": (44.3, 44.45, -79.78, -79.6),
+    "AULTV": (-38.5, -38.0, 146.15, 146.75),
+    "CASRY": (49.0, 49.22, -122.93, -122.675),
+    "USFSD": (43.45, 43.64, -96.86, -96.6),
     "AUSHT": (-36.71, -36.03, 145.03, 145.81),
     "AUMRS": (-37.57, -37.10, 144.30, 144.93),
     "AULST": (-41.5, -41.17, 147.02, 147.51),
@@ -3225,6 +3275,24 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
+    # osm_dedup_validation (2026-11-22): 6 m flags 486, 3.3% false, 82.0% recall;
+    # 8 m adds 21 for 14 more false.
+    "CAMPR": 6,
+    # osm_dedup_validation (2026-11-22): 4 m flags 1,186, 0.8% false, 77.4% recall;
+    # 6 m adds 131 for 36 more false.
+    "CALNG": 4,
+    # osm_dedup_validation (2026-11-22): only 235 OSM trees; 4 m flags 33, 1 false;
+    # 6 m adds 2 for 1 more false.
+    "CABAR": 4,
+    # osm_dedup_validation (2026-11-22): 8 m flags 3,552, 0.9% false, 96.3% recall;
+    # 10 m adds 81 for 24 more false.
+    "AULTV": 8,
+    # osm_dedup_validation (2026-11-22): 6 m flags 5,653, 1.1% false, 94.3% recall;
+    # 8 m adds 279 for 231 more false (dense boulevard planting).
+    "CASRY": 6,
+    # osm_dedup_validation (2026-11-22): 6 m flags 1,245, 0.9% false, 85.6% recall;
+    # 8 m adds 62 for 28 more false.
+    "USFSD": 6,
     # osm_dedup_validation (2026-11-21): 8 m flags 184, 2.2% false, 70.3% recall;
     # 10 m adds 27 for 3 more false; stop at 8 like Bendigo.
     "AUSHT": 8,
@@ -3854,6 +3922,50 @@ DEDUP_CELL_METRES: dict[str, int] = {
 Box = tuple[float, float, float, float]
 
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
+    # South edge steps along the Fraser above Langley Township (CALNG).
+    'CAMPR': (
+        (49.195, 49.33, -122.67, -122.64),
+        (49.208, 49.33, -122.64, -122.62),
+        (49.179, 49.33, -122.62, -122.53),
+        (49.17, 49.33, -122.53, -122.4),
+    ),
+    # West edge follows 196 St, the Surrey border, in steps: the two
+    # inventories come within metres of each other along it, so each band's
+    # edge sits between Surrey's easternmost and Langley's westernmost tree.
+    # North edge steps along the Fraser under Maple Ridge (CAMPR), which is cut
+    # to match; the -122.64..-122.62 band reaches the Greenway at Craigentinney.
+    'CALNG': (
+        (49.0, 49.01, -122.6801, -122.64),
+        (49.01, 49.10, -122.681, -122.64),
+        (49.10, 49.128, -122.68, -122.64),
+        (49.128, 49.13, -122.6797, -122.64),
+        (49.13, 49.14, -122.67955, -122.64),
+        (49.14, 49.17, -122.6793, -122.64),
+        (49.17, 49.195, -122.68, -122.64),
+        (49.0, 49.208, -122.64, -122.62),
+        (49.0, 49.179, -122.62, -122.53),
+        (49.0, 49.17, -122.53, -122.4),
+    ),
+    'CABAR': ((44.3, 44.45, -79.78, -79.6),),
+    'AULTV': ((-38.5, -38.0, 146.15, 146.75),),
+    # Surrey south of the Fraser, east edge stepped along 196 St (see CALNG).
+    # North of 49.16 the boxes follow the river: in each longitude band they
+    # stop between Surrey's northernmost tree and New Westminster's
+    # southernmost (tightest margin ~60 m near -122.865); CANWE is cut to match.
+    'CASRY': (
+        (49.0, 49.01, -122.93, -122.6801),
+        (49.01, 49.10, -122.93, -122.681),
+        (49.10, 49.128, -122.93, -122.68),
+        (49.128, 49.13, -122.93, -122.6797),
+        (49.13, 49.14, -122.93, -122.67955),
+        (49.14, 49.16, -122.93, -122.6793),
+        (49.16, 49.19, -122.915, -122.905),
+        (49.16, 49.203, -122.905, -122.895),
+        (49.16, 49.213, -122.895, -122.85),
+        (49.16, 49.17, -122.85, -122.6793),
+        (49.17, 49.215, -122.85, -122.68),
+    ),
+    'USFSD': ((43.45, 43.64, -96.86, -96.6),),
     'AUSHT': ((-36.71, -36.03, 145.03, 145.81),),
     # The shire's own LGA boundary reaches -37.568 at Gisborne South, so
     # Melbourne's territory stops at -37.57 (none of its five councils reach
@@ -4230,7 +4342,13 @@ CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
         (43.72, 43.74, -79.88, -79.625),
         (43.74, 43.78, -79.88, -79.64),
     ),
-    'CANWE': ((49.16, 49.26, -122.99, -122.85),),
+    # Cut along the Fraser where Surrey (CASRY) takes the south bank.
+    'CANWE': (
+        (49.16, 49.26, -122.99, -122.915),
+        (49.19, 49.26, -122.915, -122.905),
+        (49.203, 49.26, -122.905, -122.895),
+        (49.213, 49.26, -122.895, -122.85),
+    ),
     'CAKEL': ((49.75, 50.0, -119.6, -119.3),),
     'CAVIC': ((48.39, 48.48, -123.42, -123.3),),
     'CALET': ((49.6, 49.8, -113.0, -112.68),),

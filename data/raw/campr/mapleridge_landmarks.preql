@@ -1,0 +1,27 @@
+import ..landmark_common;
+
+root datasource mapleridge_landmarks_update_time (
+    data_updated_through: campr_landmark_data_updated_through
+)
+file `./mapleridge_landmarks_probe.py`;
+
+# Maple Ridge's Heritage Register and its bylaw-designated properties, read
+# live off the City's own ArcGIS Server (Open Government Licence - Maple
+# Ridge) -- an official register, so nothing geocoded or staged.
+root partial datasource raw_mapleridge_landmark_info extends landmark_partition (
+    address: ?address,
+    year_built: ?year_built,
+    property_type: ?property_type,
+)
+complete where city = 'CAMPR'
+file `./mapleridge_landmarks.py`;
+
+partial datasource mapleridge_landmark_info extends published_landmark_info (
+    ?address,
+    ?year_built,
+    ?property_type,
+    campr_landmark_data_updated_through,
+)
+complete where city = 'CAMPR'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/campr_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/campr_landmark_info_v{data_version}.parquet`
+freshness by campr_landmark_data_updated_through;

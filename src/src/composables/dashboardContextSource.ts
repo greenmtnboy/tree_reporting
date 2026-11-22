@@ -800,6 +800,42 @@ const CITY_DASHBOARD_CONTEXT: Record<
     biome: 'Temperate Grasslands, Savannas & Shrublands',
     realm: 'australasia',
   },
+  USFSD: {
+    ecoregionId: 388, // Central Tallgrass prairie
+    usdaZone: 5,
+    biome: 'Temperate Grasslands, Savannas & Shrublands',
+    realm: 'nearctic',
+  },
+  CASRY: {
+    ecoregionId: 364, // Puget lowland forests
+    usdaZone: 8,
+    biome: 'Temperate Conifer Forests',
+    realm: 'nearctic',
+  },
+  AULTV: {
+    ecoregionId: 176, // Southeast Australia temperate forests
+    usdaZone: 9,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'australasia',
+  },
+  CABAR: {
+    ecoregionId: 334, // Eastern Great Lakes lowland forests
+    usdaZone: 5,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'nearctic',
+  },
+  CALNG: {
+    ecoregionId: 364, // Puget lowland forests
+    usdaZone: 8,
+    biome: 'Temperate Conifer Forests',
+    realm: 'nearctic',
+  },
+  CAMPR: {
+    ecoregionId: 364, // Puget lowland forests
+    usdaZone: 8,
+    biome: 'Temperate Conifer Forests',
+    realm: 'nearctic',
+  },
 }
 
 function escapeStringLiteral(value: string) {

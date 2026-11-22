@@ -67,6 +67,7 @@ The reference for each is `docs/DATA_PIPELINE.md`.
 ## Where to read next
 
 - `EXTENDING.md`: the city-addition runbook.
+- `docs/REJECTED_SOURCES.md`: leads turned down (licence, unofficial copies, territory) and why; add one when you drop a lead.
 - `docs/DATA_PIPELINE.md`: jobs, partitions, sources, dedup, rebuilding, predictions.
 - `docs/SPECIES_ENRICHMENT.md`: the species key rule, synonyms and misspellings, sentinels, the enrichment job.
 - `docs/LANDMARKS.md`: landmark sources, schema, staging and building.

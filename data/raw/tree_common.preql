@@ -51,6 +51,18 @@ property <*>.usden_data_updated_through datetime; # when Denver data is through
 # community column with the staged OSM one and nothing else.
 property <*>.ustem_osm_data_updated_through datetime; # mtime of Tempe's committed OSM staging parquet
 property <*>.usbos_osm_data_updated_through datetime;
+property <*>.campr_data_updated_through datetime; # when Maple Ridge data is through
+property <*>.campr_osm_data_updated_through datetime; # GCS publication time of Maple Ridge's staged OSM parquet
+property <*>.calng_data_updated_through datetime; # when Langley Township data is through
+property <*>.calng_osm_data_updated_through datetime; # GCS publication time of Langley Township's staged OSM parquet
+property <*>.cabar_data_updated_through datetime; # when Barrie data is through
+property <*>.cabar_osm_data_updated_through datetime; # GCS publication time of Barrie's staged OSM parquet
+property <*>.aultv_data_updated_through datetime; # when Latrobe City data is through
+property <*>.aultv_osm_data_updated_through datetime; # GCS publication time of Latrobe City's staged OSM parquet
+property <*>.casry_data_updated_through datetime; # when Surrey data is through
+property <*>.casry_osm_data_updated_through datetime; # GCS publication time of Surrey's staged OSM parquet
+property <*>.usfsd_data_updated_through datetime; # when Sioux Falls data is through
+property <*>.usfsd_osm_data_updated_through datetime; # GCS publication time of Sioux Falls's staged OSM parquet
 property <*>.ausht_data_updated_through datetime; # when Greater Shepparton data is through
 property <*>.ausht_osm_data_updated_through datetime; # GCS publication time of Greater Shepparton's staged OSM parquet
 property <*>.aumrs_data_updated_through datetime; # when Macedon Ranges data is through
