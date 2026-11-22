@@ -2167,6 +2167,12 @@ def _sanitize_taxon(value: str | None) -> str | None:
 # Keyed by city code so `community_source_for` can derive the community label
 # and so tests can assert the two lists agree.
 MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
+    "AUCOL": ("COLAC_OTWAY_OPENDATA",),
+    "AUBSD": ("BASSENDEAN_OPENDATA",),
+    "CAWLD": ("WELLAND_OPENDATA",),
+    "CAFSJ": ("FORT_ST_JOHN_OPENDATA",),
+    "CAPEN": ("PENTICTON_OPENDATA",),
+    "CAPRG": ("PRINCE_GEORGE_OPENDATA",),
     "CAMPR": ("MAPLERIDGE_OPENDATA",),
     "CALNG": ("LANGLEY_OPENDATA",),
     "CABAR": ("BARRIE_OPENDATA",),
@@ -2335,6 +2341,12 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # overlapping rows under one cluster id and publishes only the survivor — see
 # tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
+    "AUCOL": "OSM_AUCOL",
+    "AUBSD": "OSM_AUBSD",
+    "CAWLD": "OSM_CAWLD",
+    "CAFSJ": "OSM_CAFSJ",
+    "CAPEN": "OSM_CAPEN",
+    "CAPRG": "OSM_CAPRG",
     "CAMPR": "OSM_CAMPR",
     "CALNG": "OSM_CALNG",
     "CABAR": "OSM_CABAR",
@@ -3082,6 +3094,12 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
+    "AUCOL": (-38.87, -38.05, 143.25, 143.95),
+    "AUBSD": (-31.94, -31.88, 115.92, 115.98),
+    "CAWLD": (42.93, 43.05, -79.34, -79.16),
+    "CAFSJ": (56.2, 56.29, -120.92, -120.77),
+    "CAPEN": (49.42, 49.56, -119.66, -119.5),
+    "CAPRG": (53.8, 54.05, -122.95, -122.6),
     "CAMPR": (49.17, 49.33, -122.67, -122.4),
     "CALNG": (49.0, 49.21, -122.681, -122.4),
     "CABAR": (44.3, 44.45, -79.78, -79.6),
@@ -3275,6 +3293,18 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "AUCOL": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "AUBSD": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "CAWLD": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "CAFSJ": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "CAPEN": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "CAPRG": 10,
     # osm_dedup_validation (2026-11-22): 6 m flags 486, 3.3% false, 82.0% recall;
     # 8 m adds 21 for 14 more false.
     "CAMPR": 6,
@@ -3922,6 +3952,12 @@ DEDUP_CELL_METRES: dict[str, int] = {
 Box = tuple[float, float, float, float]
 
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
+    'AUCOL': ((-38.87, -38.05, 143.25, 143.95),),
+    'AUBSD': ((-31.94, -31.88, 115.92, 115.98),),
+    'CAWLD': ((42.93, 43.05, -79.34, -79.16),),
+    'CAFSJ': ((56.2, 56.29, -120.92, -120.77),),
+    'CAPEN': ((49.42, 49.56, -119.66, -119.5),),
+    'CAPRG': ((53.8, 54.05, -122.95, -122.6),),
     # South edge steps along the Fraser above Langley Township (CALNG).
     'CAMPR': (
         (49.195, 49.33, -122.67, -122.64),

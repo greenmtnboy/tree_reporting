@@ -10,6 +10,12 @@
  * gets round to naming it here.
  */
 export const DATA_SOURCE_LABELS: Record<string, string> = {
+  COLAC_OTWAY_OPENDATA: 'Colac Otway Open Data',
+  BASSENDEAN_OPENDATA: 'Bassendean Open Data',
+  WELLAND_OPENDATA: 'Welland Open Data',
+  FORT_ST_JOHN_OPENDATA: 'Fort St. John Open Data',
+  PENTICTON_OPENDATA: 'Penticton Open Data',
+  PRINCE_GEORGE_OPENDATA: 'Prince George Open Data',
   MAPLERIDGE_OPENDATA: 'Maple Ridge Open Data',
   LANGLEY_OPENDATA: 'Langley Township Open Data',
   BARRIE_OPENDATA: 'Barrie Open Data',

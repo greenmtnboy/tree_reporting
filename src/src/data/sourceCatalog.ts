@@ -11,6 +11,12 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
+  { city: 'Colac Otway', label: 'TODO: Colac Otway tree inventory source', url: 'TODO' },
+  { city: 'Bassendean', label: 'TODO: Bassendean tree inventory source', url: 'TODO' },
+  { city: 'Welland', label: 'TODO: Welland tree inventory source', url: 'TODO' },
+  { city: 'Fort St. John', label: 'TODO: Fort St. John tree inventory source', url: 'TODO' },
+  { city: 'Penticton', label: 'TODO: Penticton tree inventory source', url: 'TODO' },
+  { city: 'Prince George', label: 'TODO: Prince George tree inventory source', url: 'TODO' },
   { city: 'Maple Ridge', label: 'City of Maple Ridge - Street Tree (Open Government Licence - Maple Ridge; contains information licensed under the Open Government Licence - Maple Ridge)', url: 'https://www.arcgis.com/home/item.html?id=290505c676d64cf09989eca1320aedd3' },
   { city: 'Langley Township', label: 'Township of Langley - Tree Inventory (Open Government License - Township of Langley; contains information licensed under the Open Government License - Township of Langley)', url: 'https://www.arcgis.com/home/item.html?id=07ed48e3e633476aba03b1a800d616af' },
   { city: 'Barrie', label: 'City of Barrie Open Data - Tree (Open Government Licence - Barrie; contains information licensed under the Open Government Licence - Barrie)', url: 'https://opendata.barrie.ca/datasets/d053284adf6341d7939486d13bfd6911' },
@@ -177,6 +183,12 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
+  { city: 'Colac Otway', label: 'TODO: Colac Otway landmark source' },
+  { city: 'Bassendean', label: 'TODO: Bassendean landmark source' },
+  { city: 'Welland', label: 'TODO: Welland landmark source' },
+  { city: 'Fort St. John', label: 'TODO: Fort St. John landmark source' },
+  { city: 'Penticton', label: 'TODO: Penticton landmark source' },
+  { city: 'Prince George', label: 'TODO: Prince George landmark source' },
   { city: 'Maple Ridge', label: 'City of Maple Ridge - Heritage Register and Heritage Designation (Open Government Licence - Maple Ridge)', url: 'https://www.arcgis.com/home/item.html?id=85e758ffcd7a4aaeb8dd476143b70fd7' },
   { city: 'Langley Township', label: 'Township of Langley - Langley\'s Historic Places inventory (no licence stated; displayed with attribution only, not licensed for reuse); Province of British Columbia - Heritage Conservation Areas of BC (Open Government Licence - British Columbia)', url: 'https://www.arcgis.com/home/item.html?id=838d297431b747128230a452f038b503' },
   { city: 'Barrie', label: 'City of Barrie Municipal Heritage Register - Heritage Properties (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://www.arcgis.com/home/item.html?id=aa31258e142d4a7e9a01567e8fc2550f' },

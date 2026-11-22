@@ -144,6 +144,12 @@ import aultv.latrobe_landmarks;
 import cabar.barrie_landmarks;
 import calng.langley_landmarks;
 import campr.mapleridge_landmarks;
+import caprg.princegeorge_landmarks;
+import capen.penticton_landmarks;
+import cafsj.fortstjohn_landmarks;
+import cawld.welland_landmarks;
+import aubsd.bassendean_landmarks;
+import aucol.colacotway_landmarks;
 
 # The cross-city union is NOT declared here. It lives in
 # `full_landmark_publish.preql`, which reads the parquets these imports publish
