@@ -250,7 +250,7 @@
            species. -->
       <div class="tree-card-pane tree-card-pane--photos">
         <div class="tree-card-section-label">
-          {{ selectedTree.submission_photo_url || visitorPhotoUrl ? 'Photo of this tree' : unknownSpecies && !selectedTree.photo_url ? 'Unidentified tree' : 'Example species photo' }}
+          {{ selectedTree.submission_photo_url || visitorPhotoUrl ? 'Photo of this tree' : selectedTree.photo_url ? 'Leaf' : unknownSpecies ? 'Unidentified tree' : 'Species photo' }}
         </div>
         <div v-if="selectedTree.submission_photo_url" class="tc-photo-wrap">
           <img
@@ -288,7 +288,7 @@
         <div v-else-if="selectedTree.photo_url" class="tc-photo-wrap">
           <img
             :src="selectedTree.photo_url"
-            :alt="selectedTree.species || 'tree photo'"
+            :alt="`Leaf of ${selectedTree.species || 'this species'}`"
             class="tc-photo"
             loading="lazy"
           />
@@ -301,12 +301,12 @@
           <span>Species not recorded</span>
         </div>
         <div v-else class="tc-photo-placeholder">No photo available</div>
-        <!-- A trunk / bark view of the species, when a reviewer has picked one. -->
+        <!-- The reviewer selects a whole-tree view for the legacy trunk photo field. -->
         <div v-if="selectedTree.trunk_photo_url" class="tc-photo-wrap tc-photo-wrap--trunk">
-          <div class="tree-card-section-label">Another species photo</div>
+          <div class="tree-card-section-label">Full tree</div>
           <img
             :src="selectedTree.trunk_photo_url"
-            :alt="`Another species photo of ${selectedTree.species || 'this species'}`"
+            :alt="`Full tree — ${selectedTree.species || 'unidentified species'}`"
             class="tc-photo"
             loading="lazy"
           />
