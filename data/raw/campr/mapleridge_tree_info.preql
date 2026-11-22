@@ -63,7 +63,10 @@ root partial datasource campr_osm_tree_info extends tree_partition (
 )
 complete where city = 'CAMPR' and campr_source = 'OSM_CAMPR'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/campr_osm_staging.parquet`
-where (raw_latitude >= 49.18 and raw_latitude < 49.33 and raw_longitude >= -122.67 and raw_longitude < -122.4);
+where (raw_latitude >= 49.195 and raw_latitude < 49.33 and raw_longitude >= -122.67 and raw_longitude < -122.64)
+    or (raw_latitude >= 49.208 and raw_latitude < 49.33 and raw_longitude >= -122.64 and raw_longitude < -122.62)
+    or (raw_latitude >= 49.179 and raw_latitude < 49.33 and raw_longitude >= -122.62 and raw_longitude < -122.53)
+    or (raw_latitude >= 49.17 and raw_latitude < 49.33 and raw_longitude >= -122.53 and raw_longitude < -122.4);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

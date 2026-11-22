@@ -142,10 +142,10 @@ property <*>.aumrs_community_data_updated_through datetime; # when approved comm
 property <*>.ausht_community_data_updated_through datetime; # when approved community submissions for AUSHT are through
 property <*>.usfsd_community_data_updated_through datetime; # when approved community submissions for USFSD are through
 property <*>.casry_community_data_updated_through datetime; # when approved community submissions for CASRY are through
-property <*>.cabar_community_data_updated_through datetime; # when approved community submissions for CABAR are through
-property <*>.capbo_community_data_updated_through datetime; # when approved community submissions for CAPBO are through
-property <*>.campr_community_data_updated_through datetime; # when approved community submissions for CAMPR are through
 property <*>.aultv_community_data_updated_through datetime; # when approved community submissions for AULTV are through
+property <*>.cabar_community_data_updated_through datetime; # when approved community submissions for CABAR are through
+property <*>.calng_community_data_updated_through datetime; # when approved community submissions for CALNG are through
+property <*>.campr_community_data_updated_through datetime; # when approved community submissions for CAMPR are through
 
 # The community *rows* are declared per city too, in each city's own tree model,
 # as a `complete where city = 'X' and {code}_source = 'COMMUNITY_X'` partition.

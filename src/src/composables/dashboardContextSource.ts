@@ -812,16 +812,22 @@ const CITY_DASHBOARD_CONTEXT: Record<
     biome: 'Temperate Conifer Forests',
     realm: 'nearctic',
   },
+  AULTV: {
+    ecoregionId: 176, // Southeast Australia temperate forests
+    usdaZone: 9,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'australasia',
+  },
   CABAR: {
     ecoregionId: 334, // Eastern Great Lakes lowland forests
     usdaZone: 5,
     biome: 'Temperate Broadleaf & Mixed Forests',
     realm: 'nearctic',
   },
-  CAPBO: {
-    ecoregionId: 334, // Eastern Great Lakes lowland forests
-    usdaZone: 5,
-    biome: 'Temperate Broadleaf & Mixed Forests',
+  CALNG: {
+    ecoregionId: 364, // Puget lowland forests
+    usdaZone: 8,
+    biome: 'Temperate Conifer Forests',
     realm: 'nearctic',
   },
   CAMPR: {
@@ -829,12 +835,6 @@ const CITY_DASHBOARD_CONTEXT: Record<
     usdaZone: 8,
     biome: 'Temperate Conifer Forests',
     realm: 'nearctic',
-  },
-  AULTV: {
-    ecoregionId: 176, // Southeast Australia temperate forests
-    usdaZone: 9,
-    biome: 'Temperate Broadleaf & Mixed Forests',
-    realm: 'australasia',
   },
 }
 

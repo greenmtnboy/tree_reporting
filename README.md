@@ -164,6 +164,12 @@ Currently has data from the following cities:
 - [Fredericton, New Brunswick, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CAFRE)
 - [Medicine Hat, Alberta, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CAMHT)
 - [Greater Shepparton, Victoria, Australia](https://greenmtnboy.github.io/tree_reporting/#/?city=AUSHT)
+- [Sioux Falls, South Dakota](https://greenmtnboy.github.io/tree_reporting/#/?city=USFSD)
+- [Surrey, British Columbia, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CASRY)
+- [Latrobe City, Victoria, Australia](https://greenmtnboy.github.io/tree_reporting/#/?city=AULTV)
+- [Barrie, Ontario, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CABAR)
+- [Langley Township, British Columbia, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CALNG)
+- [Maple Ridge, British Columbia, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CAMPR)
 
 **[Live page](https://greenmtnboy.github.io/tree_reporting/)**
 
@@ -319,6 +325,12 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 | Fredericton | City of Fredericton - Tree Inventory (Open Government License - City of Fredericton) | https://data-fredericton.opendata.arcgis.com/datasets/1778707bb5a44f72b40aebcb297da092_37 |
 | Medicine Hat | City of Medicine Hat - Park Tree Inventory (City of Medicine Hat Open Data Licence) | https://www.arcgis.com/home/item.html?id=af05aa132ad24367a7d32d46af50bb38 |
 | Greater Shepparton | Greater Shepparton City Council - Street and Park Trees on data.gov.au (CC BY 4.0) | https://data.gov.au/data/dataset/greater-shepparton-city-council-street-and-park-trees |
+| Sioux Falls | City of Sioux Falls GIS - Trees (CC BY 4.0) | https://www.arcgis.com/home/item.html?id=c880d62ae5fb4652b1f8e6cbca244107 |
+| Surrey | City of Surrey - Park Specimen Trees (Open Government License - City of Surrey; contains information licensed under the Open Government License - City of Surrey) | https://opendata-surrey.hub.arcgis.com/datasets/626b2212e0594eadb8a86ccf0b9640c2 |
+| Latrobe City | Latrobe City Council - Tree Inventory (CC BY 4.0) | https://latrobecc.maps.arcgis.com/home/item.html?id=f41d6a33a5a545e9b84aca02d8448377 |
+| Barrie | City of Barrie Open Data - Tree (Open Government Licence - Barrie; contains information licensed under the Open Government Licence - Barrie) | https://opendata.barrie.ca/datasets/d053284adf6341d7939486d13bfd6911 |
+| Langley Township | Township of Langley - Tree Inventory (Open Government License - Township of Langley; contains information licensed under the Open Government License - Township of Langley) | https://www.arcgis.com/home/item.html?id=07ed48e3e633476aba03b1a800d616af |
+| Maple Ridge | City of Maple Ridge - Street Tree (Open Government Licence - Maple Ridge; contains information licensed under the Open Government Licence - Maple Ridge) | https://www.arcgis.com/home/item.html?id=290505c676d64cf09989eca1320aedd3 |
 | Bendigo | City of Greater Bendigo - Environment - Trees (CC BY 2.5 AU) | https://data.gov.au/data/dataset/city-of-greater-bendigo-environment-trees |
 | Melbourne | Melbourne Open Data - Urban Forest Trees | https://data.melbourne.vic.gov.au/explore/dataset/trees-with-species-and-dimensions-urban-forest/ |
 | Melbourne (Port Phillip) | City of Port Phillip - Trees (CC BY 2.5 AU) | https://data.gov.au/data/dataset/city-of-port-phillip-trees |
@@ -462,6 +474,12 @@ Every tree row carries a `data_source` column identifying which of the above it 
 | Fredericton | City of Fredericton - Heritage Preservation Areas (no licence stated; displayed with attribution only, not licensed for reuse) | https://www.arcgis.com/home/item.html?id=7a92b67c2593433196e35dc1f3e6e763 |
 | Medicine Hat | City of Medicine Hat - Historic Resources (no licence stated; displayed with attribution only, not licensed for reuse) | https://services3.arcgis.com/2gQ2Dv4Fb016qFVU/arcgis/rest/services/Historic_Map_Tour_layer/FeatureServer/0 |
 | Greater Shepparton | Department of Transport and Planning - Victorian Heritage Register via Vicmap (CC BY 4.0) | https://discover.data.vic.gov.au/dataset/victorian-heritage-register |
+| Sioux Falls | City of Sioux Falls - Historic Properties (local register, CC BY 4.0); National Park Service - National Register of Historic Places | https://www.arcgis.com/home/item.html?id=7b0407feca3e4f47bfe54559b9c1dd5d |
+| Surrey | City of Surrey Heritage Register - Heritage Sites (Open Government License - City of Surrey) | https://opendata-surrey.hub.arcgis.com/datasets/b65ea74c6e4743928ae25392935ca08f |
+| Latrobe City | Department of Transport and Planning - Victorian Heritage Register via Vicmap (CC BY 4.0) | https://discover.data.vic.gov.au/dataset/victorian-heritage-register |
+| Barrie | City of Barrie Municipal Heritage Register - Heritage Properties (no licence stated; displayed with attribution only, not licensed for reuse) | https://www.arcgis.com/home/item.html?id=aa31258e142d4a7e9a01567e8fc2550f |
+| Langley Township | Township of Langley - Langley's Historic Places inventory (no licence stated; displayed with attribution only, not licensed for reuse); Province of British Columbia - Heritage Conservation Areas of BC (Open Government Licence - British Columbia) | https://www.arcgis.com/home/item.html?id=838d297431b747128230a452f038b503 |
+| Maple Ridge | City of Maple Ridge - Heritage Register and Heritage Designation (Open Government Licence - Maple Ridge) | https://www.arcgis.com/home/item.html?id=85e758ffcd7a4aaeb8dd476143b70fd7 |
 | Bendigo | Heritage Victoria - Victorian Heritage Register via Vicmap (CC BY 4.0) | https://discover.data.vic.gov.au/dataset/victorian-heritage-register |
 | Sydney | Sydney LEP 2012 heritage items (NSW DPHI, CC BY) | https://data.nsw.gov.au/data/dataset/environmental-planning-instrument-heritage-her |
 | Eindhoven | Rijksdienst voor het Cultureel Erfgoed - Rijksmonumenten via PDOK (CC BY 4.0) | https://service.pdok.nl/rce/ps-ch/wfs/v1_0?request=GetCapabilities&service=WFS |

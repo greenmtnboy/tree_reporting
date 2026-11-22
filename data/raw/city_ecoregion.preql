@@ -156,9 +156,9 @@ select * from (values
     ('AUSHT', 192),
     ('USFSD', 388),
     ('CASRY', 364),
+    ('AULTV', 176),
     ('CABAR', 334),
-    ('CAPBO', 334),
-    ('CAMPR', 364),
-    ('AULTV', 176)
+    ('CALNG', 364),
+    ('CAMPR', 364)
 ) as t(city, ecoregion_id)
 ''';

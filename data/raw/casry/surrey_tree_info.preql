@@ -63,7 +63,17 @@ root partial datasource casry_osm_tree_info extends tree_partition (
 )
 complete where city = 'CASRY' and casry_source = 'OSM_CASRY'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/casry_osm_staging.parquet`
-where (raw_latitude >= 49.0 and raw_latitude < 49.16 and raw_longitude >= -122.93 and raw_longitude < -122.67);
+where (raw_latitude >= 49.0 and raw_latitude < 49.01 and raw_longitude >= -122.93 and raw_longitude < -122.6801)
+    or (raw_latitude >= 49.01 and raw_latitude < 49.1 and raw_longitude >= -122.93 and raw_longitude < -122.681)
+    or (raw_latitude >= 49.1 and raw_latitude < 49.128 and raw_longitude >= -122.93 and raw_longitude < -122.68)
+    or (raw_latitude >= 49.128 and raw_latitude < 49.13 and raw_longitude >= -122.93 and raw_longitude < -122.6797)
+    or (raw_latitude >= 49.13 and raw_latitude < 49.14 and raw_longitude >= -122.93 and raw_longitude < -122.67955)
+    or (raw_latitude >= 49.14 and raw_latitude < 49.16 and raw_longitude >= -122.93 and raw_longitude < -122.6793)
+    or (raw_latitude >= 49.16 and raw_latitude < 49.19 and raw_longitude >= -122.915 and raw_longitude < -122.905)
+    or (raw_latitude >= 49.16 and raw_latitude < 49.203 and raw_longitude >= -122.905 and raw_longitude < -122.895)
+    or (raw_latitude >= 49.16 and raw_latitude < 49.213 and raw_longitude >= -122.895 and raw_longitude < -122.85)
+    or (raw_latitude >= 49.16 and raw_latitude < 49.17 and raw_longitude >= -122.85 and raw_longitude < -122.6793)
+    or (raw_latitude >= 49.17 and raw_latitude < 49.215 and raw_longitude >= -122.85 and raw_longitude < -122.68);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

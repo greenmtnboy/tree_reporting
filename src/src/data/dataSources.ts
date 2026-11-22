@@ -10,10 +10,10 @@
  * gets round to naming it here.
  */
 export const DATA_SOURCE_LABELS: Record<string, string> = {
-  LATROBE_OPENDATA: 'Latrobe City Open Data',
   MAPLERIDGE_OPENDATA: 'Maple Ridge Open Data',
-  PETERBOROUGH_OPENDATA: 'Peterborough Open Data',
+  LANGLEY_OPENDATA: 'Langley Township Open Data',
   BARRIE_OPENDATA: 'Barrie Open Data',
+  LATROBE_OPENDATA: 'Latrobe City Open Data',
   SURREY_OPENDATA: 'Surrey Open Data',
   SIOUXFALLS_OPENDATA: 'Sioux Falls Open Data',
   SHEPPARTON_OPENDATA: 'Greater Shepparton Open Data',

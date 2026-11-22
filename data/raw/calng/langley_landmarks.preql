@@ -1,0 +1,29 @@
+import ..landmark_common;
+
+root datasource langley_landmarks_update_time (
+    data_updated_through: calng_landmark_data_updated_through
+)
+file `./langley_landmarks_probe.py`;
+
+# Langley Township's inventory of historic places (the Township's own layer)
+# and its two heritage conservation areas (the Province's register), read
+# live -- official sources, so no geocoding and nothing to stage.
+root partial datasource raw_langley_landmark_info extends landmark_partition (
+    address: ?address,
+    property_type: ?property_type,
+    year_built: ?year_built,
+    year_designated: ?year_designated,
+)
+complete where city = 'CALNG'
+file `./langley_landmarks.py`;
+
+partial datasource langley_landmark_info extends published_landmark_info (
+    ?address,
+    ?property_type,
+    ?year_built,
+    ?year_designated,
+    calng_landmark_data_updated_through,
+)
+complete where city = 'CALNG'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/calng_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/calng_landmark_info_v{data_version}.parquet`
+freshness by calng_landmark_data_updated_through;

@@ -99,6 +99,10 @@ Rules that hold while wiring:
 
 ### 1. Understand the source
 
+Check `docs/REJECTED_SOURCES.md` first: it lists the leads already turned
+down (licence, unofficial copies, territory) and why. When you drop a lead,
+add it there.
+
 You need a stable unique id, a scientific-name species field, WGS84
 coordinates, and a diameter or a proxy (circumference in cm converts as
 `dbh_in = circ_cm / (pi * 2.54)`). Missing fields are fine as null.

@@ -11,12 +11,12 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
-  { city: 'Latrobe City', label: 'TODO: Latrobe City tree inventory source', url: 'TODO' },
-  { city: 'Maple Ridge', label: 'TODO: Maple Ridge tree inventory source', url: 'TODO' },
-  { city: 'Peterborough', label: 'TODO: Peterborough tree inventory source', url: 'TODO' },
-  { city: 'Barrie', label: 'TODO: Barrie tree inventory source', url: 'TODO' },
-  { city: 'Surrey', label: 'TODO: Surrey tree inventory source', url: 'TODO' },
-  { city: 'Sioux Falls', label: 'TODO: Sioux Falls tree inventory source', url: 'TODO' },
+  { city: 'Maple Ridge', label: 'City of Maple Ridge - Street Tree (Open Government Licence - Maple Ridge; contains information licensed under the Open Government Licence - Maple Ridge)', url: 'https://www.arcgis.com/home/item.html?id=290505c676d64cf09989eca1320aedd3' },
+  { city: 'Langley Township', label: 'Township of Langley - Tree Inventory (Open Government License - Township of Langley; contains information licensed under the Open Government License - Township of Langley)', url: 'https://www.arcgis.com/home/item.html?id=07ed48e3e633476aba03b1a800d616af' },
+  { city: 'Barrie', label: 'City of Barrie Open Data - Tree (Open Government Licence - Barrie; contains information licensed under the Open Government Licence - Barrie)', url: 'https://opendata.barrie.ca/datasets/d053284adf6341d7939486d13bfd6911' },
+  { city: 'Latrobe City', label: 'Latrobe City Council - Tree Inventory (CC BY 4.0)', url: 'https://latrobecc.maps.arcgis.com/home/item.html?id=f41d6a33a5a545e9b84aca02d8448377' },
+  { city: 'Surrey', label: 'City of Surrey - Park Specimen Trees (Open Government License - City of Surrey; contains information licensed under the Open Government License - City of Surrey)', url: 'https://opendata-surrey.hub.arcgis.com/datasets/626b2212e0594eadb8a86ccf0b9640c2' },
+  { city: 'Sioux Falls', label: 'City of Sioux Falls GIS - Trees (CC BY 4.0)', url: 'https://www.arcgis.com/home/item.html?id=c880d62ae5fb4652b1f8e6cbca244107' },
   { city: 'Greater Shepparton', label: 'Greater Shepparton City Council - Street and Park Trees on data.gov.au (CC BY 4.0)', url: 'https://data.gov.au/data/dataset/greater-shepparton-city-council-street-and-park-trees' },
   { city: 'Macedon Ranges', label: 'Macedon Ranges Shire Council - Macedon Ranges Shire Trees on data.gov.au (CC BY 2.5 AU)', url: 'https://data.gov.au/data/dataset/macedon-ranges-shire-trees' },
   { city: 'Launceston', label: 'City of Launceston - Trees (CC BY 4.0, per the council\'s copyright notice for its mapping data)', url: 'https://opendata.launceston.tas.gov.au' },
@@ -177,12 +177,12 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
-  { city: 'Latrobe City', label: 'TODO: Latrobe City landmark source' },
-  { city: 'Maple Ridge', label: 'TODO: Maple Ridge landmark source' },
-  { city: 'Peterborough', label: 'TODO: Peterborough landmark source' },
-  { city: 'Barrie', label: 'TODO: Barrie landmark source' },
-  { city: 'Surrey', label: 'TODO: Surrey landmark source' },
-  { city: 'Sioux Falls', label: 'TODO: Sioux Falls landmark source' },
+  { city: 'Maple Ridge', label: 'City of Maple Ridge - Heritage Register and Heritage Designation (Open Government Licence - Maple Ridge)', url: 'https://www.arcgis.com/home/item.html?id=85e758ffcd7a4aaeb8dd476143b70fd7' },
+  { city: 'Langley Township', label: 'Township of Langley - Langley\'s Historic Places inventory (no licence stated; displayed with attribution only, not licensed for reuse); Province of British Columbia - Heritage Conservation Areas of BC (Open Government Licence - British Columbia)', url: 'https://www.arcgis.com/home/item.html?id=838d297431b747128230a452f038b503' },
+  { city: 'Barrie', label: 'City of Barrie Municipal Heritage Register - Heritage Properties (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://www.arcgis.com/home/item.html?id=aa31258e142d4a7e9a01567e8fc2550f' },
+  { city: 'Latrobe City', label: 'Department of Transport and Planning - Victorian Heritage Register via Vicmap (CC BY 4.0)', url: 'https://discover.data.vic.gov.au/dataset/victorian-heritage-register' },
+  { city: 'Surrey', label: 'City of Surrey Heritage Register - Heritage Sites (Open Government License - City of Surrey)', url: 'https://opendata-surrey.hub.arcgis.com/datasets/b65ea74c6e4743928ae25392935ca08f' },
+  { city: 'Sioux Falls', label: 'City of Sioux Falls - Historic Properties (local register, CC BY 4.0); National Park Service - National Register of Historic Places', url: 'https://www.arcgis.com/home/item.html?id=7b0407feca3e4f47bfe54559b9c1dd5d' },
   { city: 'Greater Shepparton', label: 'Department of Transport and Planning - Victorian Heritage Register via Vicmap (CC BY 4.0)', url: 'https://discover.data.vic.gov.au/dataset/victorian-heritage-register' },
   { city: 'Macedon Ranges', label: 'Department of Transport and Planning - Victorian Heritage Register via Vicmap (CC BY 4.0)', url: 'https://discover.data.vic.gov.au/dataset/victorian-heritage-register' },
   { city: 'Launceston', label: 'Heritage Tasmania - Tasmanian Heritage Register via theLIST © State of Tasmania (CC BY 3.0 AU)', url: 'https://services.thelist.tas.gov.au/arcgis/rest/services/HT/HT_Public/MapServer/0' },
