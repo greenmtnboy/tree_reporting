@@ -63,7 +63,7 @@ root partial datasource aucol_osm_tree_info extends tree_partition (
 )
 complete where city = 'AUCOL' and aucol_source = 'OSM_AUCOL'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/aucol_osm_staging.parquet`
-where (raw_latitude >= -38.87 and raw_latitude < -38.05 and raw_longitude >= 143.25 and raw_longitude < 143.95);
+where (raw_latitude >= -38.87 and raw_latitude < -38.01 and raw_longitude >= 143.24 and raw_longitude < 143.95);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

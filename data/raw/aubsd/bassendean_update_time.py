@@ -3,26 +3,20 @@
 # requires-python = ">=3.13"
 # dependencies = ["pyarrow", "pytrilogy", "requests"]
 # ///
-"""Freshness probe for Bassendean's tree inventory.  STUB -- point it at the portal.
+"""Freshness probe for Bassendean's tree inventory.
 
-Mandatory: without it the pipeline re-downloads the whole dataset on every
-tick.  Hit the lightest metadata endpoint the portal exposes:
+Reads the hosted view's own `editingInfo.dataLastEditDate` -- one small
+metadata response -- so a refresh only re-downloads the inventory when the
+Town has actually edited it.  The item's `modified` stamp is not used: it
+moves when the item page is edited, not when the data does.
 
-    ArcGIS     `shared.platforms.arcgis.layer_last_edit(LAYER)`, or `field_max` for a
-               layer with no editingInfo
-    OpenDataSoft  GET /api/explore/v2.1/catalog/datasets/{id} -> .metas.default.modified
-    CKAN       GET /api/3/action/resource_show?id={id} -> .result.last_modified
-    Socrata    `shared.platforms.socrata.rows_updated_at(DATASET)` -- reads
-               /api/views/{id}.json .rowsUpdatedAt (unix SECONDS, not
-               Esri's milliseconds)
+`layer_last_edit` raises rather than degrading when the layer publishes no
+`editingInfo`: that is our mapping being wrong, not the portal being down.  A
+genuine outage is caught by `get_json_with_retry` inside it and does degrade.
 
-Fetch with `get_json_with_retry`, never a bare `requests.get(...).json()`: a
-portal in maintenance answers every path with an HTML holding page and HTTP
-200, and every probe is a root datasource whose exception ends the whole
-refresh for every city.  `emit_freshness` turns an availability failure into
-the epoch so this city sits out the run; a *parse* failure still raises, because
-that means the portal changed its schema and degrading would freeze this city's
-Parquet silently and for ever.
+The layer's name carries a version ("..._Corrected_July_2026_v1"): when the
+Town publishes a successor view this one stops moving.  Its GlobalIDs would
+re-key the city, so a switch is a deliberate edit, never automatic.
 """
 
 import sys
@@ -30,13 +24,18 @@ from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from shared.ingest import emit_freshness, get_json_with_retry
+from shared.platforms.arcgis import FeatureLayer, layer_last_edit
+from shared.ingest import emit_freshness
 
-METADATA_URL = "TODO: the portal's metadata endpoint"
+# Kept in step with bassendean_tree_info.py's LAYER.
+LAYER = FeatureLayer(
+    "https://services-ap1.arcgis.com/551UnqKK1GZeDKxQ/arcgis/rest/services/"
+    "Public_View_TOB_213_All_Trees_Corrected_July_2026_v1/FeatureServer/0"
+)
 
 
 def fetch_modified_at() -> datetime:
-    raise NotImplementedError("TODO: read Bassendean's published-through timestamp")
+    return layer_last_edit(LAYER)
 
 
 if __name__ == "__main__":

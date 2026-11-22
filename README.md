@@ -170,6 +170,14 @@ Currently has data from the following cities:
 - [Barrie, Ontario, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CABAR)
 - [Langley Township, British Columbia, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CALNG)
 - [Maple Ridge, British Columbia, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CAMPR)
+- [Prince George, British Columbia, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CAPRG)
+- [Penticton, British Columbia, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CAPEN)
+- [Fort St. John, British Columbia, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CAFSJ)
+- [Welland, Ontario, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CAWLD)
+- [Bassendean, Western Australia, Australia](https://greenmtnboy.github.io/tree_reporting/#/?city=AUBSD)
+- [Colac Otway Shire, Victoria, Australia](https://greenmtnboy.github.io/tree_reporting/#/?city=AUCOL)
+- [Barcelona, Spain](https://greenmtnboy.github.io/tree_reporting/#/?city=ESBCN)
+- [Singapore](https://greenmtnboy.github.io/tree_reporting/#/?city=SGSIN)
 
 **[Live page](https://greenmtnboy.github.io/tree_reporting/)**
 
@@ -331,6 +339,14 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 | Barrie | City of Barrie Open Data - Tree (Open Government Licence - Barrie; contains information licensed under the Open Government Licence - Barrie) | https://opendata.barrie.ca/datasets/d053284adf6341d7939486d13bfd6911 |
 | Langley Township | Township of Langley - Tree Inventory (Open Government License - Township of Langley; contains information licensed under the Open Government License - Township of Langley) | https://www.arcgis.com/home/item.html?id=07ed48e3e633476aba03b1a800d616af |
 | Maple Ridge | City of Maple Ridge - Street Tree (Open Government Licence - Maple Ridge; contains information licensed under the Open Government Licence - Maple Ridge) | https://www.arcgis.com/home/item.html?id=290505c676d64cf09989eca1320aedd3 |
+| Prince George | City of Prince George - Trees (Open Government License - City of Prince George; contains information licensed under the Open Government License - City of Prince George) | https://www.arcgis.com/home/item.html?id=382244b24c054f0ab92ca9d76facd44c |
+| Penticton | City of Penticton - City Owned Trees (Open Government Licence - City of Penticton; contains information licenced under the Open Government Licence - City of Penticton) | https://www.arcgis.com/home/item.html?id=e0905b0677bf4b468b57fb52d2d725db |
+| Fort St. John | City of Fort St. John - Tree Inventory (Open Government License - City of Fort St. John; contains information licensed under the Open Government License - City of Fort St. John) | https://data-fortstjohn.opendata.arcgis.com/datasets/c4ee1a5aa7c7496b8a70544a8fcf4e1a_0/about |
+| Welland | City of Welland Open Data - Welland Trees (Open Government Licence - City of Welland; contains information licensed under the Open Government Licence - City of Welland) | https://www.arcgis.com/home/item.html?id=afcb6b5308de40b1830a3ebb2369a83b |
+| Bassendean | Town of Bassendean - All Trees (street, park and private-land trees) (no licence stated; displayed with attribution only, not licensed for reuse) | https://www.arcgis.com/home/item.html?id=5973d2d7b04648a4bb000fe13cc4db74 |
+| Colac Otway | Colac Otway Shire - Colac Otway Shire Trees (data.gov.au, CC BY 3.0 AU) | https://data.gov.au/data/dataset/colac-otway-shire-trees |
+| Barcelona | Ajuntament de Barcelona - Atles de la Biodiversitat, tree inventory (Open Data BCN, CC BY 4.0) | https://opendata-ajuntament.barcelona.cat/data/en/dataset/atles-biodiversitat-arbrat-geometries |
+| Singapore | National Parks Board - Heritage Trees via data.gov.sg (Singapore Open Data Licence v1.0) | https://data.gov.sg/datasets/d_644ff187b6d14d6316f47284a4a6c81f/view |
 | Bendigo | City of Greater Bendigo - Environment - Trees (CC BY 2.5 AU) | https://data.gov.au/data/dataset/city-of-greater-bendigo-environment-trees |
 | Melbourne | Melbourne Open Data - Urban Forest Trees | https://data.melbourne.vic.gov.au/explore/dataset/trees-with-species-and-dimensions-urban-forest/ |
 | Melbourne (Port Phillip) | City of Port Phillip - Trees (CC BY 2.5 AU) | https://data.gov.au/data/dataset/city-of-port-phillip-trees |
@@ -480,6 +496,14 @@ Every tree row carries a `data_source` column identifying which of the above it 
 | Barrie | City of Barrie Municipal Heritage Register - Heritage Properties (no licence stated; displayed with attribution only, not licensed for reuse) | https://www.arcgis.com/home/item.html?id=aa31258e142d4a7e9a01567e8fc2550f |
 | Langley Township | Township of Langley - Langley's Historic Places inventory (no licence stated; displayed with attribution only, not licensed for reuse); Province of British Columbia - Heritage Conservation Areas of BC (Open Government Licence - British Columbia) | https://www.arcgis.com/home/item.html?id=838d297431b747128230a452f038b503 |
 | Maple Ridge | City of Maple Ridge - Heritage Register and Heritage Designation (Open Government Licence - Maple Ridge) | https://www.arcgis.com/home/item.html?id=85e758ffcd7a4aaeb8dd476143b70fd7 |
+| Prince George | City of Prince George - Heritage Register (no licence stated; displayed with attribution only, not licensed for reuse), placed on City civic address points (Open Government License - City of Prince George) | https://www.princegeorge.ca/community-culture/heritage/heritage-register-properties |
+| Penticton | City of Penticton - Community Heritage Register (no licence stated; displayed with attribution only, not licensed for reuse) | https://maps.penticton.ca/utility/rest/services/External_PRD/Planning/MapServer/235 |
+| Fort St. John | City of Fort St. John - Recreation Areas and Points of Interest (Open Government License - City of Fort St. John) | https://data-fortstjohn.opendata.arcgis.com/datasets/66b0dcbb2f9e4478b8f2751cb4742475_0/about |
+| Welland | City of Welland - Designated Heritage Properties (Open Government Licence - City of Welland) | https://www.arcgis.com/home/item.html?id=0aa78d20dd6a4dac95e2e8e5bca0e8c2 |
+| Bassendean | Town of Bassendean - Heritage List, adopted 26 July 2022 (no licence stated; displayed with attribution only, not licensed for reuse) | https://www.arcgis.com/home/item.html?id=225a54f515224e1996e6d5f6c6613f36 |
+| Colac Otway | Department of Transport and Planning - Victorian Heritage Register via Vicmap (CC BY 4.0) | https://discover.data.vic.gov.au/dataset/victorian-heritage-register |
+| Barcelona | Ajuntament de Barcelona - Punts d'interès cultural (Open Data BCN, CC BY 4.0) | https://opendata-ajuntament.barcelona.cat/data/en/dataset/punts-informacio-turistica |
+| Singapore | National Heritage Board - National Monuments and Historic Sites via data.gov.sg (Singapore Open Data Licence v1.0) | https://data.gov.sg/datasets/d_b29c230ec6b609e29ed42f71ca9a8767/view |
 | Bendigo | Heritage Victoria - Victorian Heritage Register via Vicmap (CC BY 4.0) | https://discover.data.vic.gov.au/dataset/victorian-heritage-register |
 | Sydney | Sydney LEP 2012 heritage items (NSW DPHI, CC BY) | https://data.nsw.gov.au/data/dataset/environmental-planning-instrument-heritage-her |
 | Eindhoven | Rijksdienst voor het Cultureel Erfgoed - Rijksmonumenten via PDOK (CC BY 4.0) | https://service.pdok.nl/rce/ps-ch/wfs/v1_0?request=GetCapabilities&service=WFS |

@@ -63,7 +63,7 @@ root partial datasource cafsj_osm_tree_info extends tree_partition (
 )
 complete where city = 'CAFSJ' and cafsj_source = 'OSM_CAFSJ'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/cafsj_osm_staging.parquet`
-where (raw_latitude >= 56.2 and raw_latitude < 56.29 and raw_longitude >= -120.92 and raw_longitude < -120.77);
+where (raw_latitude >= 56.2 and raw_latitude < 56.29 and raw_longitude >= -120.97 and raw_longitude < -120.73);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

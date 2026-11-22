@@ -136,6 +136,7 @@ COUNTRIES = {
     "NL": "Netherlands",
     "NZ": "New Zealand",
     "PT": "Portugal",
+    "SG": "Singapore",
     "TW": "Taiwan",
     "US": "United States",
 }

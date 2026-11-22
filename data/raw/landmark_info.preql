@@ -150,6 +150,8 @@ import cafsj.fortstjohn_landmarks;
 import cawld.welland_landmarks;
 import aubsd.bassendean_landmarks;
 import aucol.colacotway_landmarks;
+import esbcn.barcelona_landmarks;
+import sgsin.singapore_landmarks;
 
 # The cross-city union is NOT declared here. It lives in
 # `full_landmark_publish.preql`, which reads the parquets these imports publish

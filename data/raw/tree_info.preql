@@ -141,6 +141,8 @@ import cafsj.fortstjohn_tree_info;
 import cawld.welland_tree_info;
 import aubsd.bassendean_tree_info;
 import aucol.colacotway_tree_info;
+import esbcn.barcelona_tree_info;
+import sgsin.singapore_tree_info;
 
 # Each city models its originating dataset as its own enum key so Trilogy can
 # prove per-city partition coverage (see core.preql). Merging them here — and
@@ -289,6 +291,8 @@ merge cafsj_source into data_source;
 merge cawld_source into data_source;
 merge aubsd_source into data_source;
 merge aucol_source into data_source;
+merge esbcn_source into data_source;
+merge sgsin_source into data_source;
 
 # The dedup columns (`merged_sources`, `merged_tree_ids`) are
 # the one shared derivation in tree_dedup.preql, computed inside each city's
@@ -446,7 +450,9 @@ capen_published_data_updated_through,
 cafsj_published_data_updated_through,
 cawld_published_data_updated_through,
 aubsd_published_data_updated_through,
-aucol_published_data_updated_through);
+aucol_published_data_updated_through,
+esbcn_published_data_updated_through,
+sgsin_published_data_updated_through);
 # --- Merged union datasource ---
 
 datasource tree_info (

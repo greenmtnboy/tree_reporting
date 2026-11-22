@@ -3,26 +3,26 @@
 # requires-python = ">=3.13"
 # dependencies = ["pyarrow", "pytrilogy", "requests"]
 # ///
-"""Freshness probe for Penticton's tree inventory.  STUB -- point it at the portal.
+"""Freshness probe for Penticton's tree inventory.
 
-Mandatory: without it the pipeline re-downloads the whole dataset on every
-tick.  Hit the lightest metadata endpoint the portal exposes:
+The ingest reads the `Trees` MapServer layer on the City's own ArcGIS Server,
+which publishes no `editingInfo` and no editor-tracking column (its dates are
+`PLANTDATE` and `INSTALLDATE`, which say when a tree went in, not when a row
+changed).  So the watermark is the later of:
 
-    ArcGIS     `shared.platforms.arcgis.layer_last_edit(LAYER)`, or `field_max` for a
-               layer with no editingInfo
-    OpenDataSoft  GET /api/explore/v2.1/catalog/datasets/{id} -> .metas.default.modified
-    CKAN       GET /api/3/action/resource_show?id={id} -> .result.last_modified
-    Socrata    `shared.platforms.socrata.rows_updated_at(DATASET)` -- reads
-               /api/views/{id}.json .rowsUpdatedAt (unix SECONDS, not
-               Esri's milliseconds)
+* the `editingInfo.dataLastEditDate` of the City's hosted copy of the same
+  table (Open Penticton's "City Owned Trees",
+  `services1.arcgis.com/ZMQyarkhNAnn8lip/.../Parks_PRD/FeatureServer/1355`),
+  which the City's `gisscripts` account reloads from the server -- 2026-11-22
+  10:15 UTC when the city was wired, the small hours Pacific.  A reload moves
+  it whether or not a tree changed, which costs at most one rebuild of a
+  ten-thousand-row city per scheduled tick;
+* MAX(`INSTALLDATE`) on the server layer itself (stamped when a tree is
+  entered), so a hosted copy that stops being refreshed cannot freeze the
+  city while trees are still being added.
 
-Fetch with `get_json_with_retry`, never a bare `requests.get(...).json()`: a
-portal in maintenance answers every path with an HTML holding page and HTTP
-200, and every probe is a root datasource whose exception ends the whole
-refresh for every city.  `emit_freshness` turns an availability failure into
-the epoch so this city sits out the run; a *parse* failure still raises, because
-that means the portal changed its schema and degrading would freeze this city's
-Parquet silently and for ever.
+An outage degrades through `get_json_with_retry`; a layer that loses
+`editingInfo` or the column raises, because that is a schema change.
 """
 
 import sys
@@ -30,13 +30,22 @@ from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from shared.ingest import emit_freshness, get_json_with_retry
+from shared.platforms.arcgis import FeatureLayer, field_max, layer_last_edit
+from shared.ingest import emit_freshness
 
-METADATA_URL = "TODO: the portal's metadata endpoint"
+SERVER_LAYER = FeatureLayer(
+    "https://maps.penticton.ca/utility/rest/services/External_PRD/Parks/MapServer/1355",
+    timeout=60,
+)
+HOSTED_COPY = FeatureLayer(
+    "https://services1.arcgis.com/ZMQyarkhNAnn8lip/arcgis/rest/services/"
+    "Parks_PRD/FeatureServer/1355",
+    timeout=60,
+)
 
 
 def fetch_modified_at() -> datetime:
-    raise NotImplementedError("TODO: read Penticton's published-through timestamp")
+    return max(layer_last_edit(HOSTED_COPY), field_max(SERVER_LAYER, "INSTALLDATE"))
 
 
 if __name__ == "__main__":

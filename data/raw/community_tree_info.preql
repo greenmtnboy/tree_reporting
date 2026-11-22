@@ -152,6 +152,8 @@ property <*>.cafsj_community_data_updated_through datetime; # when approved comm
 property <*>.cawld_community_data_updated_through datetime; # when approved community submissions for CAWLD are through
 property <*>.aubsd_community_data_updated_through datetime; # when approved community submissions for AUBSD are through
 property <*>.aucol_community_data_updated_through datetime; # when approved community submissions for AUCOL are through
+property <*>.esbcn_community_data_updated_through datetime; # when approved community submissions for ESBCN are through
+property <*>.sgsin_community_data_updated_through datetime; # when approved community submissions for SGSIN are through
 
 # The community *rows* are declared per city too, in each city's own tree model,
 # as a `complete where city = 'X' and {code}_source = 'COMMUNITY_X'` partition.

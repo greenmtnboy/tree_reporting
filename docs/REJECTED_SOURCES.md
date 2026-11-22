@@ -26,7 +26,6 @@ forbidden) belongs under "Licence".
 |---|---|---|
 | Zagreb, ArcGIS item `07e1bc958853430d84d1f0ba0a66fd7b` | 2026-11-17 | An Esri/GDi demo account (`gdi3demo`), not the city's; no licence. |
 | Cape Town, ArcGIS item `4ea4a97a40744b90a99e87a66270b6be` | 2026-11-17 | Polyphagous shot-hole borer sightings, not a tree inventory. |
-| Singapore, data.gov.sg `d_644ff187b6d14d6316f47284a4a6c81f` | 2026-11-17 | Heritage trees only. |
 | Hong Kong, data.gov.hk `hk-housing-lt-lt` | 2026-11-17 | Housing Authority estates only. |
 | Medellín, GeoMedellín dataset 398 | 2026-11-17 | The server returns 403 to scripted access. |
 | Budapest, infogardenweb.hu/bpfatar | 2026-11-21 | The API needs authentication; no licence. |
@@ -36,6 +35,8 @@ forbidden) belongs under "Licence".
 | Amherst MA, ArcGIS item `0d4e7c7e12ce42b5908570604ab8020d` | 2026-11-22 | An Amherst College student account's copy of the town's data. Wire the town's own hub layer instead if it is found. |
 | Abbotsford BC, ArcGIS item `a6f44ffead21443c8b8201c0fef87e39` | 2026-11-22 | A consultant's account (`DHC_Consultant`), a 2019 snapshot last edited 2021. |
 | Minneapolis, Ann Arbor, Lincoln NE leads | 2026-11-19 | University or personal accounts, not the city's. |
+| Barcelona protected-heritage catalogue `patrimoni-arquitectonic-protegit` (landmarks for ESBCN) | 2026-11-22 | CC BY 4.0, but published only as SHP/DGN/WMS file downloads, which Open Data BCN answers with 403 to scripted clients. ESBCN uses the cultural points of interest (datastore API) instead. The same 403 blocks the street-tree file `arbrat-viari`; ESBCN reads every tree from the Biodiversity Atlas datastore instead. | 
+| Brisbane, data.brisbane.qld.gov.au `botanic-collection-sherwood-arboretum` | 2026-11-22 | One arboretum's botanic collection, not a city inventory; Brisbane City Council publishes no street or park tree inventory (only street-tree species lists and vegetation overlays). Wire Brisbane if the council releases one. |
 
 ## Parked for territory
 

@@ -872,6 +872,18 @@ const CITY_DASHBOARD_CONTEXT: Record<
     biome: 'Temperate Broadleaf & Mixed Forests',
     realm: 'australasia',
   },
+  ESBCN: {
+    ecoregionId: 799, // Northeast Spain and Southern France Mediterranean forests
+    usdaZone: 10,
+    biome: 'Mediterranean Forests, Woodlands & Scrub',
+    realm: 'palearctic',
+  },
+  SGSIN: {
+    ecoregionId: 265, // Peninsular Malaysian rain forests
+    usdaZone: 13,
+    biome: 'Tropical & Subtropical Moist Broadleaf Forests',
+    realm: 'indo_malay',
+  },
 }
 
 function escapeStringLiteral(value: string) {

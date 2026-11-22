@@ -896,6 +896,56 @@ SPECIES_SYNONYMS: dict[str, str] = {
 # `Celtis`/`Cercis occidentalis`, `Pinus`/`Prunus nigra` and
 # `Malus`/`Taxus baccata`.  Add an entry only with that check behind it.
 SPECIES_MISSPELLINGS: dict[str, str] = {
+    "Pinus uncinate": "Pinus uncinata",  # Fort St. John
+    "Acacia menaloxylon": "Acacia melanoxylon",  # Bassendean
+    "Allocausuarina littoralis": "Allocasuarina littoralis",  # Bassendean
+    "Bouganvillia": "Bougainvillea",  # Bassendean
+    "Callitris priessii": "Callitris preissii",  # Bassendean
+    "Elaeocarpus reticulatis": "Elaeocarpus reticulatus",  # Bassendean
+    "Fraxinus griffithi": "Fraxinus griffithii",  # Bassendean
+    "Hakea petolaris": "Hakea petiolaris",  # Bassendean
+    "Lagunaria pattersonii": "Lagunaria patersonia",  # Bassendean
+    "Liquidambar styracciflua": "Liquidambar styraciflua",  # Bassendean
+    "Persia americana": "Persea americana",  # Bassendean
+    "Phoenix roebelini": "Phoenix roebelenii",  # Bassendean
+    "Populus simonsii": "Populus simonii",  # Bassendean
+    "Pyrus ussueriensis": "Pyrus ussuriensis",  # Bassendean
+    "Sapium serbiferum": "Triadica sebifera",  # Bassendean
+    "Metrosiderous excelsus": "Metrosideros excelsa",  # Bassendean
+    "Phoenix roebellini": "Phoenix roebelenii",  # Bassendean
+    "Eucalyptus pterocarpan": "Eucalyptus pterocarpa",  # Bassendean
+    "Acacia floribuna": "Acacia floribunda",  # Colac Otway
+    "Allocasuarina luehannii": "Allocasuarina luehmannii",  # Colac Otway
+    "Banksia intergifolia": "Banksia integrifolia",  # Colac Otway
+    "Cercis canadersis": "Cercis canadensis",  # Colac Otway
+    "Eucalyptus mellidora": "Eucalyptus melliodora",  # Colac Otway
+    "Eucalyptus nichollii": "Eucalyptus nicholii",  # Colac Otway
+    "Fraxinus pennsyvanica": "Fraxinus pennsylvanica",  # Colac Otway
+    "Jacaranda momosifolia": "Jacaranda mimosifolia",  # Colac Otway
+    "Lophostermon confertus": "Lophostemon confertus",  # Colac Otway
+    "Melaleuca lanceolota": "Melaleuca lanceolata",  # Colac Otway
+    "Melaleuca stypheliodes": "Melaleuca styphelioides",  # Colac Otway
+    "Olea ueropaea": "Olea europaea",  # Colac Otway
+    "Photina glabra": "Photinia glabra",  # Colac Otway
+    "Pittosporum eugeniodes": "Pittosporum eugenioides",  # Colac Otway
+    "Plantanus orientalis": "Platanus orientalis",  # Colac Otway
+    "Agonis juniperana": "Agonis juniperina",  # Colac Otway
+    "Agonis linearfolia": "Agonis linearifolia",  # Colac Otway
+    "Eucalyptus botriodies": "Eucalyptus botryoides",  # Colac Otway
+    "Protea specious": "Protea speciosa",  # Colac Otway
+    "Sorbus american": "Sorbus americana",  # Prince George
+    "Crataegus mordensis": "Crataegus x mordenensis",  # Prince George
+    "Ziziphus mauritania": "Ziziphus mauritiana",  # Barcelona
+    "Faxinus americana": "Fraxinus americana",  # Penticton
+    "Fraxinus pennsylvania": "Fraxinus pennsylvanica",  # Penticton
+    "Gleditsia tracanthos": "Gleditsia triacanthos",  # Penticton
+    "Ostrya viriniana": "Ostrya virginiana",  # Penticton
+    "Picea stichensis": "Picea sitchensis",  # Penticton
+    "Populous tremula": "Populus tremula",  # Penticton
+    "Quercus palestrus": "Quercus palustris",  # Penticton
+    "Tilia cortada": "Tilia cordata",  # Penticton
+    "Ostrya virginina": "Ostrya virginiana",  # Penticton
+    "Picea stichenis": "Picea sitchensis",  # Penticton
     # Batch 14 (Sioux Falls, Surrey, Latrobe City, Barrie, Langley Township, Maple Ridge): each key absent from WCVP, each value accepted there.
     "Crataegus persimillis": "Crataegus persimilis",  # Surrey
     "Fraxinus exelsior": "Fraxinus excelsior",  # Surrey
@@ -2167,6 +2217,8 @@ def _sanitize_taxon(value: str | None) -> str | None:
 # Keyed by city code so `community_source_for` can derive the community label
 # and so tests can assert the two lists agree.
 MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
+    "SGSIN": ("SINGAPORE_NPARKS",),
+    "ESBCN": ("BARCELONA_OPENDATA",),
     "AUCOL": ("COLAC_OTWAY_OPENDATA",),
     "AUBSD": ("BASSENDEAN_OPENDATA",),
     "CAWLD": ("WELLAND_OPENDATA",),
@@ -2341,6 +2393,8 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # overlapping rows under one cluster id and publishes only the survivor — see
 # tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
+    "SGSIN": "OSM_SGSIN",
+    "ESBCN": "OSM_ESBCN",
     "AUCOL": "OSM_AUCOL",
     "AUBSD": "OSM_AUBSD",
     "CAWLD": "OSM_CAWLD",
@@ -3094,10 +3148,12 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
-    "AUCOL": (-38.87, -38.05, 143.25, 143.95),
+    "SGSIN": (1.15, 1.48, 103.59, 104.1),
+    "ESBCN": (41.32, 41.47, 2.05, 2.23),
+    "AUCOL": (-38.87, -38.01, 143.24, 143.95),
     "AUBSD": (-31.94, -31.88, 115.92, 115.98),
-    "CAWLD": (42.93, 43.05, -79.34, -79.16),
-    "CAFSJ": (56.2, 56.29, -120.92, -120.77),
+    "CAWLD": (42.92, 43.05, -79.34, -79.16),
+    "CAFSJ": (56.2, 56.29, -120.97, -120.73),
     "CAPEN": (49.42, 49.56, -119.66, -119.5),
     "CAPRG": (53.8, 54.05, -122.95, -122.6),
     "CAMPR": (49.17, 49.33, -122.67, -122.4),
@@ -3294,6 +3350,11 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
     # NOT YET CALIBRATED: default; measure after the first build.
+    "SGSIN": 10,
+    # osm_dedup_validation (2026-11-22): 4 m flags 42,137, 1,116 false (2.6%), recall 93%;
+    # 6 m adds 1,634 for 1,426 more false.
+    "ESBCN": 4,
+    # NOT YET CALIBRATED: default; measure after the first build.
     "AUCOL": 10,
     # NOT YET CALIBRATED: default; measure after the first build.
     "AUBSD": 10,
@@ -3301,10 +3362,12 @@ DEDUP_CELL_METRES: dict[str, int] = {
     "CAWLD": 10,
     # NOT YET CALIBRATED: default; measure after the first build.
     "CAFSJ": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "CAPEN": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "CAPRG": 10,
+    # osm_dedup_validation (2026-11-22): 8 m flags 716, 21 false (2.9%), recall 96%;
+    # 10 m adds 19 for 12 more false.
+    "CAPEN": 8,
+    # osm_dedup_validation (2026-11-22): 567 OSM trees, none within 28 m of an
+    # inventory tree, so nothing to calibrate against; smallest cell kept.
+    "CAPRG": 4,
     # osm_dedup_validation (2026-11-22): 6 m flags 486, 3.3% false, 82.0% recall;
     # 8 m adds 21 for 14 more false.
     "CAMPR": 6,
@@ -3952,10 +4015,22 @@ DEDUP_CELL_METRES: dict[str, int] = {
 Box = tuple[float, float, float, float]
 
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
-    'AUCOL': ((-38.87, -38.05, 143.25, 143.95),),
+    # Singapore's shore, not the scaffold box: the box also held Johor Bahru's
+    # waterfront (Malaysia, north of ~1.452 west of the Causeway) and Batam's
+    # north coast (Indonesia, south of 1.25 east of 103.90). All 255 NParks
+    # heritage trees fall inside; the north strip loses a sliver of
+    # Woodlands' waterfront west of 103.80.
+    'SGSIN': (
+        (1.15, 1.44, 103.59, 103.90),
+        (1.25, 1.44, 103.90, 104.10),
+        (1.44, 1.47, 103.80, 103.88),
+        (1.44, 1.452, 103.66, 103.80),
+    ),
+    'ESBCN': ((41.32, 41.47, 2.05, 2.23),),
+    'AUCOL': ((-38.87, -38.01, 143.24, 143.95),),
     'AUBSD': ((-31.94, -31.88, 115.92, 115.98),),
-    'CAWLD': ((42.93, 43.05, -79.34, -79.16),),
-    'CAFSJ': ((56.2, 56.29, -120.92, -120.77),),
+    'CAWLD': ((42.92, 43.05, -79.34, -79.16),),
+    'CAFSJ': ((56.2, 56.29, -120.97, -120.73),),
     'CAPEN': ((49.42, 49.56, -119.66, -119.5),),
     'CAPRG': ((53.8, 54.05, -122.95, -122.6),),
     # South edge steps along the Fraser above Langley Township (CALNG).

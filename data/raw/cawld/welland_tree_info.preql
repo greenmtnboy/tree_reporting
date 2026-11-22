@@ -63,7 +63,7 @@ root partial datasource cawld_osm_tree_info extends tree_partition (
 )
 complete where city = 'CAWLD' and cawld_source = 'OSM_CAWLD'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/cawld_osm_staging.parquet`
-where (raw_latitude >= 42.93 and raw_latitude < 43.05 and raw_longitude >= -79.34 and raw_longitude < -79.16);
+where (raw_latitude >= 42.92 and raw_latitude < 43.05 and raw_longitude >= -79.34 and raw_longitude < -79.16);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

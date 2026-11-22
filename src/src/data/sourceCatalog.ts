@@ -11,12 +11,14 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
-  { city: 'Colac Otway', label: 'TODO: Colac Otway tree inventory source', url: 'TODO' },
-  { city: 'Bassendean', label: 'TODO: Bassendean tree inventory source', url: 'TODO' },
-  { city: 'Welland', label: 'TODO: Welland tree inventory source', url: 'TODO' },
-  { city: 'Fort St. John', label: 'TODO: Fort St. John tree inventory source', url: 'TODO' },
-  { city: 'Penticton', label: 'TODO: Penticton tree inventory source', url: 'TODO' },
-  { city: 'Prince George', label: 'TODO: Prince George tree inventory source', url: 'TODO' },
+  { city: 'Singapore', label: 'National Parks Board - Heritage Trees via data.gov.sg (Singapore Open Data Licence v1.0)', url: 'https://data.gov.sg/datasets/d_644ff187b6d14d6316f47284a4a6c81f/view' },
+  { city: 'Barcelona', label: 'Ajuntament de Barcelona - Atles de la Biodiversitat, tree inventory (Open Data BCN, CC BY 4.0)', url: 'https://opendata-ajuntament.barcelona.cat/data/en/dataset/atles-biodiversitat-arbrat-geometries' },
+  { city: 'Colac Otway', label: 'Colac Otway Shire - Colac Otway Shire Trees (data.gov.au, CC BY 3.0 AU)', url: 'https://data.gov.au/data/dataset/colac-otway-shire-trees' },
+  { city: 'Bassendean', label: 'Town of Bassendean - All Trees (street, park and private-land trees) (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://www.arcgis.com/home/item.html?id=5973d2d7b04648a4bb000fe13cc4db74' },
+  { city: 'Welland', label: 'City of Welland Open Data - Welland Trees (Open Government Licence - City of Welland; contains information licensed under the Open Government Licence - City of Welland)', url: 'https://www.arcgis.com/home/item.html?id=afcb6b5308de40b1830a3ebb2369a83b' },
+  { city: 'Fort St. John', label: 'City of Fort St. John - Tree Inventory (Open Government License - City of Fort St. John; contains information licensed under the Open Government License - City of Fort St. John)', url: 'https://data-fortstjohn.opendata.arcgis.com/datasets/c4ee1a5aa7c7496b8a70544a8fcf4e1a_0/about' },
+  { city: 'Penticton', label: 'City of Penticton - City Owned Trees (Open Government Licence - City of Penticton; contains information licenced under the Open Government Licence - City of Penticton)', url: 'https://www.arcgis.com/home/item.html?id=e0905b0677bf4b468b57fb52d2d725db' },
+  { city: 'Prince George', label: 'City of Prince George - Trees (Open Government License - City of Prince George; contains information licensed under the Open Government License - City of Prince George)', url: 'https://www.arcgis.com/home/item.html?id=382244b24c054f0ab92ca9d76facd44c' },
   { city: 'Maple Ridge', label: 'City of Maple Ridge - Street Tree (Open Government Licence - Maple Ridge; contains information licensed under the Open Government Licence - Maple Ridge)', url: 'https://www.arcgis.com/home/item.html?id=290505c676d64cf09989eca1320aedd3' },
   { city: 'Langley Township', label: 'Township of Langley - Tree Inventory (Open Government License - Township of Langley; contains information licensed under the Open Government License - Township of Langley)', url: 'https://www.arcgis.com/home/item.html?id=07ed48e3e633476aba03b1a800d616af' },
   { city: 'Barrie', label: 'City of Barrie Open Data - Tree (Open Government Licence - Barrie; contains information licensed under the Open Government Licence - Barrie)', url: 'https://opendata.barrie.ca/datasets/d053284adf6341d7939486d13bfd6911' },
@@ -183,12 +185,14 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
-  { city: 'Colac Otway', label: 'TODO: Colac Otway landmark source' },
-  { city: 'Bassendean', label: 'TODO: Bassendean landmark source' },
-  { city: 'Welland', label: 'TODO: Welland landmark source' },
-  { city: 'Fort St. John', label: 'TODO: Fort St. John landmark source' },
-  { city: 'Penticton', label: 'TODO: Penticton landmark source' },
-  { city: 'Prince George', label: 'TODO: Prince George landmark source' },
+  { city: 'Singapore', label: 'National Heritage Board - National Monuments and Historic Sites via data.gov.sg (Singapore Open Data Licence v1.0)', url: 'https://data.gov.sg/datasets/d_b29c230ec6b609e29ed42f71ca9a8767/view' },
+  { city: 'Barcelona', label: 'Ajuntament de Barcelona - Punts d\'interès cultural (Open Data BCN, CC BY 4.0)', url: 'https://opendata-ajuntament.barcelona.cat/data/en/dataset/punts-informacio-turistica' },
+  { city: 'Colac Otway', label: 'Department of Transport and Planning - Victorian Heritage Register via Vicmap (CC BY 4.0)', url: 'https://discover.data.vic.gov.au/dataset/victorian-heritage-register' },
+  { city: 'Bassendean', label: 'Town of Bassendean - Heritage List, adopted 26 July 2022 (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://www.arcgis.com/home/item.html?id=225a54f515224e1996e6d5f6c6613f36' },
+  { city: 'Welland', label: 'City of Welland - Designated Heritage Properties (Open Government Licence - City of Welland)', url: 'https://www.arcgis.com/home/item.html?id=0aa78d20dd6a4dac95e2e8e5bca0e8c2' },
+  { city: 'Fort St. John', label: 'City of Fort St. John - Recreation Areas and Points of Interest (Open Government License - City of Fort St. John)', url: 'https://data-fortstjohn.opendata.arcgis.com/datasets/66b0dcbb2f9e4478b8f2751cb4742475_0/about' },
+  { city: 'Penticton', label: 'City of Penticton - Community Heritage Register (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://maps.penticton.ca/utility/rest/services/External_PRD/Planning/MapServer/235' },
+  { city: 'Prince George', label: 'City of Prince George - Heritage Register (no licence stated; displayed with attribution only, not licensed for reuse), placed on City civic address points (Open Government License - City of Prince George)', url: 'https://www.princegeorge.ca/community-culture/heritage/heritage-register-properties' },
   { city: 'Maple Ridge', label: 'City of Maple Ridge - Heritage Register and Heritage Designation (Open Government Licence - Maple Ridge)', url: 'https://www.arcgis.com/home/item.html?id=85e758ffcd7a4aaeb8dd476143b70fd7' },
   { city: 'Langley Township', label: 'Township of Langley - Langley\'s Historic Places inventory (no licence stated; displayed with attribution only, not licensed for reuse); Province of British Columbia - Heritage Conservation Areas of BC (Open Government Licence - British Columbia)', url: 'https://www.arcgis.com/home/item.html?id=838d297431b747128230a452f038b503' },
   { city: 'Barrie', label: 'City of Barrie Municipal Heritage Register - Heritage Properties (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://www.arcgis.com/home/item.html?id=aa31258e142d4a7e9a01567e8fc2550f' },

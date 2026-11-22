@@ -165,6 +165,8 @@ select * from (values
     ('CAFSJ', 376),
     ('CAWLD', 342),
     ('AUBSD', 206),
-    ('AUCOL', 176)
+    ('AUCOL', 176),
+    ('ESBCN', 799),
+    ('SGSIN', 265)
 ) as t(city, ecoregion_id)
 ''';

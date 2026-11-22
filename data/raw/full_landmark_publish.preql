@@ -240,7 +240,9 @@ file [
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/cafsj_landmark_info_v{data_version}.parquet`,
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/cawld_landmark_info_v{data_version}.parquet`,
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/aubsd_landmark_info_v{data_version}.parquet`,
-    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/aucol_landmark_info_v{data_version}.parquet`
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/aucol_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/esbcn_landmark_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/sgsin_landmark_info_v{data_version}.parquet`
 ];
 
 
