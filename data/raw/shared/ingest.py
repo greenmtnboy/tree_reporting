@@ -3275,8 +3275,9 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "CAMPR": 10,
+    # osm_dedup_validation (2026-11-22): 6 m flags 486, 3.3% false, 82.0% recall;
+    # 8 m adds 21 for 14 more false.
+    "CAMPR": 6,
     # osm_dedup_validation (2026-11-22): 4 m flags 1,186, 0.8% false, 77.4% recall;
     # 6 m adds 131 for 36 more false.
     "CALNG": 4,
