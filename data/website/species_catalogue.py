@@ -147,11 +147,13 @@ def collect(con, cities: list[dict], enrichment_source: str, ecoregion_source: s
     ).fetchall()
     age_by_species = {s: (n, med, p10, p90) for s, n, med, p10, p90 in age_rows}
 
+    palette_fields = ("trunk_color", "foliage_colors", "fall_foliage_colors", "flower_colors")
+    source = con.read_parquet(enrichment_source)
+    available = set(source.columns)
+    columns = [*ENRICHMENT_COLUMNS, *(key for key in palette_fields if key in available)]
     enrichment = {
-        r[0]: dict(zip(ENRICHMENT_COLUMNS, r[1:]))
-        for r in con.execute(
-            f"SELECT species, {', '.join(ENRICHMENT_COLUMNS)} FROM read_parquet('{enrichment_source}')"
-        ).fetchall()
+        row[0]: dict(zip(columns, row[1:]))
+        for row in source.select("species", *columns).fetchall()
     }
 
     # Aggregate every named entry, including those outside the top-N pages and
@@ -266,6 +268,7 @@ def collect(con, cities: list[dict], enrichment_source: str, ecoregion_source: s
                     "pollution_tolerance": e.get("pollution_tolerance"),
                     "wildlife_value": e.get("wildlife_value"),
                     "fire_risk": e.get("fire_risk"),
+                    **{key: e[key] for key in palette_fields if e.get(key)},
                     "bloom_months": sorted(e.get("bloom_months") or []),
                 },
                 "native_ecoregions": [

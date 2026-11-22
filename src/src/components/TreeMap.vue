@@ -337,10 +337,10 @@
         <div v-else class="tc-photo-placeholder">No photo available</div>
         <!-- A trunk / bark view of the species, when a reviewer has picked one. -->
         <div v-if="selectedTree.trunk_photo_url" class="tc-photo-wrap tc-photo-wrap--trunk">
-          <div class="tree-card-section-label">Trunk</div>
+          <div class="tree-card-section-label">Another species photo</div>
           <img
             :src="selectedTree.trunk_photo_url"
-            :alt="`Trunk of ${selectedTree.species || 'this species'}`"
+            :alt="`Another species photo of ${selectedTree.species || 'this species'}`"
             class="tc-photo"
             loading="lazy"
           />
