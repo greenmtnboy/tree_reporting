@@ -929,7 +929,7 @@ SPECIES_MISSPELLINGS: dict[str, str] = {
     "Photina glabra": "Photinia glabra",  # Colac Otway
     "Pittosporum eugeniodes": "Pittosporum eugenioides",  # Colac Otway
     "Plantanus orientalis": "Platanus orientalis",  # Colac Otway
-    "Agonis juniperana": "Agonis juniperina",  # Colac Otway
+    "Agonis juniperana": "Taxandria juniperina",  # Colac Otway
     "Agonis linearfolia": "Agonis linearifolia",  # Colac Otway
     "Eucalyptus botriodies": "Eucalyptus botryoides",  # Colac Otway
     "Protea specious": "Protea speciosa",  # Colac Otway
@@ -3349,19 +3349,24 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
-    # NOT YET CALIBRATED: default; measure after the first build.
+    # osm_dedup_validation (2026-11-22): 255 heritage anchors against 5,348 OSM trees;
+    # 10 m flags 26, none false; 14 m adds 10 for 2 false.
     "SGSIN": 10,
     # osm_dedup_validation (2026-11-22): 4 m flags 42,137, 1,116 false (2.6%), recall 93%;
     # 6 m adds 1,634 for 1,426 more false.
     "ESBCN": 4,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "AUCOL": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
+    # osm_dedup_validation (2026-11-22): 916 OSM trees; 6 m flags 6, none false;
+    # 8 m adds 2 for 1 false.
+    "AUCOL": 6,
+    # osm_dedup_validation (2026-11-22): only 251 OSM trees, positions offset;
+    # 10 m flags 13, none false; 14 m adds 4 for 1 false.
     "AUBSD": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "CAWLD": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "CAFSJ": 10,
+    # osm_dedup_validation (2026-11-22): OSM holds an import of this inventory
+    # (11,988 OSM vs 11,605); 2 m already flags 11,591; 4 m adds 2, 6 m adds 3 for 1 false.
+    "CAWLD": 4,
+    # osm_dedup_validation (2026-11-22): only 104 OSM trees; 4 m flags 89, 1 false;
+    # larger cells add 1 more true.
+    "CAFSJ": 4,
     # osm_dedup_validation (2026-11-22): 8 m flags 716, 21 false (2.9%), recall 96%;
     # 10 m adds 19 for 12 more false.
     "CAPEN": 8,
