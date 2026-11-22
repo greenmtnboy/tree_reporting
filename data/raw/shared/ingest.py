@@ -3277,12 +3277,15 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 DEDUP_CELL_METRES: dict[str, int] = {
     # NOT YET CALIBRATED: default; measure after the first build.
     "CAMPR": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "CALNG": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "CABAR": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "AULTV": 10,
+    # osm_dedup_validation (2026-11-22): 4 m flags 1,186, 0.8% false, 77.4% recall;
+    # 6 m adds 131 for 36 more false.
+    "CALNG": 4,
+    # osm_dedup_validation (2026-11-22): only 235 OSM trees; 4 m flags 33, 1 false;
+    # 6 m adds 2 for 1 more false.
+    "CABAR": 4,
+    # osm_dedup_validation (2026-11-22): 8 m flags 3,552, 0.9% false, 96.3% recall;
+    # 10 m adds 81 for 24 more false.
+    "AULTV": 8,
     # osm_dedup_validation (2026-11-22): 6 m flags 5,653, 1.1% false, 94.3% recall;
     # 8 m adds 279 for 231 more false (dense boulevard planting).
     "CASRY": 6,
