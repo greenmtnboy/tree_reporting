@@ -138,6 +138,12 @@ import camht.medicinehat_landmarks;
 import aulst.launceston_landmarks;
 import aumrs.macedon_landmarks;
 import ausht.shepparton_landmarks;
+import usfsd.siouxfalls_landmarks;
+import casry.surrey_landmarks;
+import cabar.barrie_landmarks;
+import capbo.peterborough_landmarks;
+import campr.mapleridge_landmarks;
+import aultv.latrobe_landmarks;
 
 # The cross-city union is NOT declared here. It lives in
 # `full_landmark_publish.preql`, which reads the parquets these imports publish

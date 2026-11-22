@@ -2135,6 +2135,12 @@ def _sanitize_taxon(value: str | None) -> str | None:
 # Keyed by city code so `community_source_for` can derive the community label
 # and so tests can assert the two lists agree.
 MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
+    "AULTV": ("LATROBE_OPENDATA",),
+    "CAMPR": ("MAPLERIDGE_OPENDATA",),
+    "CAPBO": ("PETERBOROUGH_OPENDATA",),
+    "CABAR": ("BARRIE_OPENDATA",),
+    "CASRY": ("SURREY_OPENDATA",),
+    "USFSD": ("SIOUXFALLS_OPENDATA",),
     "AUSHT": ("SHEPPARTON_OPENDATA",),
     "AUMRS": ("MACEDON_OPENDATA",),
     "AULST": ("LAUNCESTON_OPENDATA",),
@@ -2297,6 +2303,12 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # overlapping rows under one cluster id and publishes only the survivor — see
 # tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
+    "AULTV": "OSM_AULTV",
+    "CAMPR": "OSM_CAMPR",
+    "CAPBO": "OSM_CAPBO",
+    "CABAR": "OSM_CABAR",
+    "CASRY": "OSM_CASRY",
+    "USFSD": "OSM_USFSD",
     "AUSHT": "OSM_AUSHT",
     "AUMRS": "OSM_AUMRS",
     "AULST": "OSM_AULST",
@@ -3038,6 +3050,12 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
+    "AULTV": (-38.5, -38.0, 146.15, 146.75),
+    "CAMPR": (49.18, 49.33, -122.67, -122.4),
+    "CAPBO": (44.25, 44.37, -78.41, -78.25),
+    "CABAR": (44.3, 44.45, -79.78, -79.6),
+    "CASRY": (49.0, 49.16, -122.93, -122.67),
+    "USFSD": (43.45, 43.64, -96.86, -96.6),
     "AUSHT": (-36.71, -36.03, 145.03, 145.81),
     "AUMRS": (-37.57, -37.10, 144.30, 144.93),
     "AULST": (-41.5, -41.17, 147.02, 147.51),
@@ -3225,6 +3243,18 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "AULTV": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "CAMPR": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "CAPBO": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "CABAR": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "CASRY": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "USFSD": 10,
     # osm_dedup_validation (2026-11-21): 8 m flags 184, 2.2% false, 70.3% recall;
     # 10 m adds 27 for 3 more false; stop at 8 like Bendigo.
     "AUSHT": 8,
@@ -3854,6 +3884,12 @@ DEDUP_CELL_METRES: dict[str, int] = {
 Box = tuple[float, float, float, float]
 
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
+    'AULTV': ((-38.5, -38.0, 146.15, 146.75),),
+    'CAMPR': ((49.18, 49.33, -122.67, -122.4),),
+    'CAPBO': ((44.25, 44.37, -78.41, -78.25),),
+    'CABAR': ((44.3, 44.45, -79.78, -79.6),),
+    'CASRY': ((49.0, 49.16, -122.93, -122.67),),
+    'USFSD': ((43.45, 43.64, -96.86, -96.6),),
     'AUSHT': ((-36.71, -36.03, 145.03, 145.81),),
     # The shire's own LGA boundary reaches -37.568 at Gisborne South, so
     # Melbourne's territory stops at -37.57 (none of its five councils reach

@@ -128,5 +128,11 @@
   "CAMHT": { "name": "Medicine Hat", "center": [-110.68, 50.04] },
   "AULST": { "name": "Launceston", "center": [147.14, -41.435] },
   "AUMRS": { "name": "Macedon Ranges", "center": [144.58, -37.4] },
-  "AUSHT": { "name": "Greater Shepparton", "center": [145.4, -36.38] }
+  "AUSHT": { "name": "Greater Shepparton", "center": [145.4, -36.38] },
+  "USFSD": { "name": "Sioux Falls", "center": [-96.7311, 43.5446] },
+  "CASRY": { "name": "Surrey", "center": [-122.849, 49.1913] },
+  "CABAR": { "name": "Barrie", "center": [-79.6903, 44.3894] },
+  "CAPBO": { "name": "Peterborough", "center": [-78.3197, 44.3091] },
+  "CAMPR": { "name": "Maple Ridge", "center": [-122.5984, 49.2193] },
+  "AULTV": { "name": "Latrobe City", "center": [146.405, -38.235] }
 }

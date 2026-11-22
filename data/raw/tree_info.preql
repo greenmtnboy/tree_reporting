@@ -129,6 +129,12 @@ import camht.medicinehat_tree_info;
 import aulst.launceston_tree_info;
 import aumrs.macedon_tree_info;
 import ausht.shepparton_tree_info;
+import usfsd.siouxfalls_tree_info;
+import casry.surrey_tree_info;
+import cabar.barrie_tree_info;
+import capbo.peterborough_tree_info;
+import campr.mapleridge_tree_info;
+import aultv.latrobe_tree_info;
 
 # Each city models its originating dataset as its own enum key so Trilogy can
 # prove per-city partition coverage (see core.preql). Merging them here — and
@@ -265,6 +271,12 @@ merge camht_source into data_source;
 merge aulst_source into data_source;
 merge aumrs_source into data_source;
 merge ausht_source into data_source;
+merge usfsd_source into data_source;
+merge casry_source into data_source;
+merge cabar_source into data_source;
+merge capbo_source into data_source;
+merge campr_source into data_source;
+merge aultv_source into data_source;
 
 # The dedup columns (`merged_sources`, `merged_tree_ids`) are
 # the one shared derivation in tree_dedup.preql, computed inside each city's
@@ -410,7 +422,13 @@ cafre_published_data_updated_through,
 camht_published_data_updated_through,
 aulst_published_data_updated_through,
 aumrs_published_data_updated_through,
-ausht_published_data_updated_through);
+ausht_published_data_updated_through,
+usfsd_published_data_updated_through,
+casry_published_data_updated_through,
+cabar_published_data_updated_through,
+capbo_published_data_updated_through,
+campr_published_data_updated_through,
+aultv_published_data_updated_through);
 # --- Merged union datasource ---
 
 datasource tree_info (

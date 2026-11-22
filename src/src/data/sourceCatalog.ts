@@ -11,6 +11,12 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
+  { city: 'Latrobe City', label: 'TODO: Latrobe City tree inventory source', url: 'TODO' },
+  { city: 'Maple Ridge', label: 'TODO: Maple Ridge tree inventory source', url: 'TODO' },
+  { city: 'Peterborough', label: 'TODO: Peterborough tree inventory source', url: 'TODO' },
+  { city: 'Barrie', label: 'TODO: Barrie tree inventory source', url: 'TODO' },
+  { city: 'Surrey', label: 'TODO: Surrey tree inventory source', url: 'TODO' },
+  { city: 'Sioux Falls', label: 'TODO: Sioux Falls tree inventory source', url: 'TODO' },
   { city: 'Greater Shepparton', label: 'Greater Shepparton City Council - Street and Park Trees on data.gov.au (CC BY 4.0)', url: 'https://data.gov.au/data/dataset/greater-shepparton-city-council-street-and-park-trees' },
   { city: 'Macedon Ranges', label: 'Macedon Ranges Shire Council - Macedon Ranges Shire Trees on data.gov.au (CC BY 2.5 AU)', url: 'https://data.gov.au/data/dataset/macedon-ranges-shire-trees' },
   { city: 'Launceston', label: 'City of Launceston - Trees (CC BY 4.0, per the council\'s copyright notice for its mapping data)', url: 'https://opendata.launceston.tas.gov.au' },
@@ -171,6 +177,12 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
+  { city: 'Latrobe City', label: 'TODO: Latrobe City landmark source' },
+  { city: 'Maple Ridge', label: 'TODO: Maple Ridge landmark source' },
+  { city: 'Peterborough', label: 'TODO: Peterborough landmark source' },
+  { city: 'Barrie', label: 'TODO: Barrie landmark source' },
+  { city: 'Surrey', label: 'TODO: Surrey landmark source' },
+  { city: 'Sioux Falls', label: 'TODO: Sioux Falls landmark source' },
   { city: 'Greater Shepparton', label: 'Department of Transport and Planning - Victorian Heritage Register via Vicmap (CC BY 4.0)', url: 'https://discover.data.vic.gov.au/dataset/victorian-heritage-register' },
   { city: 'Macedon Ranges', label: 'Department of Transport and Planning - Victorian Heritage Register via Vicmap (CC BY 4.0)', url: 'https://discover.data.vic.gov.au/dataset/victorian-heritage-register' },
   { city: 'Launceston', label: 'Heritage Tasmania - Tasmanian Heritage Register via theLIST © State of Tasmania (CC BY 3.0 AU)', url: 'https://services.thelist.tas.gov.au/arcgis/rest/services/HT/HT_Public/MapServer/0' },
