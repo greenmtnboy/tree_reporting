@@ -167,6 +167,14 @@ select * from (values
     ('AUBSD', 206),
     ('AUCOL', 176),
     ('ESBCN', 799),
-    ('SGSIN', 265)
+    ('SGSIN', 265),
+    ('USBTR', 399),
+    ('USLAN', 342),
+    ('USSLM', 403),
+    ('USBIS', 396),
+    ('USSPF', 340),
+    ('USBOI', 434),
+    ('USGJT', 429),
+    ('USPSL', 399)
 ) as t(city, ecoregion_id)
 ''';

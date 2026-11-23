@@ -11,6 +11,14 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
+  { city: 'Port St. Lucie', label: 'TODO: Port St. Lucie tree inventory source', url: 'TODO' },
+  { city: 'Grand Junction', label: 'TODO: Grand Junction tree inventory source', url: 'TODO' },
+  { city: 'Boise', label: 'TODO: Boise tree inventory source', url: 'TODO' },
+  { city: 'Springfield', label: 'TODO: Springfield tree inventory source', url: 'TODO' },
+  { city: 'Bismarck', label: 'TODO: Bismarck tree inventory source', url: 'TODO' },
+  { city: 'Salem', label: 'TODO: Salem tree inventory source', url: 'TODO' },
+  { city: 'Lansing', label: 'TODO: Lansing tree inventory source', url: 'TODO' },
+  { city: 'Baton Rouge', label: 'TODO: Baton Rouge tree inventory source', url: 'TODO' },
   { city: 'Singapore', label: 'National Parks Board - Heritage Trees via data.gov.sg (Singapore Open Data Licence v1.0)', url: 'https://data.gov.sg/datasets/d_644ff187b6d14d6316f47284a4a6c81f/view' },
   { city: 'Barcelona', label: 'Ajuntament de Barcelona - Atles de la Biodiversitat, tree inventory (Open Data BCN, CC BY 4.0)', url: 'https://opendata-ajuntament.barcelona.cat/data/en/dataset/atles-biodiversitat-arbrat-geometries' },
   { city: 'Colac Otway', label: 'Colac Otway Shire - Colac Otway Shire Trees (data.gov.au, CC BY 3.0 AU)', url: 'https://data.gov.au/data/dataset/colac-otway-shire-trees' },
@@ -185,6 +193,14 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
+  { city: 'Port St. Lucie', label: 'TODO: Port St. Lucie landmark source' },
+  { city: 'Grand Junction', label: 'TODO: Grand Junction landmark source' },
+  { city: 'Boise', label: 'TODO: Boise landmark source' },
+  { city: 'Springfield', label: 'TODO: Springfield landmark source' },
+  { city: 'Bismarck', label: 'TODO: Bismarck landmark source' },
+  { city: 'Salem', label: 'TODO: Salem landmark source' },
+  { city: 'Lansing', label: 'TODO: Lansing landmark source' },
+  { city: 'Baton Rouge', label: 'TODO: Baton Rouge landmark source' },
   { city: 'Singapore', label: 'National Heritage Board - National Monuments and Historic Sites via data.gov.sg (Singapore Open Data Licence v1.0)', url: 'https://data.gov.sg/datasets/d_b29c230ec6b609e29ed42f71ca9a8767/view' },
   { city: 'Barcelona', label: 'Ajuntament de Barcelona - Punts d\'interès cultural (Open Data BCN, CC BY 4.0)', url: 'https://opendata-ajuntament.barcelona.cat/data/en/dataset/punts-informacio-turistica' },
   { city: 'Colac Otway', label: 'Department of Transport and Planning - Victorian Heritage Register via Vicmap (CC BY 4.0)', url: 'https://discover.data.vic.gov.au/dataset/victorian-heritage-register' },

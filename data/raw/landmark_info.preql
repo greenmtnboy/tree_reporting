@@ -152,6 +152,14 @@ import aubsd.bassendean_landmarks;
 import aucol.colacotway_landmarks;
 import esbcn.barcelona_landmarks;
 import sgsin.singapore_landmarks;
+import usbtr.batonrouge_landmarks;
+import uslan.lansing_landmarks;
+import usslm.salem_landmarks;
+import usbis.bismarck_landmarks;
+import usspf.springfield_landmarks;
+import usboi.boise_landmarks;
+import usgjt.grandjunction_landmarks;
+import uspsl.portstlucie_landmarks;
 
 # The cross-city union is NOT declared here. It lives in
 # `full_landmark_publish.preql`, which reads the parquets these imports publish

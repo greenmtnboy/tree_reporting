@@ -884,6 +884,54 @@ const CITY_DASHBOARD_CONTEXT: Record<
     biome: 'Tropical & Subtropical Moist Broadleaf Forests',
     realm: 'indo_malay',
   },
+  USBTR: {
+    ecoregionId: 399, // Southeast US conifer savannas
+    usdaZone: 9,
+    biome: 'Temperate Grasslands, Savannas & Shrublands',
+    realm: 'nearctic',
+  },
+  USLAN: {
+    ecoregionId: 342, // Southern Great Lakes forests
+    usdaZone: 6,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'nearctic',
+  },
+  USSLM: {
+    ecoregionId: 403, // Willamette Valley oak savanna
+    usdaZone: 8,
+    biome: 'Temperate Grasslands, Savannas & Shrublands',
+    realm: 'nearctic',
+  },
+  USBIS: {
+    ecoregionId: 396, // Northern Shortgrass prairie
+    usdaZone: 4,
+    biome: 'Temperate Grasslands, Savannas & Shrublands',
+    realm: 'nearctic',
+  },
+  USSPF: {
+    ecoregionId: 340, // Ozark Highlands mixed forests
+    usdaZone: 6,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'nearctic',
+  },
+  USBOI: {
+    ecoregionId: 434, // Snake-Columbia shrub steppe
+    usdaZone: 7,
+    biome: 'Deserts & Xeric Shrublands',
+    realm: 'nearctic',
+  },
+  USGJT: {
+    ecoregionId: 429, // Colorado Plateau shrublands
+    usdaZone: 7,
+    biome: 'Deserts & Xeric Shrublands',
+    realm: 'nearctic',
+  },
+  USPSL: {
+    ecoregionId: 399, // Southeast US conifer savannas
+    usdaZone: 10,
+    biome: 'Temperate Grasslands, Savannas & Shrublands',
+    realm: 'nearctic',
+  },
 }
 
 function escapeStringLiteral(value: string) {
