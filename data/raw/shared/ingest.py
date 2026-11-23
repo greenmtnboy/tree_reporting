@@ -1999,6 +1999,7 @@ SPECIES_MISSPELLINGS: dict[str, str] = {
     "Populus gradidentata": "Populus grandidentata",  # York Region
     "Poulus tremuloides": "Populus tremuloides",  # York Region
     "Crataegus crusgali": "Crataegus crus-galli",  # York Region
+    "Strelitzia nicolae": "Strelitzia nicolai",  # Albury
 }
 
 
@@ -2365,7 +2366,7 @@ MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
     "USEUG": ("EUGENE_OPENDATA",),
     "ATVIE": ("VIENNA_OPENDATA",),
     "USCOL": ("COLUMBUS_OPENDATA",),
-    "AUWOD": ("WODONGA_OPENDATA",),
+    "AUWOD": ("WODONGA_OPENDATA", "ALBURY"),
     "AUBAL": ("BALLARAT_OPENDATA",),
     "AUPER": ("PERTH_OPENDATA",),
     "AUADL": ("ADELAIDE_OPENDATA", "UNLEY", "BURNSIDE"),
@@ -3320,7 +3321,7 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
     "USEUG": (43.97, 44.14, -123.21, -122.98),
     "ATVIE": (48.11, 48.33, 16.18, 16.58),
     "USCOL": (39.8, 40.16, -83.21, -82.77),
-    "AUWOD": (-36.3, -36.0, 146.65, 147.1),
+    "AUWOD": (-36.3, -35.9, 146.65, 147.1),
     "AUBAL": (-37.8, -37.3, 143.55, 144.1),
     "AUPER": (-32.0, -31.92, 115.8, 115.9),
     "AUADL": (-34.98, -34.88, 138.56, 138.71),
@@ -4515,7 +4516,7 @@ CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
     'USEUG': ((43.97, 44.14, -123.21, -122.98),),
     'ATVIE': ((48.11, 48.33, 16.18, 16.58),),
     'USCOL': ((39.8, 40.16, -83.21, -82.77),),
-    'AUWOD': ((-36.3, -36.0, 146.65, 147.1),),
+    'AUWOD': ((-36.3, -35.9, 146.65, 147.1),),
     'AUBAL': ((-37.8, -37.3, 143.55, 144.1),),
     'AUPER': ((-32.0, -31.92, 115.8, 115.9),),
     'AUADL': ((-34.98, -34.88, 138.56, 138.71),),

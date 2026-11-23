@@ -247,7 +247,7 @@ property <*>.atvie_data_updated_through datetime; # when Vienna data is through
 property <*>.atvie_osm_data_updated_through datetime; # GCS publication time of Vienna's staged OSM parquet
 property <*>.uscol_data_updated_through datetime; # when Columbus data is through
 property <*>.uscol_osm_data_updated_through datetime; # GCS publication time of Columbus's staged OSM parquet
-property <*>.auwod_data_updated_through datetime; # when Wodonga data is through
+# property <*>.auwod_data_updated_through datetime; # derived in auwod/wodonga_tree_info.preql from its two council inventories
 property <*>.auwod_osm_data_updated_through datetime; # GCS publication time of Wodonga's staged OSM parquet
 property <*>.aubal_data_updated_through datetime; # when Ballarat data is through
 property <*>.aubal_osm_data_updated_through datetime; # GCS publication time of Ballarat's staged OSM parquet
