@@ -64,7 +64,32 @@ where (raw_latitude >= 43.55 and raw_latitude < 43.62 and raw_longitude >= -79.5
     or (raw_latitude >= 43.68 and raw_latitude < 43.7 and raw_longitude >= -79.607 and raw_longitude < -79.1)
     or (raw_latitude >= 43.7 and raw_latitude < 43.72 and raw_longitude >= -79.617 and raw_longitude < -79.1)
     or (raw_latitude >= 43.72 and raw_latitude < 43.74 and raw_longitude >= -79.625 and raw_longitude < -79.1)
-    or (raw_latitude >= 43.74 and raw_latitude < 43.9 and raw_longitude >= -79.64 and raw_longitude < -79.1);
+    or (raw_latitude >= 43.74 and raw_latitude < 43.75 and raw_longitude >= -79.64 and raw_longitude < -79.63)
+    or (raw_latitude >= 43.74 and raw_latitude < 43.752 and raw_longitude >= -79.63 and raw_longitude < -79.61)
+    or (raw_latitude >= 43.74 and raw_latitude < 43.756 and raw_longitude >= -79.61 and raw_longitude < -79.59)
+    or (raw_latitude >= 43.74 and raw_latitude < 43.761 and raw_longitude >= -79.59 and raw_longitude < -79.57)
+    or (raw_latitude >= 43.74 and raw_latitude < 43.765 and raw_longitude >= -79.57 and raw_longitude < -79.55)
+    or (raw_latitude >= 43.74 and raw_latitude < 43.77 and raw_longitude >= -79.55 and raw_longitude < -79.53)
+    or (raw_latitude >= 43.74 and raw_latitude < 43.774 and raw_longitude >= -79.53 and raw_longitude < -79.51)
+    or (raw_latitude >= 43.74 and raw_latitude < 43.778 and raw_longitude >= -79.51 and raw_longitude < -79.49)
+    or (raw_latitude >= 43.74 and raw_latitude < 43.783 and raw_longitude >= -79.49 and raw_longitude < -79.47)
+    or (raw_latitude >= 43.74 and raw_latitude < 43.787 and raw_longitude >= -79.47 and raw_longitude < -79.45)
+    or (raw_latitude >= 43.74 and raw_latitude < 43.792 and raw_longitude >= -79.45 and raw_longitude < -79.43)
+    or (raw_latitude >= 43.74 and raw_latitude < 43.796 and raw_longitude >= -79.43 and raw_longitude < -79.41)
+    or (raw_latitude >= 43.74 and raw_latitude < 43.8 and raw_longitude >= -79.41 and raw_longitude < -79.39)
+    or (raw_latitude >= 43.74 and raw_latitude < 43.805 and raw_longitude >= -79.39 and raw_longitude < -79.37)
+    or (raw_latitude >= 43.74 and raw_latitude < 43.809 and raw_longitude >= -79.37 and raw_longitude < -79.35)
+    or (raw_latitude >= 43.74 and raw_latitude < 43.814 and raw_longitude >= -79.35 and raw_longitude < -79.33)
+    or (raw_latitude >= 43.74 and raw_latitude < 43.818 and raw_longitude >= -79.33 and raw_longitude < -79.31)
+    or (raw_latitude >= 43.74 and raw_latitude < 43.823 and raw_longitude >= -79.31 and raw_longitude < -79.29)
+    or (raw_latitude >= 43.74 and raw_latitude < 43.828 and raw_longitude >= -79.29 and raw_longitude < -79.27)
+    or (raw_latitude >= 43.74 and raw_latitude < 43.832 and raw_longitude >= -79.27 and raw_longitude < -79.25)
+    or (raw_latitude >= 43.74 and raw_latitude < 43.837 and raw_longitude >= -79.25 and raw_longitude < -79.23)
+    or (raw_latitude >= 43.74 and raw_latitude < 43.842 and raw_longitude >= -79.23 and raw_longitude < -79.21)
+    or (raw_latitude >= 43.74 and raw_latitude < 43.846 and raw_longitude >= -79.21 and raw_longitude < -79.19)
+    or (raw_latitude >= 43.74 and raw_latitude < 43.851 and raw_longitude >= -79.19 and raw_longitude < -79.17)
+    or (raw_latitude >= 43.74 and raw_latitude < 43.9 and raw_longitude >= -79.17 and raw_longitude < -79.15)
+    or (raw_latitude >= 43.74 and raw_latitude < 43.9 and raw_longitude >= -79.15 and raw_longitude < -79.1);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------
