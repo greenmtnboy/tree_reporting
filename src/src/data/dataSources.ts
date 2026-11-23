@@ -172,6 +172,8 @@ export const DATA_SOURCE_LABELS: Record<string, string> = {
   PORT_PHILLIP: 'City of Port Phillip',
   YARRA: 'City of Yarra',
   GLEN_EIRA: 'Glen Eira City Council',
+  UNLEY: 'City of Unley',
+  BURNSIDE: 'City of Burnside',
   HOBSONS_BAY: 'Hobsons Bay City Council',
   BUENOSAIRES_OPENDATA: 'Buenos Aires Data',
   LOSANGELES_OPENDATA: 'LA Bureau of Street Services',

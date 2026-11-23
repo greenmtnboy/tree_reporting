@@ -253,7 +253,7 @@ property <*>.aubal_data_updated_through datetime; # when Ballarat data is throug
 property <*>.aubal_osm_data_updated_through datetime; # GCS publication time of Ballarat's staged OSM parquet
 property <*>.auper_data_updated_through datetime; # when Perth data is through
 property <*>.auper_osm_data_updated_through datetime; # GCS publication time of Perth's staged OSM parquet
-property <*>.auadl_data_updated_through datetime; # when Adelaide data is through
+# property <*>.auadl_data_updated_through datetime; # derived in auadl/adelaide_tree_info.preql from its three council inventories
 property <*>.auadl_osm_data_updated_through datetime; # GCS publication time of Adelaide's staged OSM parquet
 property <*>.usnpv_data_updated_through datetime; # when Naperville data is through
 property <*>.usnpv_osm_data_updated_through datetime; # GCS publication time of Naperville's staged OSM parquet

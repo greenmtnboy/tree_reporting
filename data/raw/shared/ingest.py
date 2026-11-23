@@ -1981,6 +1981,19 @@ SPECIES_MISSPELLINGS: dict[str, str] = {
     "Lyonothamnus floribunda": "Lyonothamnus floribundus",
     "Prunus x domestica": "Prunus domestica",
     "Malus floribunda": "Malus x floribunda",
+    "Fraxinus execelsior": "Fraxinus excelsior",  # Salem
+    "Prunus x blieriana": "Prunus x blireana",  # Salem
+    "Acer monspressulanum": "Acer monspessulanum",  # Unley/Burnside
+    "Eucalyptus dolichoryncha": "Eucalyptus dolichorhyncha",  # Unley/Burnside
+    "Eucalyptus foresttiana": "Eucalyptus forrestiana",  # Unley/Burnside
+    "Brahea edulus": "Brahea edulis",  # Unley/Burnside
+    "Hibiscus tilliaceus": "Hibiscus tiliaceus",  # Unley/Burnside
+    "Syzygium leuhmannii": "Syzygium luehmannii",  # Unley/Burnside
+    "Prunus xblireana": "Prunus x blireana",  # Unley/Burnside
+    "Photinia xfraseri": "Photinia x fraseri",  # Unley/Burnside
+    "Populus xcanadensis": "Populus x canadensis",  # Unley/Burnside
+    "Magnolia xsoulangeana": "Magnolia x soulangeana",  # Unley/Burnside
+    "Arbutus xandrachnoides": "Arbutus x andrachnoides",  # Unley/Burnside
 }
 
 
@@ -2350,7 +2363,7 @@ MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
     "AUWOD": ("WODONGA_OPENDATA",),
     "AUBAL": ("BALLARAT_OPENDATA",),
     "AUPER": ("PERTH_OPENDATA",),
-    "AUADL": ("ADELAIDE_OPENDATA",),
+    "AUADL": ("ADELAIDE_OPENDATA", "UNLEY", "BURNSIDE"),
     "USNPV": ("NAPERVILLE_OPENDATA",),
     "USBOU": ("BOULDER_OPENDATA",),
     "ITMIL": ("MILAN_OPENDATA",),
@@ -3305,7 +3318,7 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
     "AUWOD": (-36.3, -36.0, 146.65, 147.1),
     "AUBAL": (-37.8, -37.3, 143.55, 144.1),
     "AUPER": (-32.0, -31.92, 115.8, 115.9),
-    "AUADL": (-34.96, -34.88, 138.56, 138.64),
+    "AUADL": (-34.98, -34.88, 138.56, 138.71),
     "USNPV": (41.66, 41.83, -88.3, -88.05),
     "USBOU": (39.95, 40.13, -105.35, -105.15),
     "ITMIL": (45.38, 45.54, 9.03, 9.29),
@@ -3417,8 +3430,9 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "USSLM": 10,
+    # osm_dedup_validation 2026-11-23: 8m is the last cell whose added
+    # flags are mostly real (+13 true / +6 false); 10m adds as many false as true.
+    "USSLM": 8,
     # NOT YET CALIBRATED: default; measure after the first build.
     "CAWHI": 10,
     # NOT YET CALIBRATED: default; measure after the first build.
@@ -4498,7 +4512,7 @@ CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
     'AUWOD': ((-36.3, -36.0, 146.65, 147.1),),
     'AUBAL': ((-37.8, -37.3, 143.55, 144.1),),
     'AUPER': ((-32.0, -31.92, 115.8, 115.9),),
-    'AUADL': ((-34.96, -34.88, 138.56, 138.64),),
+    'AUADL': ((-34.98, -34.88, 138.56, 138.71),),
     'USNPV': ((41.66, 41.83, -88.3, -88.05),),
     'USBOU': ((39.95, 40.13, -105.35, -105.15),),
     'ITMIL': ((45.38, 45.54, 9.03, 9.29),),
