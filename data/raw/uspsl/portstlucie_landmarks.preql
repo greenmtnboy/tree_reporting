@@ -1,0 +1,24 @@
+import ..landmark_common;
+
+root datasource portstlucie_landmarks_update_time (
+    data_updated_through: uspsl_landmark_data_updated_through
+)
+file `./portstlucie_landmarks_probe.py`;
+
+# Port St. Lucie has no heritage register and no National Register listing
+# (see the ingest), so this is the City's own PARKS layer -- its parks and
+# civic recreation places -- read live off the City's ArcGIS Online (no
+# licence stated; displayed with attribution only).
+root partial datasource raw_portstlucie_landmark_info extends landmark_partition (
+    address: ?address,
+)
+complete where city = 'USPSL'
+file `./portstlucie_landmarks.py`;
+
+partial datasource portstlucie_landmark_info extends published_landmark_info (
+    ?address,
+    uspsl_landmark_data_updated_through,
+)
+complete where city = 'USPSL'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/uspsl_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/uspsl_landmark_info_v{data_version}.parquet`
+freshness by uspsl_landmark_data_updated_through;

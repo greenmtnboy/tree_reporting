@@ -143,6 +143,14 @@ import aubsd.bassendean_tree_info;
 import aucol.colacotway_tree_info;
 import esbcn.barcelona_tree_info;
 import sgsin.singapore_tree_info;
+import usbtr.batonrouge_tree_info;
+import uslan.lansing_tree_info;
+import usmso.missoula_tree_info;
+import usbis.bismarck_tree_info;
+import usspf.springfield_tree_info;
+import usboi.boise_tree_info;
+import usgjt.grandjunction_tree_info;
+import uspsl.portstlucie_tree_info;
 
 # Each city models its originating dataset as its own enum key so Trilogy can
 # prove per-city partition coverage (see core.preql). Merging them here — and
@@ -293,6 +301,14 @@ merge aubsd_source into data_source;
 merge aucol_source into data_source;
 merge esbcn_source into data_source;
 merge sgsin_source into data_source;
+merge usbtr_source into data_source;
+merge uslan_source into data_source;
+merge usmso_source into data_source;
+merge usbis_source into data_source;
+merge usspf_source into data_source;
+merge usboi_source into data_source;
+merge usgjt_source into data_source;
+merge uspsl_source into data_source;
 
 # The dedup columns (`merged_sources`, `merged_tree_ids`) are
 # the one shared derivation in tree_dedup.preql, computed inside each city's
@@ -452,7 +468,15 @@ cawld_published_data_updated_through,
 aubsd_published_data_updated_through,
 aucol_published_data_updated_through,
 esbcn_published_data_updated_through,
-sgsin_published_data_updated_through);
+sgsin_published_data_updated_through,
+usbtr_published_data_updated_through,
+uslan_published_data_updated_through,
+usmso_published_data_updated_through,
+usbis_published_data_updated_through,
+usspf_published_data_updated_through,
+usboi_published_data_updated_through,
+usgjt_published_data_updated_through,
+uspsl_published_data_updated_through);
 # --- Merged union datasource ---
 
 datasource tree_info (

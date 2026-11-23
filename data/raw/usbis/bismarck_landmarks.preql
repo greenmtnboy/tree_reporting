@@ -1,0 +1,30 @@
+import ..landmark_common;
+
+root datasource bismarck_landmarks_update_time (
+    data_updated_through: usbis_landmark_data_updated_through
+)
+file `./bismarck_landmarks_probe.py`;
+
+# The National Park Service's National Register listings in Bismarck, read
+# live -- no Nominatim geocoding, no committed CSV and no staging object.
+# Bismarck keeps no local landmark register of its own.  `lm_type` names the
+# register and `register_number` the NRIS reference number.
+root partial datasource raw_bismarck_landmark_info extends landmark_partition (
+    address: ?address,
+    lm_type: ?lm_type,
+    register_number: ?register_number,
+    year_designated: ?year_designated,
+)
+complete where city = 'USBIS'
+file `./bismarck_landmarks.py`;
+
+partial datasource bismarck_landmark_info extends published_landmark_info (
+    ?address,
+    ?lm_type,
+    ?register_number,
+    ?year_designated,
+    usbis_landmark_data_updated_through,
+)
+complete where city = 'USBIS'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/usbis_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/usbis_landmark_info_v{data_version}.parquet`
+freshness by usbis_landmark_data_updated_through;

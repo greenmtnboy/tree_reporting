@@ -154,6 +154,14 @@ property <*>.aubsd_community_data_updated_through datetime; # when approved comm
 property <*>.aucol_community_data_updated_through datetime; # when approved community submissions for AUCOL are through
 property <*>.esbcn_community_data_updated_through datetime; # when approved community submissions for ESBCN are through
 property <*>.sgsin_community_data_updated_through datetime; # when approved community submissions for SGSIN are through
+property <*>.usbtr_community_data_updated_through datetime; # when approved community submissions for USBTR are through
+property <*>.uslan_community_data_updated_through datetime; # when approved community submissions for USLAN are through
+property <*>.usmso_community_data_updated_through datetime; # when approved community submissions for USMSO are through
+property <*>.usbis_community_data_updated_through datetime; # when approved community submissions for USBIS are through
+property <*>.usspf_community_data_updated_through datetime; # when approved community submissions for USSPF are through
+property <*>.usboi_community_data_updated_through datetime; # when approved community submissions for USBOI are through
+property <*>.usgjt_community_data_updated_through datetime; # when approved community submissions for USGJT are through
+property <*>.uspsl_community_data_updated_through datetime; # when approved community submissions for USPSL are through
 
 # The community *rows* are declared per city too, in each city's own tree model,
 # as a `complete where city = 'X' and {code}_source = 'COMMUNITY_X'` partition.

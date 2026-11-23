@@ -1,0 +1,32 @@
+import ..landmark_common;
+
+root datasource lansing_landmarks_update_time (
+    data_updated_through: uslan_landmark_data_updated_through
+)
+file `./lansing_landmarks_probe.py`;
+
+# Lansing's locally designated historic properties (the City's Historic
+# Properties layer, in the same ArcGIS Online organisation as the trees) and
+# the National Park Service's National Register listings in Lansing --
+# registers read live, so no Nominatim geocoding, no committed CSV and no
+# staging object.  `lm_type` names the register and `register_number` the NRIS
+# reference number (the local register publishes none).
+root partial datasource raw_lansing_landmark_info extends landmark_partition (
+    address: ?address,
+    lm_type: ?lm_type,
+    register_number: ?register_number,
+    year_designated: ?year_designated,
+)
+complete where city = 'USLAN'
+file `./lansing_landmarks.py`;
+
+partial datasource lansing_landmark_info extends published_landmark_info (
+    ?address,
+    ?lm_type,
+    ?register_number,
+    ?year_designated,
+    uslan_landmark_data_updated_through,
+)
+complete where city = 'USLAN'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/uslan_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/uslan_landmark_info_v{data_version}.parquet`
+freshness by uslan_landmark_data_updated_through;

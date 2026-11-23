@@ -142,5 +142,13 @@
   "AUBSD": { "name": "Bassendean", "center": [115.9466, -31.9097] },
   "AUCOL": { "name": "Colac Otway", "center": [143.5848, -38.3404] },
   "ESBCN": { "name": "Barcelona", "center": [2.1686, 41.3874] },
-  "SGSIN": { "name": "Singapore", "center": [103.8198, 1.3521] }
+  "SGSIN": { "name": "Singapore", "center": [103.8198, 1.3521] },
+  "USBTR": { "name": "Baton Rouge", "center": [-91.1403, 30.4515] },
+  "USLAN": { "name": "Lansing", "center": [-84.5555, 42.7325] },
+  "USMSO": { "name": "Missoula", "center": [-113.994, 46.8721] },
+  "USBIS": { "name": "Bismarck", "center": [-100.7837, 46.8083] },
+  "USSPF": { "name": "Springfield", "center": [-93.2923, 37.209] },
+  "USBOI": { "name": "Boise", "center": [-116.2023, 43.615] },
+  "USGJT": { "name": "Grand Junction", "center": [-108.5506, 39.0639] },
+  "USPSL": { "name": "Port St. Lucie", "center": [-80.3582, 27.273] }
 }

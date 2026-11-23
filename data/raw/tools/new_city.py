@@ -861,9 +861,11 @@ def next_landmark_slot(toml_text: str) -> str:
     # so the window opened at 01:00, and 01:00-03:00 filled too, so it now opens
     # at 00:00; landmark refreshes read only their own portals, so nothing
     # before them has to land first.
+    # Every even minute from 00:00 filled in Nov 2026 (batch 16), so the odd
+    # minutes come after them: a landmark refresh takes well under a minute.
     taken = set(minutes)
     used = set(re.findall(r'schedule = "([^"]+)"', toml_text))
-    for slot in range(0, 5 * 60, 2):
+    for slot in [*range(0, 5 * 60, 2), *range(1, 5 * 60, 2)]:
         cron = f"0 {slot % 60} {slot // 60} * * SUN"
         if slot not in taken and cron not in used:
             return cron

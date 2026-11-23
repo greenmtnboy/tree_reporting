@@ -1,0 +1,32 @@
+import ..landmark_common;
+
+root datasource missoula_landmarks_update_time (
+    data_updated_through: usmso_landmark_data_updated_through
+)
+file `./missoula_landmarks_probe.py`;
+
+# The National Park Service's National Register listings in Missoula, read
+# live -- no Nominatim geocoding, no committed CSV and no staging object.
+# The City's own historic-preservation layer lists the same National Register
+# properties under no stated licence and is not used (see
+# missoula_landmarks.py).  `lm_type` names the register and `register_number`
+# the NRIS reference number.
+root partial datasource raw_missoula_landmark_info extends landmark_partition (
+    address: ?address,
+    lm_type: ?lm_type,
+    register_number: ?register_number,
+    year_designated: ?year_designated,
+)
+complete where city = 'USMSO'
+file `./missoula_landmarks.py`;
+
+partial datasource missoula_landmark_info extends published_landmark_info (
+    ?address,
+    ?lm_type,
+    ?register_number,
+    ?year_designated,
+    usmso_landmark_data_updated_through,
+)
+complete where city = 'USMSO'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/usmso_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/usmso_landmark_info_v{data_version}.parquet`
+freshness by usmso_landmark_data_updated_through;

@@ -1,0 +1,16 @@
+# Scheduled OSM extraction for Baton Rouge, run by the `osm-usbtr` [[cloud.job]] in
+# ../trilogy.toml. Everything shared with the other cities -- the canonical tree
+# concepts, the Overpass freshness probe, and why extraction is a separate job
+# at all -- lives in staging_common.preql; this file is just Baton Rouge's rows and
+# the staging object they land in.
+
+import staging_common;
+
+root datasource usbtr_osm_rows extends osm_rows (
+)
+file `./osm_rows.py`
+where city = 'USBTR';
+
+datasource usbtr_osm_staging extends osm_staging (
+)
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usbtr_osm_staging.parquet`:`gcs://trilogy_public_models/duckdb/staging/usbtr_osm_staging.parquet`;

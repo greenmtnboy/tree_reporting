@@ -661,6 +661,17 @@ SENTINEL_ENRICHMENT: dict[str, dict[str, object]] = {
 # F. microcarpa, `Jacaranda acutifolia` for J. mimosifolia) is not a synonym
 # and is deliberately not here.
 SPECIES_SYNONYMS: dict[str, str] = {
+    # --- Batch 16 (Port St. Lucie): WCVP accepted names ---
+    "Roystonea elata": "Roystonea regia",
+    "Veitchia merrillii": "Adonidia merrillii",
+    "Veitchia montgomeryana": "Veitchia arecina",
+    "Livistona decipiens": "Livistona decora",
+    "Millettia pinnata": "Pongamia pinnata",
+    "Tabebuia chrysantha": "Handroanthus chrysanthus",
+    "Tabebuia argentea": "Tabebuia aurea",
+    "Thevetia peruviana": "Cascabela thevetia",
+    "Bulnesia arborea": "Plectrocarpa arborea",
+    "Fortunella crassifolia": "Citrus japonica",
     # Batch 14 (Sioux Falls, Surrey, Latrobe City, Barrie, Langley Township, Maple Ridge): WCVP synonyms and hybrid marks.
     "Acer x truncatum": "Acer truncatum",  # Surrey
     # Batch 12 (Cockburn, Bendigo, Basingstoke, York, Hastings, Red Deer): WCVP synonyms and hybrid marks.
@@ -896,6 +907,27 @@ SPECIES_SYNONYMS: dict[str, str] = {
 # `Celtis`/`Cercis occidentalis`, `Pinus`/`Prunus nigra` and
 # `Malus`/`Taxus baccata`.  Add an entry only with that check behind it.
 SPECIES_MISSPELLINGS: dict[str, str] = {
+    # --- Batch 16 (Bismarck, Springfield MO, Lansing, Port St. Lucie, Grand Junction, Boise) ---
+    "Acer freemani": "Acer x freemanii",
+    "Crataegus molis": "Crataegus mollis",
+    "Halesia carolinana": "Halesia carolina",
+    "Metasequoia glyptostrobiodes": "Metasequoia glyptostroboides",
+    "Acoelorrhaphe wrightii": "Acoelorraphe wrightii",
+    "Archontophoenix alexandre": "Archontophoenix alexandrae",
+    "Calophyllum brasilense": "Calophyllum brasiliense",
+    "Clusea rosea": "Clusia rosea",
+    "Lagerstroemia speciose": "Lagerstroemia speciosa",
+    "Livistona chinesis": "Livistona chinensis",
+    "Myrcianthes fragans": "Myrcianthes fragrans",
+    "Acer miyabi": "Acer miyabei",
+    "Cladrastus kentukea": "Cladrastis kentukea",
+    "Koelreutera paniculata": "Koelreuteria paniculata",
+    "Larix larcinia": "Larix laricina",
+    "Pinus flexilus": "Pinus flexilis",
+    "Taxoidum distichum": "Taxodium distichum",
+    "Tilia tcordata": "Tilia cordata",
+    "Crataegus phaenophyrum": "Crataegus phaenopyrum",
+    "Viburmum dentatum": "Viburnum dentatum",
     "Pinus uncinate": "Pinus uncinata",  # Fort St. John
     "Acacia menaloxylon": "Acacia melanoxylon",  # Bassendean
     "Allocausuarina littoralis": "Allocasuarina littoralis",  # Bassendean
@@ -2217,6 +2249,14 @@ def _sanitize_taxon(value: str | None) -> str | None:
 # Keyed by city code so `community_source_for` can derive the community label
 # and so tests can assert the two lists agree.
 MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
+    "USPSL": ("PORT_ST_LUCIE_OPENDATA",),
+    "USGJT": ("GRAND_JUNCTION_OPENDATA",),
+    "USBOI": ("BOISE_OPENDATA",),
+    "USSPF": ("SPRINGFIELD_MO_OPENDATA",),
+    "USBIS": ("BISMARCK_OPENDATA",),
+    "USMSO": ("MISSOULA_OPENDATA",),
+    "USLAN": ("LANSING_OPENDATA",),
+    "USBTR": ("BATON_ROUGE_OPENDATA",),
     "SGSIN": ("SINGAPORE_NPARKS",),
     "ESBCN": ("BARCELONA_OPENDATA",),
     "AUCOL": ("COLAC_OTWAY_OPENDATA",),
@@ -2393,6 +2433,14 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # overlapping rows under one cluster id and publishes only the survivor — see
 # tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
+    "USPSL": "OSM_USPSL",
+    "USGJT": "OSM_USGJT",
+    "USBOI": "OSM_USBOI",
+    "USSPF": "OSM_USSPF",
+    "USBIS": "OSM_USBIS",
+    "USMSO": "OSM_USMSO",
+    "USLAN": "OSM_USLAN",
+    "USBTR": "OSM_USBTR",
     "SGSIN": "OSM_SGSIN",
     "ESBCN": "OSM_ESBCN",
     "AUCOL": "OSM_AUCOL",
@@ -3148,6 +3196,14 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
+    "USPSL": (27.19, 27.39, -80.5, -80.24),
+    "USGJT": (39.01, 39.16, -108.7, -108.45),
+    "USBOI": (43.53, 43.7, -116.37, -116.08),
+    "USSPF": (37.08, 37.28, -93.44, -93.18),
+    "USBIS": (46.72, 46.89, -100.85, -100.68),
+    "USMSO": (46.78, 46.97, -114.15, -113.89),
+    "USLAN": (42.63, 42.8, -84.64, -84.47),
+    "USBTR": (30.22, 30.58, -91.27, -90.84),
     "SGSIN": (1.15, 1.48, 103.59, 104.1),
     "ESBCN": (41.32, 41.47, 2.05, 2.23),
     "AUCOL": (-38.87, -38.01, 143.24, 143.95),
@@ -3349,6 +3405,30 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
+    # osm_dedup_validation (2026-11-23): 6 m flags 41, 0 false, recall 55%;
+    # 8 m adds 7 true for 2 false. OSM is sparse here (775 trees).
+    "USPSL": 6,
+    # osm_dedup_validation (2026-11-23): 6 m flags 1,594, 41 false (2.6%), recall 84%;
+    # 8 m adds 103 true for 35 false.
+    "USGJT": 6,
+    # osm_dedup_validation (2026-11-23): 8 m flags 1,269, 29 false (2.3%), recall 94%;
+    # 10 m adds 12 true for 16 false.
+    "USBOI": 8,
+    # osm_dedup_validation (2026-11-23): 6 m flags 305, 13 false (4.3%), recall 73%;
+    # 8 m adds 16 true for 9 false.
+    "USSPF": 6,
+    # osm_dedup_validation (2026-11-23): 4 m flags 340, 0 false, recall 79%;
+    # 6 m adds 9 true for 8 false.
+    "USBIS": 4,
+    # osm_dedup_validation (2026-11-23): 6 m flags 180, 9 false (5.0%), recall 62%;
+    # 8 m adds 22 true for 8 false.
+    "USMSO": 6,
+    # osm_dedup_validation (2026-11-23): 4 m flags 18, 0 false; OSM barely overlaps
+    # the inventory (3,816 OSM trees, 104 near one); 6 m is 13% false.
+    "USLAN": 4,
+    # osm_dedup_validation (2026-11-23): 6 m flags 155, 7 false (4.5%), recall 64%;
+    # 8 m adds 7 true for 2 false. OSM is sparse here (1,930 trees).
+    "USBTR": 6,
     # osm_dedup_validation (2026-11-22): 255 heritage anchors against 5,348 OSM trees;
     # 10 m flags 26, none false; 14 m adds 10 for 2 false.
     "SGSIN": 10,
@@ -4020,6 +4100,14 @@ DEDUP_CELL_METRES: dict[str, int] = {
 Box = tuple[float, float, float, float]
 
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
+    'USPSL': ((27.19, 27.39, -80.5, -80.24),),
+    'USGJT': ((39.01, 39.16, -108.7, -108.45),),
+    'USBOI': ((43.53, 43.7, -116.37, -116.08),),
+    'USSPF': ((37.08, 37.28, -93.44, -93.18),),
+    'USBIS': ((46.72, 46.89, -100.85, -100.68),),
+    'USMSO': ((46.78, 46.97, -114.15, -113.89),),
+    'USLAN': ((42.63, 42.8, -84.64, -84.47),),
+    'USBTR': ((30.22, 30.58, -91.27, -90.84),),
     # Singapore's shore, not the scaffold box: the box also held Johor Bahru's
     # waterfront (Malaysia, north of ~1.452 west of the Causeway) and Batam's
     # north coast (Indonesia, south of 1.25 east of 103.90). All 255 NParks
