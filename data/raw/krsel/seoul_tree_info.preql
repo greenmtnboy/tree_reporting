@@ -34,8 +34,12 @@ file `./seoul_osm_probe.py`;
 # Every partition extends ../tree_dedup.preql's `tree_partition`, which maps
 # the shared raw_* columns; a source that names a column differently re-binds
 # it here (`dbh: ?raw_dbh`).
+# `borough` is the district (구) the tree stands in, read from its address;
+# the community and OSM partitions declare it too (all-null on OSM), as Tokyo
+# does, or they drop out of the union.
 root partial datasource seoul_raw_tree_info extends tree_partition (
     data_source: krsel_source,
+    borough: ?borough,
 )
 complete where city = 'KRSEL' and krsel_source = 'SEOUL_OPENDATA'
 file `./seoul_tree_info.py`;
@@ -47,6 +51,7 @@ file `./seoul_tree_info.py`;
 # `complete where` asserts, it does not promise a predicate.
 root partial datasource krsel_community_tree_info extends tree_partition (
     data_source: krsel_source,
+    borough: ?borough,
 )
 complete where city = 'KRSEL' and krsel_source = 'COMMUNITY_KRSEL'
 file `../community_tree_info.py`
@@ -60,6 +65,7 @@ where city = 'KRSEL';
 # staged extract keeps the territory it was cut with until its next firing.
 root partial datasource krsel_osm_tree_info extends tree_partition (
     data_source: krsel_source,
+    borough: ?borough,
 )
 complete where city = 'KRSEL' and krsel_source = 'OSM_KRSEL'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/krsel_osm_staging.parquet`
@@ -86,6 +92,7 @@ merge merged_longitude into longitude;
 # (`test_every_city_refuses_a_collapsed_build`).
 partial datasource seoul_tree_info extends published_tree_info (
     data_source: krsel_source,
+    ?borough,
     krsel_published_data_updated_through,
 )
 complete where city = 'KRSEL'

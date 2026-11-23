@@ -3495,8 +3495,9 @@ DEDUP_CELL_METRES: dict[str, int] = {
     # osm_dedup_validation 2026-11-23: 6 m flags 349, 22 false (6.3%);
     # 8 m adds 29 true for 15 false.
     "CAYRK": 6,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "KRSEL": 10,
+    # osm_dedup_validation 2026-11-23: dense street rows; 4 m flags 594,
+    # 123 false (20.7%); 6 m adds 180 true for 163 false.
+    "KRSEL": 4,
     # osm_dedup_validation (2026-11-23): 6 m flags 41, 0 false, recall 55%;
     # 8 m adds 7 true for 2 false. OSM is sparse here (775 trees).
     "USPSL": 6,

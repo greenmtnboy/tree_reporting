@@ -6,11 +6,17 @@
 
 import staging_common;
 
+# Seoul's municipal source declares `borough` -- the district (구) parsed from
+# the address -- so this partition must declare it too (see jptyo's note).
+property tree_id.borough string;
+
 root datasource krsel_osm_rows extends osm_rows (
+    borough: ?borough,
 )
 file `./osm_rows.py`
 where city = 'KRSEL';
 
 datasource krsel_osm_staging extends osm_staging (
+    ?borough,
 )
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/krsel_osm_staging.parquet`:`gcs://trilogy_public_models/duckdb/staging/krsel_osm_staging.parquet`;

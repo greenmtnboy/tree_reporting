@@ -21,12 +21,18 @@ who writes the GCS object.
 import sys
 from pathlib import Path
 
+import pyarrow as pa
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from shared.osm import extract_city  # noqa: E402
 
 CITY_CODE = "KRSEL"
 CITY_NAME = "Seoul OSM"
 
+# Seoul's municipal and community partitions both declare `borough` -- the
+# district, 구 -- so this one must too.  OSM has no district: all-null.
+EXTRA_NULL_COLUMNS = {"borough": pa.string()}
+
 
 if __name__ == "__main__":
-    extract_city(CITY_CODE, CITY_NAME)
+    extract_city(CITY_CODE, CITY_NAME, EXTRA_NULL_COLUMNS)

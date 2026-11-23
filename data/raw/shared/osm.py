@@ -260,6 +260,7 @@ OSM_CITY_NAMES: dict[str, str] = {
 OSM_EXTRA_NULL_COLUMNS: dict[str, dict[str, "pa.DataType"]] = {
     "GBLON": {"borough": pa.string()},
     "JPTYO": {"borough": pa.string()},
+    "KRSEL": {"borough": pa.string()},
     # Bogotá's localidad, Taipei's 區 and Copenhagen's bydel are the same
     # concept as London's borough and ride the same column.
     "COBOG": {"borough": pa.string()},

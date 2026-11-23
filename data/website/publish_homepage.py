@@ -133,6 +133,7 @@ COUNTRIES = {
     "IE": "Ireland",
     "IT": "Italy",
     "JP": "Japan",
+    "KR": "South Korea",
     "NL": "Netherlands",
     "NZ": "New Zealand",
     "PT": "Portugal",
