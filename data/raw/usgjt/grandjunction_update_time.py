@@ -3,26 +3,16 @@
 # requires-python = ">=3.13"
 # dependencies = ["pyarrow", "pytrilogy", "requests"]
 # ///
-"""Freshness probe for Grand Junction's tree inventory.  STUB -- point it at the portal.
+"""Freshness probe for Grand Junction's tree inventory.
 
-Mandatory: without it the pipeline re-downloads the whole dataset on every
-tick.  Hit the lightest metadata endpoint the portal exposes:
-
-    ArcGIS     `shared.platforms.arcgis.layer_last_edit(LAYER)`, or `field_max` for a
-               layer with no editingInfo
-    OpenDataSoft  GET /api/explore/v2.1/catalog/datasets/{id} -> .metas.default.modified
-    CKAN       GET /api/3/action/resource_show?id={id} -> .result.last_modified
-    Socrata    `shared.platforms.socrata.rows_updated_at(DATASET)` -- reads
-               /api/views/{id}.json .rowsUpdatedAt (unix SECONDS, not
-               Esri's milliseconds)
-
-Fetch with `get_json_with_retry`, never a bare `requests.get(...).json()`: a
-portal in maintenance answers every path with an HTML holding page and HTTP
-200, and every probe is a root datasource whose exception ends the whole
-refresh for every city.  `emit_freshness` turns an availability failure into
-the epoch so this city sits out the run; a *parse* failure still raises, because
-that means the portal changed its schema and degrading would freeze this city's
-Parquet silently and for ever.
+`Hub/City_Hub/MapServer/1` is a map-service layer over the City's enterprise
+geodatabase and publishes no `editingInfo`, so the watermark is the newest
+`last_edited_date` (the geodatabase's editor-tracking stamp), read with one
+statistics query.  The layer is synced from Cartegraph and the stamp moves
+most days; the rebuild it triggers is a single 16k-row read.  Esri returns
+the stamp as epoch milliseconds, and a few hours of zone offset make no
+difference to a staleness check.  A missing statistics row raises (a schema
+question); an outage degrades through `emit_freshness`.
 """
 
 import sys
@@ -30,13 +20,16 @@ from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from shared.ingest import emit_freshness, get_json_with_retry
+from shared.platforms.arcgis import FeatureLayer, field_max
+from shared.ingest import emit_freshness
 
-METADATA_URL = "TODO: the portal's metadata endpoint"
+LAYER = FeatureLayer(
+    "https://external25-gis.gjcity.org/arcgis/rest/services/Hub/City_Hub/MapServer/1"
+)
 
 
 def fetch_modified_at() -> datetime:
-    raise NotImplementedError("TODO: read Grand Junction's published-through timestamp")
+    return field_max(LAYER, "last_edited_date")
 
 
 if __name__ == "__main__":

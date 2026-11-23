@@ -3,26 +3,16 @@
 # requires-python = ">=3.13"
 # dependencies = ["pyarrow", "pytrilogy", "requests"]
 # ///
-"""Freshness probe for Boise's tree inventory.  STUB -- point it at the portal.
+"""Freshness probe for Boise's park and street trees.
 
-Mandatory: without it the pipeline re-downloads the whole dataset on every
-tick.  Hit the lightest metadata endpoint the portal exposes:
+The later of the two hosted layers' own `editingInfo.dataLastEditDate`
+(`BPR_Park_And_Street_Trees/FeatureServer/0` park trees, `/1` street trees;
+2026-11-21 when the city was wired) -- two metadata responses, so a refresh
+only re-downloads the 35k rows when Parks and Recreation has edited either.
 
-    ArcGIS     `shared.platforms.arcgis.layer_last_edit(LAYER)`, or `field_max` for a
-               layer with no editingInfo
-    OpenDataSoft  GET /api/explore/v2.1/catalog/datasets/{id} -> .metas.default.modified
-    CKAN       GET /api/3/action/resource_show?id={id} -> .result.last_modified
-    Socrata    `shared.platforms.socrata.rows_updated_at(DATASET)` -- reads
-               /api/views/{id}.json .rowsUpdatedAt (unix SECONDS, not
-               Esri's milliseconds)
-
-Fetch with `get_json_with_retry`, never a bare `requests.get(...).json()`: a
-portal in maintenance answers every path with an HTML holding page and HTTP
-200, and every probe is a root datasource whose exception ends the whole
-refresh for every city.  `emit_freshness` turns an availability failure into
-the epoch so this city sits out the run; a *parse* failure still raises, because
-that means the portal changed its schema and degrading would freeze this city's
-Parquet silently and for ever.
+`layer_last_edit` raises when a layer stops publishing `editingInfo`, a
+schema question that must not degrade to "no new data"; an outage is caught
+by `get_json_with_retry` inside it and does degrade.
 """
 
 import sys
@@ -30,13 +20,18 @@ from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from shared.ingest import emit_freshness, get_json_with_retry
+from shared.platforms.arcgis import FeatureLayer, layer_last_edit
+from shared.ingest import emit_freshness
 
-METADATA_URL = "TODO: the portal's metadata endpoint"
+SERVICE = (
+    "https://services1.arcgis.com/WHM6qC35aMtyAAlN/arcgis/rest/services/"
+    "BPR_Park_And_Street_Trees/FeatureServer"
+)
+LAYERS = (FeatureLayer(f"{SERVICE}/0"), FeatureLayer(f"{SERVICE}/1"))
 
 
 def fetch_modified_at() -> datetime:
-    raise NotImplementedError("TODO: read Boise's published-through timestamp")
+    return max(layer_last_edit(layer) for layer in LAYERS)
 
 
 if __name__ == "__main__":

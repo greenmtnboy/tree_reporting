@@ -3438,6 +3438,15 @@ timeout_seconds = 1800
 memory_mb = 2048
 
 [[cloud.job]]
+key = "derived-usmso"
+name = "urban-tree-derived-usmso"
+entrypoint = "raw/usmso/missoula_tree_derived.preql"
+operation = "refresh"
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[[cloud.job]]
 key = "derived-usnap"
 name = "urban-tree-derived-usnap"
 entrypoint = "raw/usnap/naples_tree_derived.preql"
@@ -3605,15 +3614,6 @@ name = "urban-tree-derived-ussjc"
 entrypoint = "raw/ussjc/sanjose_tree_derived.preql"
 operation = "refresh"
 schedule = "0 50 7 * * FRI,MON"
-timeout_seconds = 1800
-memory_mb = 2048
-
-[[cloud.job]]
-key = "derived-usmso"
-name = "urban-tree-derived-usmso"
-entrypoint = "raw/usmso/missoula_tree_derived.preql"
-operation = "refresh"
-schedule = "0 0 12 * * SUN,WED"
 timeout_seconds = 1800
 memory_mb = 2048
 

@@ -178,6 +178,14 @@ Currently has data from the following cities:
 - [Colac Otway Shire, Victoria, Australia](https://greenmtnboy.github.io/tree_reporting/#/?city=AUCOL)
 - [Barcelona, Spain](https://greenmtnboy.github.io/tree_reporting/#/?city=ESBCN)
 - [Singapore](https://greenmtnboy.github.io/tree_reporting/#/?city=SGSIN)
+- [Baton Rouge, Louisiana](https://greenmtnboy.github.io/tree_reporting/#/?city=USBTR)
+- [Lansing, Michigan](https://greenmtnboy.github.io/tree_reporting/#/?city=USLAN)
+- [Boise, Idaho](https://greenmtnboy.github.io/tree_reporting/#/?city=USBOI)
+- [Port St. Lucie, Florida](https://greenmtnboy.github.io/tree_reporting/#/?city=USPSL)
+- [Missoula, Montana](https://greenmtnboy.github.io/tree_reporting/#/?city=USMSO)
+- [Bismarck, North Dakota](https://greenmtnboy.github.io/tree_reporting/#/?city=USBIS)
+- [Springfield, Missouri](https://greenmtnboy.github.io/tree_reporting/#/?city=USSPF)
+- [Grand Junction, Colorado](https://greenmtnboy.github.io/tree_reporting/#/?city=USGJT)
 
 **[Live page](https://greenmtnboy.github.io/tree_reporting/)**
 
@@ -347,6 +355,14 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 | Colac Otway | Colac Otway Shire - Colac Otway Shire Trees (data.gov.au, CC BY 3.0 AU) | https://data.gov.au/data/dataset/colac-otway-shire-trees |
 | Barcelona | Ajuntament de Barcelona - Atles de la Biodiversitat, tree inventory (Open Data BCN, CC BY 4.0) | https://opendata-ajuntament.barcelona.cat/data/en/dataset/atles-biodiversitat-arbrat-geometries |
 | Singapore | National Parks Board - Heritage Trees via data.gov.sg (Singapore Open Data Licence v1.0) | https://data.gov.sg/datasets/d_644ff187b6d14d6316f47284a4a6c81f/view |
+| Baton Rouge | East Baton Rouge City-Parish GIS - Tree Inventory (no licence stated; displayed with attribution only, not licensed for reuse) | https://www.arcgis.com/home/item.html?id=51b996ab35bc44bfb8d9e8d032b458c7 |
+| Lansing | City of Lansing - Trees (no licence stated; displayed with attribution only, not licensed for reuse) | https://www.arcgis.com/home/item.html?id=156f8898d26a471dae7c858e46851b29 |
+| Boise | City of Boise Parks and Recreation - Managed Park and Street Trees (CC BY 4.0) | https://opendata.cityofboise.org/datasets/61e4dc96bc0745ecb42c3f3892728bd6 |
+| Port St. Lucie | City of Port St. Lucie - PSL Trees (no licence stated; displayed with attribution only, not licensed for reuse) | https://www.arcgis.com/home/item.html?id=767ea62a6ae34d898185ec5050319c0d |
+| Missoula | City of Missoula - Tree Locations (no licence stated; displayed with attribution only, not licensed for reuse) | https://www.arcgis.com/home/item.html?id=478d76729bfc4236ae12bafb644fb635 |
+| Bismarck | City of Bismarck Forestry - Tree Inventory (no licence stated; displayed with attribution only, not licensed for reuse) | https://www.arcgis.com/home/item.html?id=c84565e8695d41fbbde0973470cefab6 |
+| Springfield | City of Springfield, MO - Tree Inventory (no licence stated; displayed with attribution only, not licensed for reuse). This data has been modified for use from its original source, www.springfieldmo.gov; the City makes no claims as to its content, accuracy, timeliness or completeness, and it is used at one's own risk | https://gisdata-cosmo.opendata.arcgis.com/datasets/705ae4c71b014910a0617ba5c7b25b98_34 |
+| Grand Junction | City of Grand Junction GIS and Parks Forestry - Trees (CC0 1.0) | https://www.arcgis.com/home/item.html?id=cef93c83233749eb9265914aca06b35c |
 | Bendigo | City of Greater Bendigo - Environment - Trees (CC BY 2.5 AU) | https://data.gov.au/data/dataset/city-of-greater-bendigo-environment-trees |
 | Melbourne | Melbourne Open Data - Urban Forest Trees | https://data.melbourne.vic.gov.au/explore/dataset/trees-with-species-and-dimensions-urban-forest/ |
 | Melbourne (Port Phillip) | City of Port Phillip - Trees (CC BY 2.5 AU) | https://data.gov.au/data/dataset/city-of-port-phillip-trees |
@@ -504,6 +520,18 @@ Every tree row carries a `data_source` column identifying which of the above it 
 | Colac Otway | Department of Transport and Planning - Victorian Heritage Register via Vicmap (CC BY 4.0) | https://discover.data.vic.gov.au/dataset/victorian-heritage-register |
 | Barcelona | Ajuntament de Barcelona - Punts d'interès cultural (Open Data BCN, CC BY 4.0) | https://opendata-ajuntament.barcelona.cat/data/en/dataset/punts-informacio-turistica |
 | Singapore | National Heritage Board - National Monuments and Historic Sites via data.gov.sg (Singapore Open Data Licence v1.0) | https://data.gov.sg/datasets/d_b29c230ec6b609e29ed42f71ca9a8767/view |
+| Baton Rouge | City of Baton Rouge-Parish of East Baton Rouge - Local Historic Landmarks (no licence stated; displayed with attribution only, not licensed for reuse) | https://www.arcgis.com/home/item.html?id=ef927acb261c48c3bbef735602b9f5dc |
+| Baton Rouge | National Park Service - National Register of Historic Places | https://www.nps.gov/subjects/nationalregister/data-downloads.htm |
+| Lansing | City of Lansing - Historic Properties, local designations (no licence stated; displayed with attribution only, not licensed for reuse) | https://www.arcgis.com/home/item.html?id=a0f8c6e4d0a44291a7711103367329f4 |
+| Lansing | National Park Service - National Register of Historic Places | https://www.nps.gov/subjects/nationalregister/data-downloads.htm |
+| Boise | City of Boise - Historic Landmarks (CC BY 4.0) | https://opendata.cityofboise.org/datasets/b44aba318fd746988f1a48887bb0f990 |
+| Boise | National Park Service - National Register of Historic Places | https://www.nps.gov/subjects/nationalregister/data-downloads.htm |
+| Port St. Lucie | City of Port St. Lucie - Parks (no licence stated; displayed with attribution only, not licensed for reuse) | https://www.arcgis.com/home/item.html?id=65f2da9f968e463c8cf240ca452177f7 |
+| Missoula | National Park Service - National Register of Historic Places | https://www.nps.gov/subjects/nationalregister/data-downloads.htm |
+| Bismarck | National Park Service - National Register of Historic Places | https://www.nps.gov/subjects/nationalregister/data-downloads.htm |
+| Springfield | National Park Service - National Register of Historic Places | https://www.nps.gov/subjects/nationalregister/data-downloads.htm |
+| Grand Junction | City of Grand Junction - Historic Sites (CC0 1.0) | https://www.arcgis.com/home/item.html?id=474f2237f2c44e6bbe5b6588d7638a43 |
+| Grand Junction | National Park Service - National Register of Historic Places | https://www.nps.gov/subjects/nationalregister/data-downloads.htm |
 | Bendigo | Heritage Victoria - Victorian Heritage Register via Vicmap (CC BY 4.0) | https://discover.data.vic.gov.au/dataset/victorian-heritage-register |
 | Sydney | Sydney LEP 2012 heritage items (NSW DPHI, CC BY) | https://data.nsw.gov.au/data/dataset/environmental-planning-instrument-heritage-her |
 | Eindhoven | Rijksdienst voor het Cultureel Erfgoed - Rijksmonumenten via PDOK (CC BY 4.0) | https://service.pdok.nl/rce/ps-ch/wfs/v1_0?request=GetCapabilities&service=WFS |
