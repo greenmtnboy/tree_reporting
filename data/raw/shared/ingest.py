@@ -2000,6 +2000,7 @@ SPECIES_MISSPELLINGS: dict[str, str] = {
     "Poulus tremuloides": "Populus tremuloides",  # York Region
     "Crataegus crusgali": "Crataegus crus-galli",  # York Region
     "Strelitzia nicolae": "Strelitzia nicolai",  # Albury
+    "Aesculus hippocatanum": "Aesculus hippocastanum",  # St. Albert
 }
 
 
@@ -2404,7 +2405,7 @@ MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
     "CAMTL": ("MONTREAL_OPENDATA",),
     "CATOR": ("TORONTO_OPENDATA",),
     "CAWPG": ("WINNIPEG_OPENDATA",),
-    "CAEDM": ("EDMONTON_OPENDATA",),
+    "CAEDM": ("EDMONTON_OPENDATA", "ST_ALBERT"),
     "CACAL": ("CALGARY_OPENDATA",),
     "USSFO": ("SF_OPENDATA",),
     "USNYC": ("NYC_OPENDATA",),

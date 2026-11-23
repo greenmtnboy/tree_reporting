@@ -342,7 +342,7 @@ property <*>.cator_data_updated_through datetime; # when Toronto data is through
 property <*>.cator_osm_data_updated_through datetime; # GCS publication time of Toronto's staged OSM parquet
 property <*>.cawpg_data_updated_through datetime; # when Winnipeg data is through
 property <*>.cawpg_osm_data_updated_through datetime; # GCS publication time of Winnipeg's staged OSM parquet
-property <*>.caedm_data_updated_through datetime; # when Edmonton data is through
+# property <*>.caedm_data_updated_through datetime; # derived in caedm/edmonton_tree_info.preql from its two inventories
 property <*>.caedm_osm_data_updated_through datetime; # GCS publication time of Edmonton's staged OSM parquet
 property <*>.cacal_data_updated_through datetime; # when Calgary data is through
 property <*>.cacal_osm_data_updated_through datetime; # GCS publication time of Calgary's staged OSM parquet
