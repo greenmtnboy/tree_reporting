@@ -882,6 +882,7 @@ SPECIES_SYNONYMS: dict[str, str] = {
     "Pinus thunbergiana": "Pinus thunbergii",
     "Aesculus octandra": "Aesculus flava",
     "Quercus prinus": "Quercus montana",
+    "Quercus sargentii": "Quercus x sargentii",  # Brimbank
 }
 
 
@@ -2001,6 +2002,48 @@ SPECIES_MISSPELLINGS: dict[str, str] = {
     "Crataegus crusgali": "Crataegus crus-galli",  # York Region
     "Strelitzia nicolae": "Strelitzia nicolai",  # Albury
     "Aesculus hippocatanum": "Aesculus hippocastanum",  # St. Albert
+    "Allocasuarina leuhmannii": "Allocasuarina luehmannii",  # Brimbank
+    "Angohpora costata": "Angophora costata",  # Brimbank
+    "Angohpora hispida": "Angophora hispida",  # Brimbank
+    "Arcontophoenix": "Archontophoenix",  # Brimbank
+    "Callitris preisii": "Callitris preissii",  # Brimbank
+    "Chamaecyparis psifera": "Chamaecyparis pisifera",  # Brimbank
+    "Eucalyptus scoparium": "Eucalyptus scoparia",  # Brimbank
+    "Euonymous japonicus": "Euonymus japonicus",  # Brimbank
+    "Garrya eliptica": "Garrya elliptica",  # Brimbank
+    "Mella azedarach": "Melia azedarach",  # Brimbank
+    "Ravanea rivularis": "Ravenea rivularis",  # Brimbank
+    "Syzygium paniculata": "Syzygium paniculatum",  # Brimbank
+    "Lycium fercissimum": "Lycium ferocissimum",  # Brimbank
+    "Acacia cultiformis": "Acacia cultriformis",  # Manningham
+    "Acacia decurens": "Acacia decurrens",  # Manningham
+    "Acer xfreemanii": "Acer x freemanii",  # Manningham
+    "Allocasuarina verticulata": "Allocasuarina verticillata",  # Manningham
+    "Alnus jorulensis": "Alnus jorullensis",  # Manningham
+    "Araucaria heterophyla": "Araucaria heterophylla",  # Manningham
+    "Corymbia gummiferum": "Corymbia gummifera",  # Manningham
+    "Eucalyptus cinera": "Eucalyptus cinerea",  # Manningham
+    "Eucalyptus cladocalix": "Eucalyptus cladocalyx",  # Manningham
+    "Eucalyptus conferuminata": "Eucalyptus conferruminata",  # Manningham
+    "Eucalyptus gonyocalyx": "Eucalyptus goniocalyx",  # Manningham
+    "Eucalyptus nicholli": "Eucalyptus nicholii",  # Manningham
+    "Eucalyptus salibrus": "Eucalyptus salubris",  # Manningham
+    "Eucalyptus salmanophloia": "Eucalyptus salmonophloia",  # Manningham
+    "Ficus rubignosa": "Ficus rubiginosa",  # Manningham
+    "Gleditsia triacanthus": "Gleditsia triacanthos",  # Manningham
+    "Grevillia": "Grevillea",  # Manningham
+    "Grevillia hookeriana": "Grevillea hookeriana",  # Manningham
+    "Hymanosporum flavum": "Hymenosporum flavum",  # Manningham
+    "Koelruteria paniculata": "Koelreuteria paniculata",  # Manningham
+    "Liriodendrum tulipifera": "Liriodendron tulipifera",  # Manningham
+    "Malus ionensis": "Malus ioensis",  # Manningham
+    "Melaleuca hypercifolia": "Melaleuca hypericifolia",  # Manningham
+    "Melaleuca quinquinervia": "Melaleuca quinquenervia",  # Manningham
+    "Melaleuca stypheloides": "Melaleuca styphelioides",  # Manningham
+    "Qurecus coccinea": "Quercus coccinea",  # Manningham
+    "Symcareia glomulifera": "Syncarpia glomulifera",  # Manningham
+    "Syringia vulgaris": "Syringa vulgaris",  # Manningham
+    "Syzigium": "Syzygium",  # Manningham
 }
 
 
@@ -2416,7 +2459,7 @@ MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
     "DEBER": ("BERLIN_OPENDATA",),
     "NLAMS": ("AMSTERDAM_OPENDATA",),
     "GBLON": ("LONDON_OPENDATA",),
-    "AUMEL": ("MELBOURNE_OPENDATA", "PORT_PHILLIP", "YARRA", "GLEN_EIRA", "HOBSONS_BAY"),
+    "AUMEL": ("MELBOURNE_OPENDATA", "PORT_PHILLIP", "YARRA", "GLEN_EIRA", "HOBSONS_BAY", "BRIMBANK", "MANNINGHAM"),
     "ARBUE": ("BUENOSAIRES_OPENDATA",),
     "USLAX": ("LOSANGELES_OPENDATA", "WEST_HOLLYWOOD"),
     "USWAS": ("WASHINGTONDC_OPENDATA",),
