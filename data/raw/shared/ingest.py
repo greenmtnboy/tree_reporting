@@ -1994,6 +1994,11 @@ SPECIES_MISSPELLINGS: dict[str, str] = {
     "Populus xcanadensis": "Populus x canadensis",  # Unley/Burnside
     "Magnolia xsoulangeana": "Magnolia x soulangeana",  # Unley/Burnside
     "Arbutus xandrachnoides": "Arbutus x andrachnoides",  # Unley/Burnside
+    "Gleditisia triocanthos": "Gleditsia triacanthos",  # York Region
+    "Gleditsia triocanthos": "Gleditsia triacanthos",  # York Region
+    "Populus gradidentata": "Populus grandidentata",  # York Region
+    "Poulus tremuloides": "Populus tremuloides",  # York Region
+    "Crataegus crusgali": "Crataegus crus-galli",  # York Region
 }
 
 
@@ -3435,8 +3440,9 @@ DEDUP_CELL_METRES: dict[str, int] = {
     "USSLM": 8,
     # NOT YET CALIBRATED: default; measure after the first build.
     "CAWHI": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "CAYRK": 10,
+    # osm_dedup_validation 2026-11-23: 6 m flags 349, 22 false (6.3%);
+    # 8 m adds 29 true for 15 false.
+    "CAYRK": 6,
     # NOT YET CALIBRATED: default; measure after the first build.
     "KRSEL": 10,
     # osm_dedup_validation (2026-11-23): 6 m flags 41, 0 false, recall 55%;

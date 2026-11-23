@@ -5,23 +5,18 @@ root datasource yorkregion_landmarks_update_time (
 )
 file `./yorkregion_landmarks_probe.py`;
 
-# STUB. Every city needs a landmarks model even if it yields zero rows -- a
-# missing file fails the landmark lane for every city, and the agent has no
-# geographic context for this one.
-#
-# Point the raw datasource at whichever source this city has, in preference
-# order: an official designation registry, the same portal as the trees, an
-# Overpass extract (STAGE it -- do not fetch at refresh time), or a curated CSV
-# geocoded via Nominatim (then add a `landmarks-cayrk` job with NO cron).
-#
-# Both datasources extend ../landmark_common.preql's templates: add the
-# register's own attributes to both, mapped in one and stored in the other.
+# York Region's heritage properties (all nine local municipalities), read
+# live off the Region's own hosted ArcGIS Online layer -- the trees'
+# publisher, so nothing geocoded or staged.  No licence is stated; see
+# yorkregion_landmarks.py.
 root partial datasource raw_yorkregion_landmark_info extends landmark_partition (
+    address: ?address,
 )
 complete where city = 'CAYRK'
 file `./yorkregion_landmarks.py`;
 
 partial datasource yorkregion_landmark_info extends published_landmark_info (
+    ?address,
     cayrk_landmark_data_updated_through,
 )
 complete where city = 'CAYRK'
