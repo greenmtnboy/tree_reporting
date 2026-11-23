@@ -14,7 +14,15 @@ from shared.ingest import emit, enforce_tree_schema, normalize_species, validate
 
 BASE_URL = "https://gis.arboretum.harvard.edu/arcgis/rest/services/Maps/Explorer/MapServer/34/query"
 PAGE_SIZE = 100_000
-OUT_FIELDS = "OBJECTID,SCIENTIFIC_NAME,LATITUDE,LONGITUDE,DBH_NUM,DBH_UNIT_CODE,PLANT_DT"
+OUT_FIELDS = (
+    "OBJECTID,SCIENTIFIC_NAME,LATITUDE,LONGITUDE,DBH_NUM,DBH_UNIT_CODE,DBH_UNIT,PLANT_DT"
+)
+DBH_UNIT_CODES = {"c": "cm", "cm": "cm", "i": "in", "in": "in", "m": "m"}
+DBH_UNIT_LABELS = {
+    "centimeter": "cm", "centimeters": "cm", "centimetre": "cm", "centimetres": "cm",
+    "inch": "in", "inches": "in",
+    "meter": "m", "meters": "m", "metre": "m", "metres": "m",
+}
 
 # Only include living, geographically mapped specimens
 WHERE = "IS_DEAD=0 AND IS_MAPPED=1"
@@ -30,14 +38,33 @@ def parse_plant_date(ms: int | None) -> date | None:
         return None
 
 
-def convert_dbh(dbh_num: float | None, unit_code: str | None) -> float | None:
-    """Return DBH in inches.  ArcGIS unit codes: 'in' = inches, 'cm' = centimeters."""
+def convert_dbh(
+    dbh_num: float | None, unit_code: str | None, unit_label: str | None = None
+) -> float | None:
+    """Convert an explicitly identified Harvard measurement to inches.
+
+    Harvard uses C, I and M. If either field is absent, a recognized value
+    in the other is sufficient. Unknown or conflicting units stay null
+    rather than being interpreted as inches.
+    """
     if dbh_num is None:
         return None
-    if unit_code and unit_code.lower() == "cm":
+    code = (unit_code or "").strip().lower()
+    label = (unit_label or "").strip().lower()
+    code_unit = DBH_UNIT_CODES.get(code)
+    label_unit = DBH_UNIT_LABELS.get(label)
+    if (code and code_unit is None) or (label and label_unit is None):
+        return None
+    if code_unit and label_unit and code_unit != label_unit:
+        return None
+    unit = code_unit or label_unit
+    if unit == "cm":
         return dbh_num / 2.54
-    # Treat unknown / 'in' as already inches
-    return float(dbh_num)
+    if unit == "m":
+        return dbh_num / 0.0254
+    if unit == "in":
+        return float(dbh_num)
+    return None
 
 
 def fetch_page(offset: int) -> list[dict]:
@@ -89,7 +116,9 @@ def build_table(records: list[dict]) -> pa.Table:
         plant_dates.append(parse_plant_date(rec.get("PLANT_DT")))
         latitudes.append(float(rec["LATITUDE"]) if rec.get("LATITUDE") is not None else None)
         longitudes.append(float(rec["LONGITUDE"]) if rec.get("LONGITUDE") is not None else None)
-        dbhs.append(convert_dbh(rec.get("DBH_NUM"), rec.get("DBH_UNIT_CODE")))
+        dbhs.append(
+            convert_dbh(rec.get("DBH_NUM"), rec.get("DBH_UNIT_CODE"), rec.get("DBH_UNIT"))
+        )
 
     return pa.table(
         {
