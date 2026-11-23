@@ -1,0 +1,32 @@
+import ..landmark_common;
+
+root datasource seoul_landmarks_update_time (
+    data_updated_through: krsel_landmark_data_updated_through
+)
+file `./seoul_landmarks_probe.py`;
+
+# Seoul's protected and veteran trees (보호수 및 노거수, Seoul Open Data Plaza
+# OA-1323), read live from the portal's sheet service -- an official register,
+# so no Nominatim geocoding, no committed CSV and no staging object.
+# `lm_type` is the kind (보호수 designated, 보호수 후보목 candidate, 노거수
+# veteran), `borough` the district (구) and `year_designated` the designation
+# year where the register has one.
+root partial datasource raw_seoul_landmark_info extends landmark_partition (
+    address: ?address,
+    borough: ?borough,
+    lm_type: ?lm_type,
+    year_designated: ?year_designated,
+)
+complete where city = 'KRSEL'
+file `./seoul_landmarks.py`;
+
+partial datasource seoul_landmark_info extends published_landmark_info (
+    ?address,
+    ?borough,
+    ?lm_type,
+    ?year_designated,
+    krsel_landmark_data_updated_through,
+)
+complete where city = 'KRSEL'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/krsel_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/krsel_landmark_info_v{data_version}.parquet`
+freshness by krsel_landmark_data_updated_through;

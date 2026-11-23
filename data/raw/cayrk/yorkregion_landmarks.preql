@@ -1,0 +1,24 @@
+import ..landmark_common;
+
+root datasource yorkregion_landmarks_update_time (
+    data_updated_through: cayrk_landmark_data_updated_through
+)
+file `./yorkregion_landmarks_probe.py`;
+
+# York Region's heritage properties (all nine local municipalities), read
+# live off the Region's own hosted ArcGIS Online layer -- the trees'
+# publisher, so nothing geocoded or staged.  No licence is stated; see
+# yorkregion_landmarks.py.
+root partial datasource raw_yorkregion_landmark_info extends landmark_partition (
+    address: ?address,
+)
+complete where city = 'CAYRK'
+file `./yorkregion_landmarks.py`;
+
+partial datasource yorkregion_landmark_info extends published_landmark_info (
+    ?address,
+    cayrk_landmark_data_updated_through,
+)
+complete where city = 'CAYRK'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/cayrk_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/cayrk_landmark_info_v{data_version}.parquet`
+freshness by cayrk_landmark_data_updated_through;

@@ -10,6 +10,10 @@
  * gets round to naming it here.
  */
 export const DATA_SOURCE_LABELS: Record<string, string> = {
+  SALEM_OPENDATA: 'Salem Open Data',
+  WHITBY_OPENDATA: 'Whitby Open Data',
+  YORK_REGION_OPENDATA: 'York Region Open Data',
+  SEOUL_OPENDATA: 'Seoul Open Data',
   PORT_ST_LUCIE_OPENDATA: 'Port St. Lucie Open Data',
   GRAND_JUNCTION_OPENDATA: 'Grand Junction Open Data',
   BOISE_OPENDATA: 'Boise Open Data',
@@ -168,7 +172,13 @@ export const DATA_SOURCE_LABELS: Record<string, string> = {
   PORT_PHILLIP: 'City of Port Phillip',
   YARRA: 'City of Yarra',
   GLEN_EIRA: 'Glen Eira City Council',
+  UNLEY: 'City of Unley',
+  BURNSIDE: 'City of Burnside',
+  ALBURY: 'Albury City Council',
+  ST_ALBERT: 'City of St. Albert Open Data',
   HOBSONS_BAY: 'Hobsons Bay City Council',
+  BRIMBANK: 'Brimbank City Council',
+  MANNINGHAM: 'Manningham City Council',
   BUENOSAIRES_OPENDATA: 'Buenos Aires Data',
   LOSANGELES_OPENDATA: 'LA Bureau of Street Services',
   WEST_HOLLYWOOD: 'West Hollywood Open Data',

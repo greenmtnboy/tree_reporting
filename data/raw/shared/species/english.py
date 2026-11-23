@@ -736,6 +736,8 @@ COMMON_NAME_SPECIES: dict[str, str] = {
     "shellbark hickory": "Carya laciniosa",
     "allegheny chinkapin": "Castanea pumila",
     "catalpa": "Catalpa",
+    "caragana": "Caragana",  # St. Albert
+    "maackia": "Maackia",  # St. Albert
     "deodar cedar": "Cedrus deodara",
     "blue atlas cedar": "Cedrus atlantica",
     "dwarf hackberry": "Celtis tenuifolia",

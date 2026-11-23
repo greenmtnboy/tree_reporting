@@ -1,0 +1,26 @@
+import ..landmark_common;
+
+root datasource whitby_landmarks_update_time (
+    data_updated_through: cawhi_landmark_data_updated_through
+)
+file `./whitby_landmarks_probe.py`;
+
+# Whitby publishes no heritage register as data (see the ingest), so this is
+# the Town's own parks layer, filtered to parks, and its Town facilities, read
+# live off the Town's ArcGIS Online layers (The Corporation of the Town of
+# Whitby Open Government License).
+root partial datasource raw_whitby_landmark_info extends landmark_partition (
+    address: ?address,
+    property_type: ?property_type,
+)
+complete where city = 'CAWHI'
+file `./whitby_landmarks.py`;
+
+partial datasource whitby_landmark_info extends published_landmark_info (
+    ?address,
+    ?property_type,
+    cawhi_landmark_data_updated_through,
+)
+complete where city = 'CAWHI'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/cawhi_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/cawhi_landmark_info_v{data_version}.parquet`
+freshness by cawhi_landmark_data_updated_through;

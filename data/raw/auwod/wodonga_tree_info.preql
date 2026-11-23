@@ -2,9 +2,16 @@ import ..tree_common;
 import ..community_tree_info;
 import ..tree_dedup;
 
-auto auwod_published_data_updated_through <- greatest(auwod_data_updated_through, auwod_community_data_updated_through, auwod_osm_data_updated_through);
+property <*>.wodonga_city_data_updated_through datetime; # when the City of Wodonga's street and reserve trees layer is through
+property <*>.albury_data_updated_through datetime; # when Albury City Council's Trees (Public) layer is through
 
-key auwod_source enum<string>['WODONGA_OPENDATA', 'COMMUNITY_AUWOD', 'OSM_AUWOD']; # originating dataset for the row
+auto auwod_published_data_updated_through <- greatest(auwod_data_updated_through, auwod_community_data_updated_through, auwod_osm_data_updated_through);
+auto auwod_data_updated_through <- greatest(wodonga_city_data_updated_through, albury_data_updated_through);
+
+# The City of Wodonga plus Albury City Council, its twin across the Murray in
+# NSW, inside AUWOD's territory: each its own municipal partition (the
+# Melbourne councils' pattern).
+key auwod_source enum<string>['WODONGA_OPENDATA', 'ALBURY', 'COMMUNITY_AUWOD', 'OSM_AUWOD']; # originating dataset for the row
 
 # Feed the shared cross-source merge (../tree_dedup.preql): it classifies rows
 # by the label's prefix and records provenance from it.
@@ -12,9 +19,16 @@ auto auwod_source_label <- concat(auwod_source, '');
 merge auwod_source_label into source_label;
 
 root datasource wodonga_update_time (
-    data_updated_through: auwod_data_updated_through
+    data_updated_through: wodonga_city_data_updated_through
 )
 file `./wodonga_update_time.py`;
+
+# Albury's layer carries its own editingInfo; the probe is its
+# dataLastEditDate (shared/platforms/arcgis.py `layer_last_edit`).
+root datasource albury_update_time (
+    data_updated_through: albury_data_updated_through
+)
+file `./albury_update_time.py`;
 
 # Only this city's column, so an approval elsewhere does not mark AUWOD's
 # Parquet stale. Trilogy probes this as MAX over the one column.
@@ -40,6 +54,16 @@ root partial datasource wodonga_raw_tree_info extends tree_partition (
 complete where city = 'AUWOD' and auwod_source = 'WODONGA_OPENDATA'
 file `./wodonga_tree_info.py`;
 
+# Albury City Council.  The Murray is the border between the two
+# inventories, so no tree is in both and no border-dedup block is needed;
+# Albury publishes no trunk measurement or crown spread (the template binds
+# them; the columns are emitted null).
+root partial datasource albury_raw_tree_info extends tree_partition (
+    data_source: auwod_source,
+)
+complete where city = 'AUWOD' and auwod_source = 'ALBURY'
+file `./albury_tree_info.py`;
+
 
 # Approved community submissions for this city. The shared ingest script emits
 # every city's rows; the `complete where` clause narrows it to AUWOD and makes
@@ -63,7 +87,7 @@ root partial datasource auwod_osm_tree_info extends tree_partition (
 )
 complete where city = 'AUWOD' and auwod_source = 'OSM_AUWOD'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/auwod_osm_staging.parquet`
-where (raw_latitude >= -36.3 and raw_latitude < -36.0 and raw_longitude >= 146.65 and raw_longitude < 147.1);
+where (raw_latitude >= -36.3 and raw_latitude < -35.9 and raw_longitude >= 146.65 and raw_longitude < 147.1);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------
@@ -81,7 +105,7 @@ merge merged_longitude into longitude;
 
 # The published target extends ../tree_dedup.preql's `published_tree_info`:
 # the canonical columns, the prune, and the guard that refuses a build which
-# lost a quarter of the city.  The two `@source_kept` lines are the same guard
+# lost a quarter of the city.  The `@source_kept` lines are the same guard
 # per bulk source; add one for every municipal or OSM label in the enum
 # (`test_every_city_refuses_a_collapsed_build`).
 partial datasource wodonga_tree_info extends published_tree_info (
@@ -92,4 +116,5 @@ complete where city = 'AUWOD'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/auwod_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/auwod_tree_info_v{data_version}.parquet`
 freshness by auwod_published_data_updated_through
 assert @source_kept(tree_id, auwod_source, 'WODONGA_OPENDATA', 0.75)
+assert @source_kept(tree_id, auwod_source, 'ALBURY', 0.75)
 assert @source_kept(tree_id, auwod_source, 'OSM_AUWOD', 0.75);

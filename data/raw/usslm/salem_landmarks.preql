@@ -1,0 +1,34 @@
+import ..landmark_common;
+
+root datasource salem_landmarks_update_time (
+    data_updated_through: usslm_landmark_data_updated_through
+)
+file `./salem_landmarks_probe.py`;
+
+# The City of Salem's historic buildings inventory (its local landmarks and
+# the buildings it records as individually on the National Register, on the
+# City's ArcGIS Online organisation), topped up with the National Park
+# Service's National Register listings in Salem the City layer does not carry
+# -- registers read live, so no Nominatim geocoding, no committed CSV and no
+# staging object.  `lm_type` names the register(s); `register_number` is the
+# Oregon SHPO inventory number on a City row and the NRIS reference number on
+# an NPS one.
+root partial datasource raw_salem_landmark_info extends landmark_partition (
+    address: ?address,
+    lm_type: ?lm_type,
+    register_number: ?register_number,
+    year_designated: ?year_designated,
+)
+complete where city = 'USSLM'
+file `./salem_landmarks.py`;
+
+partial datasource salem_landmark_info extends published_landmark_info (
+    ?address,
+    ?lm_type,
+    ?register_number,
+    ?year_designated,
+    usslm_landmark_data_updated_through,
+)
+complete where city = 'USSLM'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/usslm_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/usslm_landmark_info_v{data_version}.parquet`
+freshness by usslm_landmark_data_updated_through;

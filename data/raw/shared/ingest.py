@@ -882,6 +882,7 @@ SPECIES_SYNONYMS: dict[str, str] = {
     "Pinus thunbergiana": "Pinus thunbergii",
     "Aesculus octandra": "Aesculus flava",
     "Quercus prinus": "Quercus montana",
+    "Quercus sargentii": "Quercus x sargentii",  # Brimbank
 }
 
 
@@ -1981,6 +1982,74 @@ SPECIES_MISSPELLINGS: dict[str, str] = {
     "Lyonothamnus floribunda": "Lyonothamnus floribundus",
     "Prunus x domestica": "Prunus domestica",
     "Malus floribunda": "Malus x floribunda",
+    "Fraxinus execelsior": "Fraxinus excelsior",  # Salem
+    "Prunus x blieriana": "Prunus x blireana",  # Salem
+    "Acer monspressulanum": "Acer monspessulanum",  # Unley/Burnside
+    "Eucalyptus dolichoryncha": "Eucalyptus dolichorhyncha",  # Unley/Burnside
+    "Eucalyptus foresttiana": "Eucalyptus forrestiana",  # Unley/Burnside
+    "Brahea edulus": "Brahea edulis",  # Unley/Burnside
+    "Hibiscus tilliaceus": "Hibiscus tiliaceus",  # Unley/Burnside
+    "Syzygium leuhmannii": "Syzygium luehmannii",  # Unley/Burnside
+    "Prunus xblireana": "Prunus x blireana",  # Unley/Burnside
+    "Photinia xfraseri": "Photinia x fraseri",  # Unley/Burnside
+    "Populus xcanadensis": "Populus x canadensis",  # Unley/Burnside
+    "Magnolia xsoulangeana": "Magnolia x soulangeana",  # Unley/Burnside
+    "Arbutus xandrachnoides": "Arbutus x andrachnoides",  # Unley/Burnside
+    "Gleditisia triocanthos": "Gleditsia triacanthos",  # York Region
+    "Gleditsia triocanthos": "Gleditsia triacanthos",  # York Region
+    "Populus gradidentata": "Populus grandidentata",  # York Region
+    "Poulus tremuloides": "Populus tremuloides",  # York Region
+    "Crataegus crusgali": "Crataegus crus-galli",  # York Region
+    "Strelitzia nicolae": "Strelitzia nicolai",  # Albury
+    "Aesculus hippocatanum": "Aesculus hippocastanum",  # St. Albert
+    "Allocasuarina leuhmannii": "Allocasuarina luehmannii",  # Brimbank
+    "Angohpora costata": "Angophora costata",  # Brimbank
+    "Angohpora hispida": "Angophora hispida",  # Brimbank
+    "Arcontophoenix": "Archontophoenix",  # Brimbank
+    "Callitris preisii": "Callitris preissii",  # Brimbank
+    "Chamaecyparis psifera": "Chamaecyparis pisifera",  # Brimbank
+    "Eucalyptus scoparium": "Eucalyptus scoparia",  # Brimbank
+    "Euonymous japonicus": "Euonymus japonicus",  # Brimbank
+    "Garrya eliptica": "Garrya elliptica",  # Brimbank
+    "Mella azedarach": "Melia azedarach",  # Brimbank
+    "Ravanea rivularis": "Ravenea rivularis",  # Brimbank
+    "Syzygium paniculata": "Syzygium paniculatum",  # Brimbank
+    "Lycium fercissimum": "Lycium ferocissimum",  # Brimbank
+    "Acacia cultiformis": "Acacia cultriformis",  # Manningham
+    "Acacia decurens": "Acacia decurrens",  # Manningham
+    "Acer xfreemanii": "Acer x freemanii",  # Manningham
+    "Allocasuarina verticulata": "Allocasuarina verticillata",  # Manningham
+    "Alnus jorulensis": "Alnus jorullensis",  # Manningham
+    "Araucaria heterophyla": "Araucaria heterophylla",  # Manningham
+    "Corymbia gummiferum": "Corymbia gummifera",  # Manningham
+    "Eucalyptus cinera": "Eucalyptus cinerea",  # Manningham
+    "Eucalyptus cladocalix": "Eucalyptus cladocalyx",  # Manningham
+    "Eucalyptus conferuminata": "Eucalyptus conferruminata",  # Manningham
+    "Eucalyptus gonyocalyx": "Eucalyptus goniocalyx",  # Manningham
+    "Eucalyptus nicholli": "Eucalyptus nicholii",  # Manningham
+    "Eucalyptus salibrus": "Eucalyptus salubris",  # Manningham
+    "Eucalyptus salmanophloia": "Eucalyptus salmonophloia",  # Manningham
+    "Ficus rubignosa": "Ficus rubiginosa",  # Manningham
+    "Gleditsia triacanthus": "Gleditsia triacanthos",  # Manningham
+    "Grevillia": "Grevillea",  # Manningham
+    "Grevillia hookeriana": "Grevillea hookeriana",  # Manningham
+    "Hymanosporum flavum": "Hymenosporum flavum",  # Manningham
+    "Koelruteria paniculata": "Koelreuteria paniculata",  # Manningham
+    "Liriodendrum tulipifera": "Liriodendron tulipifera",  # Manningham
+    "Malus ionensis": "Malus ioensis",  # Manningham
+    "Melaleuca hypercifolia": "Melaleuca hypericifolia",  # Manningham
+    "Melaleuca quinquinervia": "Melaleuca quinquenervia",  # Manningham
+    "Melaleuca stypheloides": "Melaleuca styphelioides",  # Manningham
+    "Qurecus coccinea": "Quercus coccinea",  # Manningham
+    "Symcareia glomulifera": "Syncarpia glomulifera",  # Manningham
+    "Syringia vulgaris": "Syringa vulgaris",  # Manningham
+    "Syzigium": "Syzygium",  # Manningham
+    "Acer x freemanni": "Acer x freemanii",  # Whitby
+    "Acer freemanni": "Acer x freemanii",  # Whitby
+    "Assimina triloba": "Asimina triloba",  # Whitby
+    "Gleditsa triacanthos": "Gleditsia triacanthos",  # Whitby
+    "Tilia american": "Tilia americana",  # Whitby
+    "Plantus occidentalis": "Platanus occidentalis",  # Whitby
 }
 
 
@@ -2249,6 +2318,10 @@ def _sanitize_taxon(value: str | None) -> str | None:
 # Keyed by city code so `community_source_for` can derive the community label
 # and so tests can assert the two lists agree.
 MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
+    "USSLM": ("SALEM_OPENDATA",),
+    "CAWHI": ("WHITBY_OPENDATA",),
+    "CAYRK": ("YORK_REGION_OPENDATA",),
+    "KRSEL": ("SEOUL_OPENDATA",),
     "USPSL": ("PORT_ST_LUCIE_OPENDATA",),
     "USGJT": ("GRAND_JUNCTION_OPENDATA",),
     "USBOI": ("BOISE_OPENDATA",),
@@ -2343,10 +2416,10 @@ MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
     "USEUG": ("EUGENE_OPENDATA",),
     "ATVIE": ("VIENNA_OPENDATA",),
     "USCOL": ("COLUMBUS_OPENDATA",),
-    "AUWOD": ("WODONGA_OPENDATA",),
+    "AUWOD": ("WODONGA_OPENDATA", "ALBURY"),
     "AUBAL": ("BALLARAT_OPENDATA",),
     "AUPER": ("PERTH_OPENDATA",),
-    "AUADL": ("ADELAIDE_OPENDATA",),
+    "AUADL": ("ADELAIDE_OPENDATA", "UNLEY", "BURNSIDE"),
     "USNPV": ("NAPERVILLE_OPENDATA",),
     "USBOU": ("BOULDER_OPENDATA",),
     "ITMIL": ("MILAN_OPENDATA",),
@@ -2381,7 +2454,7 @@ MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
     "CAMTL": ("MONTREAL_OPENDATA",),
     "CATOR": ("TORONTO_OPENDATA",),
     "CAWPG": ("WINNIPEG_OPENDATA",),
-    "CAEDM": ("EDMONTON_OPENDATA",),
+    "CAEDM": ("EDMONTON_OPENDATA", "ST_ALBERT"),
     "CACAL": ("CALGARY_OPENDATA",),
     "USSFO": ("SF_OPENDATA",),
     "USNYC": ("NYC_OPENDATA",),
@@ -2392,7 +2465,7 @@ MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
     "DEBER": ("BERLIN_OPENDATA",),
     "NLAMS": ("AMSTERDAM_OPENDATA",),
     "GBLON": ("LONDON_OPENDATA",),
-    "AUMEL": ("MELBOURNE_OPENDATA", "PORT_PHILLIP", "YARRA", "GLEN_EIRA", "HOBSONS_BAY"),
+    "AUMEL": ("MELBOURNE_OPENDATA", "PORT_PHILLIP", "YARRA", "GLEN_EIRA", "HOBSONS_BAY", "BRIMBANK", "MANNINGHAM"),
     "ARBUE": ("BUENOSAIRES_OPENDATA",),
     "USLAX": ("LOSANGELES_OPENDATA", "WEST_HOLLYWOOD"),
     "USWAS": ("WASHINGTONDC_OPENDATA",),
@@ -2433,6 +2506,10 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # overlapping rows under one cluster id and publishes only the survivor — see
 # tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
+    "USSLM": "OSM_USSLM",
+    "CAWHI": "OSM_CAWHI",
+    "CAYRK": "OSM_CAYRK",
+    "KRSEL": "OSM_KRSEL",
     "USPSL": "OSM_USPSL",
     "USGJT": "OSM_USGJT",
     "USBOI": "OSM_USBOI",
@@ -3196,6 +3273,10 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
+    "USSLM": (44.83, 45.03, -123.14, -122.92),
+    "CAWHI": (43.81, 44.03, -79.05, -78.87),
+    "CAYRK": (43.74, 44.34, -79.73, -79.15),
+    "KRSEL": (37.42, 37.71, 126.76, 127.19),
     "USPSL": (27.19, 27.39, -80.5, -80.24),
     "USGJT": (39.01, 39.16, -108.7, -108.45),
     "USBOI": (43.53, 43.7, -116.37, -116.08),
@@ -3290,10 +3371,10 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
     "USEUG": (43.97, 44.14, -123.21, -122.98),
     "ATVIE": (48.11, 48.33, 16.18, 16.58),
     "USCOL": (39.8, 40.16, -83.21, -82.77),
-    "AUWOD": (-36.3, -36.0, 146.65, 147.1),
+    "AUWOD": (-36.3, -35.9, 146.65, 147.1),
     "AUBAL": (-37.8, -37.3, 143.55, 144.1),
     "AUPER": (-32.0, -31.92, 115.8, 115.9),
-    "AUADL": (-34.96, -34.88, 138.56, 138.64),
+    "AUADL": (-34.98, -34.88, 138.56, 138.71),
     "USNPV": (41.66, 41.83, -88.3, -88.05),
     "USBOU": (39.95, 40.13, -105.35, -105.15),
     "ITMIL": (45.38, 45.54, 9.03, 9.29),
@@ -3405,6 +3486,18 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
+    # osm_dedup_validation 2026-11-23: 8m is the last cell whose added
+    # flags are mostly real (+13 true / +6 false); 10m adds as many false as true.
+    "USSLM": 8,
+    # osm_dedup_validation 2026-11-23: 6 m flags 111, 6 false (5.4%);
+    # 8 m adds 2 true for 4 false.
+    "CAWHI": 6,
+    # osm_dedup_validation 2026-11-23: 6 m flags 349, 22 false (6.3%);
+    # 8 m adds 29 true for 15 false.
+    "CAYRK": 6,
+    # osm_dedup_validation 2026-11-23: dense street rows; 4 m flags 594,
+    # 123 false (20.7%); 6 m adds 180 true for 163 false.
+    "KRSEL": 4,
     # osm_dedup_validation (2026-11-23): 6 m flags 41, 0 false, recall 55%;
     # 8 m adds 7 true for 2 false. OSM is sparse here (775 trees).
     "USPSL": 6,
@@ -4100,6 +4193,68 @@ DEDUP_CELL_METRES: dict[str, int] = {
 Box = tuple[float, float, float, float]
 
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
+    'USSLM': ((44.83, 45.03, -123.14, -122.92),),
+    # Whitby west of Ajax: latitude bands cut at the Town's western boundary
+    # (Lakeridge Rd, then the Pickering line); see CAAJX.
+    'CAWHI': (
+        (43.81, 43.82, -78.966, -78.948),
+        (43.82, 43.83, -78.969, -78.887),
+        (43.83, 43.84, -78.974, -78.874),
+        (43.84, 43.85, -78.978, -78.877),
+        (43.85, 43.86, -78.982, -78.88),
+        (43.86, 43.87, -78.986, -78.884),
+        (43.87, 43.88, -78.991, -78.889),
+        (43.88, 43.89, -78.995, -78.893),
+        (43.89, 43.9, -78.999, -78.898),
+        (43.9, 43.91, -79.003, -78.902),
+        (43.91, 43.92, -79.007, -78.906),
+        (43.92, 43.93, -79.012, -78.911),
+        (43.93, 43.94, -79.017, -78.915),
+        (43.94, 43.95, -79.021, -78.919),
+        (43.95, 43.96, -79.026, -78.924),
+        (43.96, 43.97, -79.03, -78.928),
+        (43.97, 43.98, -79.035, -78.932),
+        (43.98, 43.99, -79.039, -78.937),
+        (43.99, 44.0, -79.043, -78.941),
+        (44.0, 44.01, -79.047, -78.945),
+        (44.01, 44.02, -79.044, -78.95),
+        (44.02, 44.03, -78.999, -78.954),
+    ),
+    # York Region north of Toronto: 0.02-degree longitude bands cut at the
+    # Region's southern boundary (Steeles Ave); see CATOR.
+    'CAYRK': (
+        (43.873, 44.005, -79.73, -79.71),
+        (43.839, 44.009, -79.71, -79.69),
+        (43.804, 44.013, -79.69, -79.67),
+        (43.78, 44.021, -79.67, -79.65),  # above Mississauga's (CAMIS) 43.78
+        (43.78, 44.026, -79.65, -79.64),
+        (43.75, 44.026, -79.64, -79.63),
+        (43.752, 44.049, -79.63, -79.61),
+        (43.756, 44.054, -79.61, -79.59),
+        (43.761, 44.068, -79.59, -79.57),
+        (43.765, 44.099, -79.57, -79.55),
+        (43.77, 44.152, -79.55, -79.53),
+        (43.774, 44.277, -79.53, -79.51),
+        (43.778, 44.34, -79.51, -79.49),
+        (43.783, 44.34, -79.49, -79.47),
+        (43.787, 44.34, -79.47, -79.45),
+        (43.792, 44.34, -79.45, -79.43),
+        (43.796, 44.34, -79.43, -79.41),
+        (43.8, 44.34, -79.41, -79.39),
+        (43.805, 44.34, -79.39, -79.37),
+        (43.809, 44.34, -79.37, -79.35),
+        (43.814, 44.34, -79.35, -79.33),
+        (43.818, 44.34, -79.33, -79.31),
+        (43.823, 44.34, -79.31, -79.29),
+        (43.828, 44.34, -79.29, -79.27),
+        (43.832, 44.34, -79.27, -79.25),
+        (43.837, 44.34, -79.25, -79.23),
+        (43.842, 44.34, -79.23, -79.21),
+        (43.846, 44.34, -79.21, -79.19),
+        (43.851, 44.34, -79.19, -79.17),
+        (44.26, 44.295, -79.17, -79.15),
+    ),
+    'KRSEL': ((37.42, 37.71, 126.76, 127.19),),
     'USPSL': ((27.19, 27.39, -80.5, -80.24),),
     'USGJT': ((39.01, 39.16, -108.7, -108.45),),
     'USBOI': ((43.53, 43.7, -116.37, -116.08),),
@@ -4413,10 +4568,10 @@ CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
     'USEUG': ((43.97, 44.14, -123.21, -122.98),),
     'ATVIE': ((48.11, 48.33, 16.18, 16.58),),
     'USCOL': ((39.8, 40.16, -83.21, -82.77),),
-    'AUWOD': ((-36.3, -36.0, 146.65, 147.1),),
+    'AUWOD': ((-36.3, -35.9, 146.65, 147.1),),
     'AUBAL': ((-37.8, -37.3, 143.55, 144.1),),
     'AUPER': ((-32.0, -31.92, 115.8, 115.9),),
-    'AUADL': ((-34.96, -34.88, 138.56, 138.64),),
+    'AUADL': ((-34.98, -34.88, 138.56, 138.71),),
     'USNPV': ((41.66, 41.83, -88.3, -88.05),),
     'USBOU': ((39.95, 40.13, -105.35, -105.15),),
     'ITMIL': ((45.38, 45.54, 9.03, 9.29),),
@@ -4456,7 +4611,24 @@ CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
     'COBOG': ((4.4, 4.9, -74.3, -73.95),),
     'JPTYO': ((35.48, 35.9, 138.93, 139.95),),
     'CAMON': ((46.02, 46.2, -64.95, -64.66),),
-    'CAAJX': ((43.78, 43.95, -79.1, -78.93),),
+    # Ajax's east edge follows Whitby's boundary (see CAWHI).
+    'CAAJX': (
+        (43.78, 43.81, -79.1, -78.93),
+        (43.81, 43.82, -79.1, -78.966),
+        (43.82, 43.83, -79.1, -78.969),
+        (43.83, 43.84, -79.1, -78.974),
+        (43.84, 43.85, -79.1, -78.978),
+        (43.85, 43.86, -79.1, -78.982),
+        (43.86, 43.87, -79.1, -78.986),
+        (43.87, 43.88, -79.1, -78.991),
+        (43.88, 43.89, -79.1, -78.995),
+        (43.89, 43.9, -79.1, -78.999),
+        (43.9, 43.91, -79.1, -79.003),
+        (43.91, 43.92, -79.1, -79.007),
+        (43.92, 43.93, -79.1, -79.012),
+        (43.93, 43.94, -79.1, -79.017),
+        (43.94, 43.95, -79.1, -79.021),
+    ),
     'CABUR': (
         (43.275, 43.28, -79.69, -79.68),
         (43.28, 43.285, -79.745, -79.68),
@@ -4579,7 +4751,33 @@ CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
         (43.68, 43.7, -79.607, -79.1),
         (43.7, 43.72, -79.617, -79.1),
         (43.72, 43.74, -79.625, -79.1),
-        (43.74, 43.9, -79.64, -79.1),
+        # North of 43.74 Toronto stops at Steeles Ave, York Region's edge (CAYRK).
+        (43.74, 43.75, -79.64, -79.63),
+        (43.74, 43.752, -79.63, -79.61),
+        (43.74, 43.756, -79.61, -79.59),
+        (43.74, 43.761, -79.59, -79.57),
+        (43.74, 43.765, -79.57, -79.55),
+        (43.74, 43.77, -79.55, -79.53),
+        (43.74, 43.774, -79.53, -79.51),
+        (43.74, 43.778, -79.51, -79.49),
+        (43.74, 43.783, -79.49, -79.47),
+        (43.74, 43.787, -79.47, -79.45),
+        (43.74, 43.792, -79.45, -79.43),
+        (43.74, 43.796, -79.43, -79.41),
+        (43.74, 43.8, -79.41, -79.39),
+        (43.74, 43.805, -79.39, -79.37),
+        (43.74, 43.809, -79.37, -79.35),
+        (43.74, 43.814, -79.35, -79.33),
+        (43.74, 43.818, -79.33, -79.31),
+        (43.74, 43.823, -79.31, -79.29),
+        (43.74, 43.828, -79.29, -79.27),
+        (43.74, 43.832, -79.27, -79.25),
+        (43.74, 43.837, -79.25, -79.23),
+        (43.74, 43.842, -79.23, -79.21),
+        (43.74, 43.846, -79.21, -79.19),
+        (43.74, 43.851, -79.19, -79.17),
+        (43.74, 43.9, -79.17, -79.15),
+        (43.74, 43.9, -79.15, -79.1),
     ),
     'CAWPG': ((49.66, 50.03, -97.4, -96.9),),
     'CAEDM': ((53.3, 53.75, -113.8, -113.2),),

@@ -186,6 +186,10 @@ Currently has data from the following cities:
 - [Bismarck, North Dakota](https://greenmtnboy.github.io/tree_reporting/#/?city=USBIS)
 - [Springfield, Missouri](https://greenmtnboy.github.io/tree_reporting/#/?city=USSPF)
 - [Grand Junction, Colorado](https://greenmtnboy.github.io/tree_reporting/#/?city=USGJT)
+- [Seoul, South Korea](https://greenmtnboy.github.io/tree_reporting/#/?city=KRSEL)
+- [York Region, ON, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CAYRK)
+- [Whitby, ON, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CAWHI)
+- [Salem, Oregon](https://greenmtnboy.github.io/tree_reporting/#/?city=USSLM)
 
 **[Live page](https://greenmtnboy.github.io/tree_reporting/)**
 
@@ -252,6 +256,7 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 | Vancouver | Vancouver Open Data - Public Trees | https://opendata.vancouver.ca/explore/dataset/public-trees/ |
 | Calgary | City of Calgary Open Data - Public Trees | https://data.calgary.ca/Environment/Public-Trees/tfs4-3wwa |
 | Edmonton | City of Edmonton Open Data - Trees | https://data.edmonton.ca/Environmental-Services/Trees/eecg-fc54 |
+| Edmonton (St. Albert) | City of St. Albert - Tree Inventory (Open Data Licence - City of St. Albert) | https://www.arcgis.com/home/item.html?id=4cd6fa57df0b44b895ca6dd69118f10a |
 | Winnipeg | City of Winnipeg Open Data - Tree Inventory | https://data.winnipeg.ca/Parks/Tree-Inventory/hfwk-jp4h |
 | Toronto | City of Toronto Open Data - Street Tree Data | https://open.toronto.ca/dataset/street-tree-data/ |
 | Montreal | Donnees Montreal - Arbres publics sur le territoire de la Ville (CC-BY 4.0) | https://donnees.montreal.ca/dataset/arbres |
@@ -363,17 +368,27 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 | Bismarck | City of Bismarck Forestry - Tree Inventory (no licence stated; displayed with attribution only, not licensed for reuse) | https://www.arcgis.com/home/item.html?id=c84565e8695d41fbbde0973470cefab6 |
 | Springfield | City of Springfield, MO - Tree Inventory (no licence stated; displayed with attribution only, not licensed for reuse). This data has been modified for use from its original source, www.springfieldmo.gov; the City makes no claims as to its content, accuracy, timeliness or completeness, and it is used at one's own risk | https://gisdata-cosmo.opendata.arcgis.com/datasets/705ae4c71b014910a0617ba5c7b25b98_34 |
 | Grand Junction | City of Grand Junction GIS and Parks Forestry - Trees (CC0 1.0) | https://www.arcgis.com/home/item.html?id=cef93c83233749eb9265914aca06b35c |
+| Seoul | Seoul Metropolitan Government - Seoul Street Tree Locations, Seoul Open Data Plaza OA-23040 (no restriction on use) | https://data.seoul.go.kr/dataList/OA-23040/F/1/datasetView.do |
+| York Region | Regional Municipality of York - Street Trees (York Region Open Data Licence) | https://insights-york.opendata.arcgis.com/datasets/york::street-trees |
+| Whitby | Town of Whitby - Trees (Open Government Licence - The Corporation of the Town of Whitby) | https://www.arcgis.com/home/item.html?id=5be6efcf4f264639874bf07009f155d2 |
+| Salem | City of Salem - City Trees (resale prohibited by the City; displayed with attribution only, not licensed for reuse) | https://www.arcgis.com/home/item.html?id=e5397978d59f46ec96f72a1dfc660919 |
 | Bendigo | City of Greater Bendigo - Environment - Trees (CC BY 2.5 AU) | https://data.gov.au/data/dataset/city-of-greater-bendigo-environment-trees |
 | Melbourne | Melbourne Open Data - Urban Forest Trees | https://data.melbourne.vic.gov.au/explore/dataset/trees-with-species-and-dimensions-urban-forest/ |
 | Melbourne (Port Phillip) | City of Port Phillip - Trees (CC BY 2.5 AU) | https://data.gov.au/data/dataset/city-of-port-phillip-trees |
 | Melbourne (Yarra) | City of Yarra - Street and Park Trees (CC BY 4.0) | https://data.gov.au/data/dataset/yarra-street-park-trees |
 | Melbourne (Glen Eira) | Glen Eira City Council - Park and Street Trees (CC BY 2.5 AU) | https://data.gov.au/data/dataset/park-and-street-trees |
 | Melbourne (Hobsons Bay) | Hobsons Bay City Council - Street and Park Trees (CC BY 2.5 AU) | https://data.gov.au/data/dataset/hbcc-street-and-park-trees |
+| Melbourne (Brimbank) | Brimbank City Council - Street Trees (data.gov.au, 2019, CC BY 2.5 AU) | https://data.gov.au/data/dataset/brimbank-street-trees |
+| Melbourne (Brimbank) | Brimbank City Council - Open Space Trees (data.gov.au, 2019, CC BY 2.5 AU) | https://data.gov.au/data/dataset/brimbank-open-space-trees |
+| Melbourne (Manningham) | Manningham City Council - Street Trees (data.gov.au, 2019, CC BY 3.0 AU) | https://data.gov.au/data/dataset/manningham-streettrees |
 | Adelaide | City of Adelaide - Street Trees (data.sa.gov.au, CC BY 4.0) | https://data.sa.gov.au/data/dataset/street-trees |
+| Adelaide (Unley) | City of Unley - Street Trees (ArcGIS; no licence stated; displayed with attribution only, not licensed for reuse) | https://www.arcgis.com/home/item.html?id=60272d3be3d34d7598a05f495fe347be |
+| Adelaide (Burnside) | City of Burnside - Burnside Street Trees (data.sa.gov.au, 2019, CC BY 4.0) | https://data.sa.gov.au/data/dataset/burnside-street-trees |
 | Perth | City of Perth - Trees in the City (ArcGIS, CC BY 4.0) | https://www.arcgis.com/home/item.html?id=c5ce51d9789a4e9a8510acb8c8f3ecf4 |
 | Ballarat | City of Ballarat Open Data - Trees (CC BY) | https://data.ballarat.vic.gov.au/explore/dataset/trees/ |
 | Ballarat (notable trees) | City of Ballarat Open Data - Exceptional Tree Register (CC BY 3.0 AU) | https://data.ballarat.vic.gov.au/explore/dataset/exceptional-tree-register/ |
 | Wodonga | City of Wodonga - Street and Reserve Trees (ArcGIS, CC BY 4.0) | https://www.arcgis.com/home/item.html?id=f6e5ca95559a4253bf7d25897bf8ed15 |
+| Wodonga (Albury) | Albury City Council - Trees (Public) (ArcGIS; no licence stated; displayed with attribution only, not licensed for reuse) | https://www.arcgis.com/home/item.html?id=605dc59091604f4b8aa99eaf56d71c3a |
 | Paris | Paris Open Data - Les Arbres | https://opendata.paris.fr/explore/dataset/les-arbres/ |
 | Buenos Aires | Buenos Aires Data - Arbolado publico lineal | https://data.buenosaires.gob.ar/dataset/arbolado-publico-lineal |
 | Athens | City of Athens Open Data - Trees of the National Garden | https://opendata.cityofathens.gr/dataset/gis-athens-8303d4c8-371b-11ec-b388-0242ac120009 |
@@ -532,6 +547,11 @@ Every tree row carries a `data_source` column identifying which of the above it 
 | Springfield | National Park Service - National Register of Historic Places | https://www.nps.gov/subjects/nationalregister/data-downloads.htm |
 | Grand Junction | City of Grand Junction - Historic Sites (CC0 1.0) | https://www.arcgis.com/home/item.html?id=474f2237f2c44e6bbe5b6588d7638a43 |
 | Grand Junction | National Park Service - National Register of Historic Places | https://www.nps.gov/subjects/nationalregister/data-downloads.htm |
+| Seoul | Seoul Metropolitan Government - Protected and Veteran Trees, Seoul Open Data Plaza OA-1323 (no restriction on use) | https://data.seoul.go.kr/dataList/OA-1323/S/1/datasetView.do |
+| York Region | Regional Municipality of York - Heritage Properties (no licence stated; displayed with attribution only, not licensed for reuse) | https://storymaps.arcgis.com/stories/b20c80927bea4b56896e535eb1bc9a45 |
+| Whitby | Town of Whitby - Parks and Open Spaces; Town Facilities (Open Government Licence - The Corporation of the Town of Whitby) | https://geohub-whitby.hub.arcgis.com/ |
+| Salem | City of Salem - Historic Buildings (resale prohibited by the City; displayed with attribution only, not licensed for reuse) | https://www.arcgis.com/home/item.html?id=a49aaabfe16945ad90053f340b2c96bf |
+| Salem | National Park Service - National Register of Historic Places | https://www.nps.gov/subjects/nationalregister/data-downloads.htm |
 | Bendigo | Heritage Victoria - Victorian Heritage Register via Vicmap (CC BY 4.0) | https://discover.data.vic.gov.au/dataset/victorian-heritage-register |
 | Sydney | Sydney LEP 2012 heritage items (NSW DPHI, CC BY) | https://data.nsw.gov.au/data/dataset/environmental-planning-instrument-heritage-her |
 | Eindhoven | Rijksdienst voor het Cultureel Erfgoed - Rijksmonumenten via PDOK (CC BY 4.0) | https://service.pdok.nl/rce/ps-ch/wfs/v1_0?request=GetCapabilities&service=WFS |

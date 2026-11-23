@@ -51,6 +51,14 @@ property <*>.usden_data_updated_through datetime; # when Denver data is through
 # community column with the staged OSM one and nothing else.
 property <*>.ustem_osm_data_updated_through datetime; # mtime of Tempe's committed OSM staging parquet
 property <*>.usbos_osm_data_updated_through datetime;
+property <*>.usslm_data_updated_through datetime; # when Salem data is through
+property <*>.usslm_osm_data_updated_through datetime; # GCS publication time of Salem's staged OSM parquet
+property <*>.cawhi_data_updated_through datetime; # when Whitby data is through
+property <*>.cawhi_osm_data_updated_through datetime; # GCS publication time of Whitby's staged OSM parquet
+property <*>.cayrk_data_updated_through datetime; # when York Region data is through
+property <*>.cayrk_osm_data_updated_through datetime; # GCS publication time of York Region's staged OSM parquet
+property <*>.krsel_data_updated_through datetime; # when Seoul data is through
+property <*>.krsel_osm_data_updated_through datetime; # GCS publication time of Seoul's staged OSM parquet
 property <*>.uspsl_data_updated_through datetime; # when Port St. Lucie data is through
 property <*>.uspsl_osm_data_updated_through datetime; # GCS publication time of Port St. Lucie's staged OSM parquet
 property <*>.usgjt_data_updated_through datetime; # when Grand Junction data is through
@@ -239,13 +247,13 @@ property <*>.atvie_data_updated_through datetime; # when Vienna data is through
 property <*>.atvie_osm_data_updated_through datetime; # GCS publication time of Vienna's staged OSM parquet
 property <*>.uscol_data_updated_through datetime; # when Columbus data is through
 property <*>.uscol_osm_data_updated_through datetime; # GCS publication time of Columbus's staged OSM parquet
-property <*>.auwod_data_updated_through datetime; # when Wodonga data is through
+# property <*>.auwod_data_updated_through datetime; # derived in auwod/wodonga_tree_info.preql from its two council inventories
 property <*>.auwod_osm_data_updated_through datetime; # GCS publication time of Wodonga's staged OSM parquet
 property <*>.aubal_data_updated_through datetime; # when Ballarat data is through
 property <*>.aubal_osm_data_updated_through datetime; # GCS publication time of Ballarat's staged OSM parquet
 property <*>.auper_data_updated_through datetime; # when Perth data is through
 property <*>.auper_osm_data_updated_through datetime; # GCS publication time of Perth's staged OSM parquet
-property <*>.auadl_data_updated_through datetime; # when Adelaide data is through
+# property <*>.auadl_data_updated_through datetime; # derived in auadl/adelaide_tree_info.preql from its three council inventories
 property <*>.auadl_osm_data_updated_through datetime; # GCS publication time of Adelaide's staged OSM parquet
 property <*>.usnpv_data_updated_through datetime; # when Naperville data is through
 property <*>.usnpv_osm_data_updated_through datetime; # GCS publication time of Naperville's staged OSM parquet
@@ -334,7 +342,7 @@ property <*>.cator_data_updated_through datetime; # when Toronto data is through
 property <*>.cator_osm_data_updated_through datetime; # GCS publication time of Toronto's staged OSM parquet
 property <*>.cawpg_data_updated_through datetime; # when Winnipeg data is through
 property <*>.cawpg_osm_data_updated_through datetime; # GCS publication time of Winnipeg's staged OSM parquet
-property <*>.caedm_data_updated_through datetime; # when Edmonton data is through
+# property <*>.caedm_data_updated_through datetime; # derived in caedm/edmonton_tree_info.preql from its two inventories
 property <*>.caedm_osm_data_updated_through datetime; # GCS publication time of Edmonton's staged OSM parquet
 property <*>.cacal_data_updated_through datetime; # when Calgary data is through
 property <*>.cacal_osm_data_updated_through datetime; # GCS publication time of Calgary's staged OSM parquet

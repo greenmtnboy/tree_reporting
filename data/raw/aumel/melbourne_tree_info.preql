@@ -7,13 +7,15 @@ property <*>.port_phillip_data_updated_through datetime; # when the City of Port
 property <*>.yarra_data_updated_through datetime; # when the City of Yarra's street and park trees resource on data.gov.au is through
 property <*>.glen_eira_data_updated_through datetime; # when Glen Eira's park and street trees resource on data.gov.au is through
 property <*>.hobsons_bay_data_updated_through datetime; # when Hobsons Bay's street and park trees resource on data.gov.au is through
+property <*>.brimbank_data_updated_through datetime; # when Brimbank's street and open-space trees resources on data.gov.au are through
+property <*>.manningham_data_updated_through datetime; # when Manningham's street trees resource on data.gov.au is through
 
 auto aumel_published_data_updated_through <- greatest(aumel_data_updated_through, aumel_community_data_updated_through, aumel_osm_data_updated_through);
-auto aumel_data_updated_through <- greatest(melbourne_city_data_updated_through, port_phillip_data_updated_through, yarra_data_updated_through, glen_eira_data_updated_through, hobsons_bay_data_updated_through);
+auto aumel_data_updated_through <- greatest(melbourne_city_data_updated_through, port_phillip_data_updated_through, yarra_data_updated_through, glen_eira_data_updated_through, hobsons_bay_data_updated_through, brimbank_data_updated_through, manningham_data_updated_through);
 
-# The City of Melbourne plus four inner-metropolitan councils inside AUMEL's
+# The City of Melbourne plus six metropolitan councils inside AUMEL's
 # territory, each its own municipal partition (the Boston metro pattern).
-key aumel_source enum<string>['MELBOURNE_OPENDATA', 'PORT_PHILLIP', 'YARRA', 'GLEN_EIRA', 'HOBSONS_BAY', 'COMMUNITY_AUMEL', 'OSM_AUMEL']; # originating dataset for the row
+key aumel_source enum<string>['MELBOURNE_OPENDATA', 'PORT_PHILLIP', 'YARRA', 'GLEN_EIRA', 'HOBSONS_BAY', 'BRIMBANK', 'MANNINGHAM', 'COMMUNITY_AUMEL', 'OSM_AUMEL']; # originating dataset for the row
 
 # Feed the shared cross-source merge (../tree_dedup.preql): it classifies rows
 # by the label's prefix and records provenance from it.
@@ -25,7 +27,7 @@ root datasource melbourne_update_time (
 )
 file `./melbourne_update_time.py`;
 
-# The four councils publish on data.gov.au's CKAN; each probe is the
+# The six councils publish on data.gov.au's CKAN; each probe is the
 # resource's data watermark (shared/platforms/ckan.py `data_last_modified`).
 root datasource port_phillip_update_time (
     data_updated_through: port_phillip_data_updated_through
@@ -46,6 +48,18 @@ root datasource hobsons_bay_update_time (
     data_updated_through: hobsons_bay_data_updated_through
 )
 file `./hobsons_bay_update_time.py`;
+
+# Brimbank's probe is the later of its two shapefile resources (street and
+# open-space trees), both read by one ingest.
+root datasource brimbank_update_time (
+    data_updated_through: brimbank_data_updated_through
+)
+file `./brimbank_update_time.py`;
+
+root datasource manningham_update_time (
+    data_updated_through: manningham_data_updated_through
+)
+file `./manningham_update_time.py`;
 
 # Only this city's column, so an approval elsewhere does not mark AUMEL's
 # Parquet stale. Trilogy probes this as MAX over the one column.
@@ -82,7 +96,7 @@ root partial datasource melbourne_raw_tree_info extends tree_partition (
 complete where city = 'AUMEL' and aumel_source = 'MELBOURNE_OPENDATA'
 file `./melbourne_tree_info.py`;
 
-# The four neighbouring councils.  Port Phillip and Yarra share boundary
+# The neighbouring councils.  Port Phillip and Yarra share boundary
 # streets with the City of Melbourne, so a tree on one of those can appear in
 # two inventories; the cross-source merge never joins two municipal rows, so
 # such a pair stays two rows.  Yarra and Hobsons Bay publish no crown spread
@@ -110,6 +124,22 @@ root partial datasource hobsons_bay_raw_tree_info extends tree_partition (
 )
 complete where city = 'AUMEL' and aumel_source = 'HOBSONS_BAY'
 file `./hobsons_bay_tree_info.py`;
+
+# Brimbank (west) and Manningham (east) publish no asset number, so their
+# ids are the tree's coordinate (shared/ingest.py `coordinate_tree_id`).
+# Neither shares a boundary with another wired council.  Manningham publishes
+# no crown spread (the column is emitted null).
+root partial datasource brimbank_raw_tree_info extends tree_partition (
+    data_source: aumel_source,
+)
+complete where city = 'AUMEL' and aumel_source = 'BRIMBANK'
+file `./brimbank_tree_info.py`;
+
+root partial datasource manningham_raw_tree_info extends tree_partition (
+    data_source: aumel_source,
+)
+complete where city = 'AUMEL' and aumel_source = 'MANNINGHAM'
+file `./manningham_tree_info.py`;
 
 
 # Approved community submissions for this city. The shared ingest script
@@ -163,6 +193,8 @@ auto aumel_border_rank <- case
     when aumel_source = 'YARRA' then 3
     when aumel_source = 'GLEN_EIRA' then 4
     when aumel_source = 'HOBSONS_BAY' then 5
+    when aumel_source = 'BRIMBANK' then 6
+    when aumel_source = 'MANNINGHAM' then 7
     else null
 end;
 auto aumel_raw_genus <- case
@@ -225,4 +257,6 @@ assert @source_kept(tree_id, aumel_source, 'PORT_PHILLIP', 0.75)
 assert @source_kept(tree_id, aumel_source, 'YARRA', 0.75)
 assert @source_kept(tree_id, aumel_source, 'GLEN_EIRA', 0.75)
 assert @source_kept(tree_id, aumel_source, 'HOBSONS_BAY', 0.75)
+assert @source_kept(tree_id, aumel_source, 'BRIMBANK', 0.75)
+assert @source_kept(tree_id, aumel_source, 'MANNINGHAM', 0.75)
 assert @source_kept(tree_id, aumel_source, 'OSM_AUMEL', 0.75);

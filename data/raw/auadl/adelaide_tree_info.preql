@@ -2,9 +2,16 @@ import ..tree_common;
 import ..community_tree_info;
 import ..tree_dedup;
 
-auto auadl_published_data_updated_through <- greatest(auadl_data_updated_through, auadl_community_data_updated_through, auadl_osm_data_updated_through);
+property <*>.adelaide_city_data_updated_through datetime; # when the City of Adelaide's street-tree CSV is through
+property <*>.unley_data_updated_through datetime; # when the City of Unley's Street Trees layer is through
+property <*>.burnside_data_updated_through datetime; # when the City of Burnside's street-trees resource on data.sa.gov.au is through
 
-key auadl_source enum<string>['ADELAIDE_OPENDATA', 'COMMUNITY_AUADL', 'OSM_AUADL']; # originating dataset for the row
+auto auadl_published_data_updated_through <- greatest(auadl_data_updated_through, auadl_community_data_updated_through, auadl_osm_data_updated_through);
+auto auadl_data_updated_through <- greatest(adelaide_city_data_updated_through, unley_data_updated_through, burnside_data_updated_through);
+
+# The City of Adelaide plus two neighbouring councils inside AUADL's
+# territory, each its own municipal partition (the Melbourne pattern).
+key auadl_source enum<string>['ADELAIDE_OPENDATA', 'UNLEY', 'BURNSIDE', 'COMMUNITY_AUADL', 'OSM_AUADL']; # originating dataset for the row
 
 # Feed the shared cross-source merge (../tree_dedup.preql): it classifies rows
 # by the label's prefix and records provenance from it.
@@ -12,9 +19,22 @@ auto auadl_source_label <- concat(auadl_source, '');
 merge auadl_source_label into source_label;
 
 root datasource adelaide_update_time (
-    data_updated_through: auadl_data_updated_through
+    data_updated_through: adelaide_city_data_updated_through
 )
 file `./adelaide_update_time.py`;
+
+# Unley's probe is its ArcGIS layer's own dataLastEditDate; Burnside's is the
+# data.sa.gov.au resource's data watermark (shared/platforms/ckan.py
+# `data_last_modified`).
+root datasource unley_update_time (
+    data_updated_through: unley_data_updated_through
+)
+file `./unley_update_time.py`;
+
+root datasource burnside_update_time (
+    data_updated_through: burnside_data_updated_through
+)
+file `./burnside_update_time.py`;
 
 # Only this city's column, so an approval elsewhere does not mark AUADL's
 # Parquet stale. Trilogy probes this as MAX over the one column.
@@ -40,6 +60,24 @@ root partial datasource adelaide_raw_tree_info extends tree_partition (
 complete where city = 'AUADL' and auadl_source = 'ADELAIDE_OPENDATA'
 file `./adelaide_tree_info.py`;
 
+# The two neighbouring councils.  Unley shares Greenhill Road and the south
+# Park Lands' edge with the City of Adelaide and Burnside shares Greenhill
+# Road with Unley, so a boundary-street tree can appear in two inventories;
+# the cross-source merge never joins two municipal rows, so such a pair stays
+# two rows.  Burnside publishes no crown spread (the template binds it; the
+# column is emitted null).
+root partial datasource unley_raw_tree_info extends tree_partition (
+    data_source: auadl_source,
+)
+complete where city = 'AUADL' and auadl_source = 'UNLEY'
+file `./unley_tree_info.py`;
+
+root partial datasource burnside_raw_tree_info extends tree_partition (
+    data_source: auadl_source,
+)
+complete where city = 'AUADL' and auadl_source = 'BURNSIDE'
+file `./burnside_tree_info.py`;
+
 
 # Approved community submissions for this city. The shared ingest script emits
 # every city's rows; the `complete where` clause narrows it to AUADL and makes
@@ -63,7 +101,7 @@ root partial datasource auadl_osm_tree_info extends tree_partition (
 )
 complete where city = 'AUADL' and auadl_source = 'OSM_AUADL'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/auadl_osm_staging.parquet`
-where (raw_latitude >= -34.96 and raw_latitude < -34.88 and raw_longitude >= 138.56 and raw_longitude < 138.64);
+where (raw_latitude >= -34.98 and raw_latitude < -34.88 and raw_longitude >= 138.56 and raw_longitude < 138.71);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------
@@ -92,4 +130,6 @@ complete where city = 'AUADL'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/auadl_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/auadl_tree_info_v{data_version}.parquet`
 freshness by auadl_published_data_updated_through
 assert @source_kept(tree_id, auadl_source, 'ADELAIDE_OPENDATA', 0.75)
+assert @source_kept(tree_id, auadl_source, 'UNLEY', 0.75)
+assert @source_kept(tree_id, auadl_source, 'BURNSIDE', 0.75)
 assert @source_kept(tree_id, auadl_source, 'OSM_AUADL', 0.75);

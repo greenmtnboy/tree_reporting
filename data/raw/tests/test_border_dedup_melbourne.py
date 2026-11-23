@@ -97,7 +97,8 @@ def published(tmp_path_factory) -> dict[str, dict]:
     conn = duckdb.connect()
     scripts = [
         "melbourne_tree_info.py", "port_phillip_tree_info.py", "yarra_tree_info.py",
-        "glen_eira_tree_info.py", "hobsons_bay_tree_info.py", "community_tree_info.py",
+        "glen_eira_tree_info.py", "hobsons_bay_tree_info.py", "brimbank_tree_info.py",
+        "manningham_tree_info.py", "community_tree_info.py",
         "aumel_osm_staging.parquet",
     ]
     fixtures = {}

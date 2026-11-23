@@ -932,6 +932,30 @@ const CITY_DASHBOARD_CONTEXT: Record<
     biome: 'Temperate Grasslands, Savannas & Shrublands',
     realm: 'nearctic',
   },
+  KRSEL: {
+    ecoregionId: 655, // Central Korean deciduous forests
+    usdaZone: 7,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'palearctic',
+  },
+  CAYRK: {
+    ecoregionId: 334, // Eastern Great Lakes lowland forests
+    usdaZone: 5,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'nearctic',
+  },
+  CAWHI: {
+    ecoregionId: 334, // Eastern Great Lakes lowland forests
+    usdaZone: 6,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'nearctic',
+  },
+  USSLM: {
+    ecoregionId: 403, // Willamette Valley oak savanna
+    usdaZone: 8,
+    biome: 'Temperate Grasslands, Savannas & Shrublands',
+    realm: 'nearctic',
+  },
 }
 
 function escapeStringLiteral(value: string) {

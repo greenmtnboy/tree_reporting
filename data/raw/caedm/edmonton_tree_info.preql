@@ -2,9 +2,16 @@ import ..tree_common;
 import ..community_tree_info;
 import ..tree_dedup;
 
-auto caedm_published_data_updated_through <- greatest(caedm_data_updated_through, caedm_community_data_updated_through, caedm_osm_data_updated_through);
+property <*>.edmonton_city_data_updated_through datetime; # when the City of Edmonton's Trees dataset is through
+property <*>.st_albert_data_updated_through datetime; # when the City of St. Albert's Tree Inventory layer is through
 
-key caedm_source enum<string>['EDMONTON_OPENDATA', 'COMMUNITY_CAEDM', 'OSM_CAEDM']; # originating dataset for the row
+auto caedm_published_data_updated_through <- greatest(caedm_data_updated_through, caedm_community_data_updated_through, caedm_osm_data_updated_through);
+auto caedm_data_updated_through <- greatest(edmonton_city_data_updated_through, st_albert_data_updated_through);
+
+# The City of Edmonton plus the City of St. Albert, its neighbour to the
+# north-west inside CAEDM's territory, each its own municipal partition (the
+# Melbourne councils' pattern).
+key caedm_source enum<string>['EDMONTON_OPENDATA', 'ST_ALBERT', 'COMMUNITY_CAEDM', 'OSM_CAEDM']; # originating dataset for the row
 
 # Feed the shared cross-source merge (../tree_dedup.preql): it classifies rows
 # by the label's prefix and records provenance from it.
@@ -12,9 +19,15 @@ auto caedm_source_label <- concat(caedm_source, '');
 merge caedm_source_label into source_label;
 
 root datasource edmonton_update_time (
-    data_updated_through: caedm_data_updated_through
+    data_updated_through: edmonton_city_data_updated_through
 )
 file `./edmonton_update_time.py`;
+
+# St. Albert's hosted layer: its editingInfo.dataLastEditDate.
+root datasource st_albert_update_time (
+    data_updated_through: st_albert_data_updated_through
+)
+file `./st_albert_update_time.py`;
 
 # Only this city's column, so an approval elsewhere does not mark CAEDM's
 # Parquet stale. Trilogy probes this as MAX over the one column.
@@ -36,6 +49,16 @@ root partial datasource edmonton_raw_tree_info extends tree_partition (
 )
 complete where city = 'CAEDM' and caedm_source = 'EDMONTON_OPENDATA'
 file `./edmonton_tree_info.py`;
+
+# The City of St. Albert.  Edmonton's inventory stops at the city line, so a
+# shared tree is at most a boundary-street one; the cross-source merge never
+# joins two municipal rows.  St. Albert publishes no diameter (the column is
+# emitted null).
+root partial datasource st_albert_raw_tree_info extends tree_partition (
+    data_source: caedm_source,
+)
+complete where city = 'CAEDM' and caedm_source = 'ST_ALBERT'
+file `./st_albert_tree_info.py`;
 
 
 # Approved community submissions for this city. The shared ingest script emits
@@ -82,4 +105,5 @@ complete where city = 'CAEDM'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/caedm_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/caedm_tree_info_v{data_version}.parquet`
 freshness by caedm_published_data_updated_through
 assert @source_kept(tree_id, caedm_source, 'EDMONTON_OPENDATA', 0.75)
+assert @source_kept(tree_id, caedm_source, 'ST_ALBERT', 0.75)
 assert @source_kept(tree_id, caedm_source, 'OSM_CAEDM', 0.75);

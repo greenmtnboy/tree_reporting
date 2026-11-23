@@ -58,7 +58,21 @@ root partial datasource caajx_osm_tree_info extends tree_partition (
 )
 complete where city = 'CAAJX' and caajx_source = 'OSM_CAAJX'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/caajx_osm_staging.parquet`
-where (raw_latitude >= 43.78 and raw_latitude < 43.95 and raw_longitude >= -79.1 and raw_longitude < -78.93);
+where (raw_latitude >= 43.78 and raw_latitude < 43.81 and raw_longitude >= -79.1 and raw_longitude < -78.93)
+    or (raw_latitude >= 43.81 and raw_latitude < 43.82 and raw_longitude >= -79.1 and raw_longitude < -78.966)
+    or (raw_latitude >= 43.82 and raw_latitude < 43.83 and raw_longitude >= -79.1 and raw_longitude < -78.969)
+    or (raw_latitude >= 43.83 and raw_latitude < 43.84 and raw_longitude >= -79.1 and raw_longitude < -78.974)
+    or (raw_latitude >= 43.84 and raw_latitude < 43.85 and raw_longitude >= -79.1 and raw_longitude < -78.978)
+    or (raw_latitude >= 43.85 and raw_latitude < 43.86 and raw_longitude >= -79.1 and raw_longitude < -78.982)
+    or (raw_latitude >= 43.86 and raw_latitude < 43.87 and raw_longitude >= -79.1 and raw_longitude < -78.986)
+    or (raw_latitude >= 43.87 and raw_latitude < 43.88 and raw_longitude >= -79.1 and raw_longitude < -78.991)
+    or (raw_latitude >= 43.88 and raw_latitude < 43.89 and raw_longitude >= -79.1 and raw_longitude < -78.995)
+    or (raw_latitude >= 43.89 and raw_latitude < 43.9 and raw_longitude >= -79.1 and raw_longitude < -78.999)
+    or (raw_latitude >= 43.9 and raw_latitude < 43.91 and raw_longitude >= -79.1 and raw_longitude < -79.003)
+    or (raw_latitude >= 43.91 and raw_latitude < 43.92 and raw_longitude >= -79.1 and raw_longitude < -79.007)
+    or (raw_latitude >= 43.92 and raw_latitude < 43.93 and raw_longitude >= -79.1 and raw_longitude < -79.012)
+    or (raw_latitude >= 43.93 and raw_latitude < 43.94 and raw_longitude >= -79.1 and raw_longitude < -79.017)
+    or (raw_latitude >= 43.94 and raw_latitude < 43.95 and raw_longitude >= -79.1 and raw_longitude < -79.021);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------
