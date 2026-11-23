@@ -145,7 +145,7 @@
   "SGSIN": { "name": "Singapore", "center": [103.8198, 1.3521] },
   "USBTR": { "name": "Baton Rouge", "center": [-91.1403, 30.4515] },
   "USLAN": { "name": "Lansing", "center": [-84.5555, 42.7325] },
-  "USSLM": { "name": "Salem", "center": [-123.0351, 44.9429] },
+  "USMSO": { "name": "Missoula", "center": [-113.994, 46.8721] },
   "USBIS": { "name": "Bismarck", "center": [-100.7837, 46.8083] },
   "USSPF": { "name": "Springfield", "center": [-93.2923, 37.209] },
   "USBOI": { "name": "Boise", "center": [-116.2023, 43.615] },

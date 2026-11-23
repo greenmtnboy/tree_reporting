@@ -104,7 +104,7 @@ OSM_CITY_NAMES: dict[str, str] = {
     "USBOI": "Boise",
     "USSPF": "Springfield",
     "USBIS": "Bismarck",
-    "USSLM": "Salem",
+    "USMSO": "Missoula",
     "USLAN": "Lansing",
     "USBTR": "Baton Rouge",
     "SGSIN": "Singapore",

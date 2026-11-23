@@ -170,7 +170,7 @@ select * from (values
     ('SGSIN', 265),
     ('USBTR', 399),
     ('USLAN', 342),
-    ('USSLM', 403),
+    ('USMSO', 394),
     ('USBIS', 396),
     ('USSPF', 340),
     ('USBOI', 434),

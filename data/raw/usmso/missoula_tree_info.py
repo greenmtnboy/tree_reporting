@@ -3,7 +3,7 @@
 # requires-python = ">=3.13"
 # dependencies = ["pyarrow", "requests", "pytrilogy"]
 # ///
-"""Salem's municipal tree inventory.  STUB -- fill in the field mapping.
+"""Missoula's municipal tree inventory.  STUB -- fill in the field mapping.
 
 Emit one Arrow IPC stream on stdout with the canonical tree schema.  The parts
 that are not optional:
@@ -44,7 +44,7 @@ SOURCE_URL = "TODO: the portal endpoint this city publishes"
 
 def iter_row_chunks():
     """Yield lists of source records, one page at a time."""
-    raise NotImplementedError("TODO: page Salem's portal")
+    raise NotImplementedError("TODO: page Missoula's portal")
 
 
 def transform(rows: list[dict]) -> pa.Table:
@@ -56,11 +56,11 @@ def transform(rows: list[dict]) -> pa.Table:
     dbh: list[float | None] = []
 
     for rec in rows:
-        raise NotImplementedError("TODO: map Salem's fields")
+        raise NotImplementedError("TODO: map Missoula's fields")
 
     return pa.table({
         "tree_id": pa.array(tree_id, type=pa.string()),
-        "city": pa.array(["USSLM"] * len(tree_id), type=pa.string()),
+        "city": pa.array(["USMSO"] * len(tree_id), type=pa.string()),
         "species": pa.array(species, type=pa.string()),
         "plant_date": pa.array(plant_date, type=pa.date32()),
         "latitude": pa.array(latitude, type=pa.float64()),
@@ -70,9 +70,9 @@ def transform(rows: list[dict]) -> pa.Table:
 
 
 if __name__ == "__main__":
-    table = stream_to_table(iter_row_chunks(), transform, label="Salem OpenData")
-    table = validate_coordinates(table, city="Salem", city_code="USSLM")
+    table = stream_to_table(iter_row_chunks(), transform, label="Missoula OpenData")
+    table = validate_coordinates(table, city="Missoula", city_code="USMSO")
     table = enforce_tree_schema(
-        table, city="Salem", data_source="SALEM_OPENDATA"
+        table, city="Missoula", data_source="MISSOULA_OPENDATA"
     )
     emit(table)

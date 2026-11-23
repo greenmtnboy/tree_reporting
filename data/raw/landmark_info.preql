@@ -154,7 +154,7 @@ import esbcn.barcelona_landmarks;
 import sgsin.singapore_landmarks;
 import usbtr.batonrouge_landmarks;
 import uslan.lansing_landmarks;
-import usslm.salem_landmarks;
+import usmso.missoula_landmarks;
 import usbis.bismarck_landmarks;
 import usspf.springfield_landmarks;
 import usboi.boise_landmarks;

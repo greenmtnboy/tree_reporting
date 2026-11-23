@@ -3609,9 +3609,9 @@ timeout_seconds = 1800
 memory_mb = 2048
 
 [[cloud.job]]
-key = "derived-usslm"
-name = "urban-tree-derived-usslm"
-entrypoint = "raw/usslm/salem_tree_derived.preql"
+key = "derived-usmso"
+name = "urban-tree-derived-usmso"
+entrypoint = "raw/usmso/missoula_tree_derived.preql"
 operation = "refresh"
 schedule = "0 0 12 * * SUN,WED"
 timeout_seconds = 1800
@@ -6905,20 +6905,20 @@ timeout_seconds = 900
 memory_mb = 2048
 
 [[cloud.job]]
-key = "city-usslm"
-name = "urban-tree-city-usslm"
-entrypoint = "raw/usslm/salem_tree_info.preql"
+key = "city-usmso"
+name = "urban-tree-city-usmso"
+entrypoint = "raw/usmso/missoula_tree_info.preql"
 operation = "refresh"
 # Starts in the twice-weekly tier, placed the day after this city's OSM
-# extract. Measure before moving it: `portal_cadence.py --record --city USSLM`.
+# extract. Measure before moving it: `portal_cadence.py --record --city USMSO`.
 schedule = "0 0 12 * * SUN,WED"
 timeout_seconds = 1800
 memory_mb = 2048
 
 [[cloud.job]]
-key = "osm-usslm"
-name = "urban-tree-osm-usslm"
-entrypoint = "osm_staging/usslm_osm_staging.preql"
+key = "osm-usmso"
+name = "urban-tree-osm-usmso"
+entrypoint = "osm_staging/usmso_osm_staging.preql"
 operation = "refresh"
 # Overpass allows two slots per client IP and answers an over-budget request
 # with HTTP 200 carrying an error remark, so a collision looks like a city with
@@ -6928,9 +6928,9 @@ timeout_seconds = 1800
 memory_mb = 1024
 
 [[cloud.job]]
-key = "refresh-landmarks-usslm"
-name = "urban-tree-landmarks-refresh-usslm"
-entrypoint = "raw/usslm/salem_landmarks.preql"
+key = "refresh-landmarks-usmso"
+name = "urban-tree-landmarks-refresh-usmso"
+entrypoint = "raw/usmso/missoula_landmarks.preql"
 operation = "refresh"
 # The next free two-minute Sunday slot; every one must land before the 05:00
 # union (tests/test_cloud_jobs.py).

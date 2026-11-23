@@ -61,8 +61,8 @@ property <*>.usspf_data_updated_through datetime; # when Springfield data is thr
 property <*>.usspf_osm_data_updated_through datetime; # GCS publication time of Springfield's staged OSM parquet
 property <*>.usbis_data_updated_through datetime; # when Bismarck data is through
 property <*>.usbis_osm_data_updated_through datetime; # GCS publication time of Bismarck's staged OSM parquet
-property <*>.usslm_data_updated_through datetime; # when Salem data is through
-property <*>.usslm_osm_data_updated_through datetime; # GCS publication time of Salem's staged OSM parquet
+property <*>.usmso_data_updated_through datetime; # when Missoula data is through
+property <*>.usmso_osm_data_updated_through datetime; # GCS publication time of Missoula's staged OSM parquet
 property <*>.uslan_data_updated_through datetime; # when Lansing data is through
 property <*>.uslan_osm_data_updated_through datetime; # GCS publication time of Lansing's staged OSM parquet
 property <*>.usbtr_data_updated_through datetime; # when Baton Rouge data is through

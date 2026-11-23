@@ -15,7 +15,7 @@ export const DATA_SOURCE_LABELS: Record<string, string> = {
   BOISE_OPENDATA: 'Boise Open Data',
   SPRINGFIELD_MO_OPENDATA: 'Springfield Open Data',
   BISMARCK_OPENDATA: 'Bismarck Open Data',
-  SALEM_OPENDATA: 'Salem Open Data',
+  MISSOULA_OPENDATA: 'Missoula Open Data',
   LANSING_OPENDATA: 'Lansing Open Data',
   BATON_ROUGE_OPENDATA: 'Baton Rouge Open Data',
   SINGAPORE_NPARKS: 'Singapore Open Data',

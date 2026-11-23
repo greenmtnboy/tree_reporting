@@ -2,55 +2,55 @@ import ..tree_common;
 import ..community_tree_info;
 import ..tree_dedup;
 
-auto usslm_published_data_updated_through <- greatest(usslm_data_updated_through, usslm_community_data_updated_through, usslm_osm_data_updated_through);
+auto usmso_published_data_updated_through <- greatest(usmso_data_updated_through, usmso_community_data_updated_through, usmso_osm_data_updated_through);
 
-key usslm_source enum<string>['SALEM_OPENDATA', 'COMMUNITY_USSLM', 'OSM_USSLM']; # originating dataset for the row
+key usmso_source enum<string>['MISSOULA_OPENDATA', 'COMMUNITY_USMSO', 'OSM_USMSO']; # originating dataset for the row
 
 # Feed the shared cross-source merge (../tree_dedup.preql): it classifies rows
 # by the label's prefix and records provenance from it.
-auto usslm_source_label <- concat(usslm_source, '');
-merge usslm_source_label into source_label;
+auto usmso_source_label <- concat(usmso_source, '');
+merge usmso_source_label into source_label;
 
-root datasource salem_update_time (
-    data_updated_through: usslm_data_updated_through
+root datasource missoula_update_time (
+    data_updated_through: usmso_data_updated_through
 )
-file `./salem_update_time.py`;
+file `./missoula_update_time.py`;
 
-# Only this city's column, so an approval elsewhere does not mark USSLM's
+# Only this city's column, so an approval elsewhere does not mark USMSO's
 # Parquet stale. Trilogy probes this as MAX over the one column.
-root datasource usslm_community_update_time (
-    usslm_community_data_updated_through: usslm_community_data_updated_through
+root datasource usmso_community_update_time (
+    usmso_community_data_updated_through: usmso_community_data_updated_through
 )
 file `../community_update_time.py`;
 
 # GCS publication time of the staged OSM parquet; it only moves when an
 # extraction is re-run and uploaded. Not a local mtime -- git does not preserve
 # it, so a committed staging file makes every fresh clone look like new data.
-root datasource usslm_osm_update_time (
-    data_updated_through: usslm_osm_data_updated_through
+root datasource usmso_osm_update_time (
+    data_updated_through: usmso_osm_data_updated_through
 )
-file `./salem_osm_probe.py`;
+file `./missoula_osm_probe.py`;
 
 # Every partition extends ../tree_dedup.preql's `tree_partition`, which maps
 # the shared raw_* columns; a source that names a column differently re-binds
 # it here (`dbh: ?raw_dbh`).
-root partial datasource salem_raw_tree_info extends tree_partition (
-    data_source: usslm_source,
+root partial datasource missoula_raw_tree_info extends tree_partition (
+    data_source: usmso_source,
 )
-complete where city = 'USSLM' and usslm_source = 'SALEM_OPENDATA'
-file `./salem_tree_info.py`;
+complete where city = 'USMSO' and usmso_source = 'MISSOULA_OPENDATA'
+file `./missoula_tree_info.py`;
 
 
 # Approved community submissions for this city. The shared ingest script emits
-# every city's rows; the `complete where` clause narrows it to USSLM and makes
+# every city's rows; the `complete where` clause narrows it to USMSO and makes
 # it a disjoint partition, and the `where` clause is what actually filters --
 # `complete where` asserts, it does not promise a predicate.
-root partial datasource usslm_community_tree_info extends tree_partition (
-    data_source: usslm_source,
+root partial datasource usmso_community_tree_info extends tree_partition (
+    data_source: usmso_source,
 )
-complete where city = 'USSLM' and usslm_source = 'COMMUNITY_USSLM'
+complete where city = 'USMSO' and usmso_source = 'COMMUNITY_USMSO'
 file `../community_tree_info.py`
-where city = 'USSLM';
+where city = 'USMSO';
 
 
 # OpenStreetMap trees, read from the staged parquet in GCS rather than Overpass
@@ -58,12 +58,12 @@ where city = 'USSLM';
 # by construction; the overlap is resolved by ../tree_dedup.preql. The `where`
 # is the city's CITY_TERRITORY (tools/sync_osm_territory.py keeps it so): a
 # staged extract keeps the territory it was cut with until its next firing.
-root partial datasource usslm_osm_tree_info extends tree_partition (
-    data_source: usslm_source,
+root partial datasource usmso_osm_tree_info extends tree_partition (
+    data_source: usmso_source,
 )
-complete where city = 'USSLM' and usslm_source = 'OSM_USSLM'
-file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usslm_osm_staging.parquet`
-where (raw_latitude >= 44.83 and raw_latitude < 45.03 and raw_longitude >= -123.14 and raw_longitude < -122.92);
+complete where city = 'USMSO' and usmso_source = 'OSM_USMSO'
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usmso_osm_staging.parquet`
+where (raw_latitude >= 46.78 and raw_latitude < 46.97 and raw_longitude >= -114.15 and raw_longitude < -113.89);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------
@@ -84,12 +84,12 @@ merge merged_longitude into longitude;
 # lost a quarter of the city.  The two `@source_kept` lines are the same guard
 # per bulk source; add one for every municipal or OSM label in the enum
 # (`test_every_city_refuses_a_collapsed_build`).
-partial datasource salem_tree_info extends published_tree_info (
-    data_source: usslm_source,
-    usslm_published_data_updated_through,
+partial datasource missoula_tree_info extends published_tree_info (
+    data_source: usmso_source,
+    usmso_published_data_updated_through,
 )
-complete where city = 'USSLM'
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usslm_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usslm_tree_info_v{data_version}.parquet`
-freshness by usslm_published_data_updated_through
-assert @source_kept(tree_id, usslm_source, 'SALEM_OPENDATA', 0.75)
-assert @source_kept(tree_id, usslm_source, 'OSM_USSLM', 0.75);
+complete where city = 'USMSO'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usmso_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usmso_tree_info_v{data_version}.parquet`
+freshness by usmso_published_data_updated_through
+assert @source_kept(tree_id, usmso_source, 'MISSOULA_OPENDATA', 0.75)
+assert @source_kept(tree_id, usmso_source, 'OSM_USMSO', 0.75);

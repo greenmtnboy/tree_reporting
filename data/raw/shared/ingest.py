@@ -2222,7 +2222,7 @@ MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
     "USBOI": ("BOISE_OPENDATA",),
     "USSPF": ("SPRINGFIELD_MO_OPENDATA",),
     "USBIS": ("BISMARCK_OPENDATA",),
-    "USSLM": ("SALEM_OPENDATA",),
+    "USMSO": ("MISSOULA_OPENDATA",),
     "USLAN": ("LANSING_OPENDATA",),
     "USBTR": ("BATON_ROUGE_OPENDATA",),
     "SGSIN": ("SINGAPORE_NPARKS",),
@@ -2406,7 +2406,7 @@ OSM_DATA_SOURCES: dict[str, str] = {
     "USBOI": "OSM_USBOI",
     "USSPF": "OSM_USSPF",
     "USBIS": "OSM_USBIS",
-    "USSLM": "OSM_USSLM",
+    "USMSO": "OSM_USMSO",
     "USLAN": "OSM_USLAN",
     "USBTR": "OSM_USBTR",
     "SGSIN": "OSM_SGSIN",
@@ -3169,7 +3169,7 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
     "USBOI": (43.53, 43.7, -116.37, -116.08),
     "USSPF": (37.08, 37.28, -93.44, -93.18),
     "USBIS": (46.72, 46.89, -100.85, -100.68),
-    "USSLM": (44.83, 45.03, -123.14, -122.92),
+    "USMSO": (46.78, 46.97, -114.15, -113.89),
     "USLAN": (42.63, 42.8, -84.64, -84.47),
     "USBTR": (30.22, 30.58, -91.27, -90.84),
     "SGSIN": (1.15, 1.48, 103.59, 104.1),
@@ -3384,7 +3384,7 @@ DEDUP_CELL_METRES: dict[str, int] = {
     # NOT YET CALIBRATED: default; measure after the first build.
     "USBIS": 10,
     # NOT YET CALIBRATED: default; measure after the first build.
-    "USSLM": 10,
+    "USMSO": 10,
     # NOT YET CALIBRATED: default; measure after the first build.
     "USLAN": 10,
     # NOT YET CALIBRATED: default; measure after the first build.
@@ -4065,7 +4065,7 @@ CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
     'USBOI': ((43.53, 43.7, -116.37, -116.08),),
     'USSPF': ((37.08, 37.28, -93.44, -93.18),),
     'USBIS': ((46.72, 46.89, -100.85, -100.68),),
-    'USSLM': ((44.83, 45.03, -123.14, -122.92),),
+    'USMSO': ((46.78, 46.97, -114.15, -113.89),),
     'USLAN': ((42.63, 42.8, -84.64, -84.47),),
     'USBTR': ((30.22, 30.58, -91.27, -90.84),),
     # Singapore's shore, not the scaffold box: the box also held Johor Bahru's

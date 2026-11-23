@@ -381,8 +381,8 @@ const CITY_DASHBOARD_CONTEXT: Record<
     realm: 'palearctic',
   },
   USEUG: {
-    ecoregionId: 403, // Willamette Valley oak savanna
-    usdaZone: 8,
+    ecoregionId: 394, // Montana Valley and Foothill grasslands
+    usdaZone: 5,
     biome: 'Temperate Grasslands, Savannas & Shrublands',
     realm: 'nearctic',
   },
@@ -411,8 +411,8 @@ const CITY_DASHBOARD_CONTEXT: Record<
     realm: 'nearctic',
   },
   USPOR: {
-    ecoregionId: 403, // Willamette Valley oak savanna
-    usdaZone: 8,
+    ecoregionId: 394, // Montana Valley and Foothill grasslands
+    usdaZone: 5,
     biome: 'Temperate Grasslands, Savannas & Shrublands',
     realm: 'nearctic',
   },
@@ -896,9 +896,9 @@ const CITY_DASHBOARD_CONTEXT: Record<
     biome: 'Temperate Broadleaf & Mixed Forests',
     realm: 'nearctic',
   },
-  USSLM: {
-    ecoregionId: 403, // Willamette Valley oak savanna
-    usdaZone: 8,
+  USMSO: {
+    ecoregionId: 394, // Montana Valley and Foothill grasslands
+    usdaZone: 5,
     biome: 'Temperate Grasslands, Savannas & Shrublands',
     realm: 'nearctic',
   },

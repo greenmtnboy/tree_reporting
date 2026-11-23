@@ -3,9 +3,9 @@
 # requires-python = ">=3.13"
 # dependencies = ["pyarrow", "requests", "pytrilogy"]
 # ///
-"""Freshness probe for Salem's OSM staging parquet.
+"""Freshness probe for Missoula's OSM staging parquet.
 
-Emits the GCS publication time of usslm_osm_staging.parquet, which only moves
+Emits the GCS publication time of usmso_osm_staging.parquet, which only moves
 when an extraction is republished -- that is the moment the city's Parquet
 becomes stale.  Never Overpass's own `osm_base` timestamp: it advances every
 minute and would rebuild the city on every tick.  A missing object emits the
@@ -19,7 +19,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from shared.ingest import emit_freshness, staging_modified_at
 
-STAGING_NAME = "usslm_osm_staging.parquet"
+STAGING_NAME = "usmso_osm_staging.parquet"
 
 
 def modified_at() -> datetime:
@@ -27,4 +27,4 @@ def modified_at() -> datetime:
 
 
 if __name__ == "__main__":
-    emit_freshness("USSLM", modified_at, label="USSLM OSM staging")
+    emit_freshness("USMSO", modified_at, label="USMSO OSM staging")
