@@ -9,7 +9,9 @@ gives written permission, and the row should say which.
 A source with **no licence stated** is not a reason to skip it: wire it and
 label it display-only (EXTENDING.md, step 10-11). Only an explicit
 prohibition (no redistribution, written consent required, all reuse
-forbidden) belongs under "Licence".
+forbidden) belongs under "Licence". A ban on resale ("copying and selling
+the data is prohibited"), or a licence line that mentions restrictions
+without stating them, is not one: free display is not selling.
 
 ## Licence
 
@@ -18,7 +20,6 @@ forbidden) belongs under "Licence".
 | Hutt City Council (Lower Hutt, NZ) street trees, ArcGIS item `237eb7c547e44b4eac64a64a02474daf` | NZLHT | 2026-11-21 | The council's open-data hub terms forbid republishing without the council's written consent. The ingest was written and then removed (batch 13, PR #266). | Written consent from Hutt City Council, or a CC BY release. |
 | Sheffield City Council street trees, ArcGIS item `7b2df397e9994ca5984bad0b679ce6d9` | GBSHF | 2026-11-19 | The layer is under the OS INSPIRE End User Licence, which forbids redistribution. data.gov.uk lists OGL, but the council's own item is the stricter one. | Written permission from the council and Ordnance Survey. |
 | City of Peterborough (ON) tree inventory, ArcGIS item `b5c84f53b4414d539bca94ba3383292c` | CAPBO | 2026-11-22 | The City's Open Data Terms of Use (data-ptbo.opendata.arcgis.com/pages/terms-of-use) license only "the unmodified Open Datasets", and redistribution requires giving each recipient the terms and obtaining "the recipient's agreement to abide by them"; all other rights reserved. A public map changes the data and cannot collect visitors' agreement. The ingest was written and removed (batch 14); its live MapServer `citymaps.peterborough.ca/.../TreesExternal/MapServer/1` (33k rows with DBH) states no licence but is outside the open-data catalogue. | An open licence (OGL-style) from the City, or written permission. |
-| City of Salem (OR) tree inventory, ArcGIS item `e5397978d59f46ec96f72a1dfc660919` (`CityTrees/FeatureServer/0`) | | 2026-11-22 | The DataSalem Terms of Use (data.cityofsalem.net/pages/disclaimer) say "Development of derivative products is encouraged however copying and selling the data is prohibited", and the item's licence text says "further distribution or resale is governed by licensing restrictions". Publishing the table as a public parquet is copying it. Scaffolded as USSLM and replaced by Missoula before any ingest was written (batch 16). | An open licence from the City (gis@cityofsalem.net), or written permission. |
 | Victorian Heritage Database API (api.heritagecouncil.vic.gov.au), landmarks | | 2026-11-21 | Terms forbid reproduction without written permission. Victorian cities use the Vicmap VHR layer (CC BY 4.0) instead. | Not needed while Vicmap VHR is available. |
 
 ## Not an official or usable inventory
