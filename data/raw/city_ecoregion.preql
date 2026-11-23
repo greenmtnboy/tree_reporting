@@ -175,6 +175,10 @@ select * from (values
     ('USSPF', 340),
     ('USBOI', 434),
     ('USGJT', 429),
-    ('USPSL', 399)
+    ('USPSL', 399),
+    ('KRSEL', 655),
+    ('CAYRK', 334),
+    ('CAWHI', 334),
+    ('USSLM', 403)
 ) as t(city, ecoregion_id)
 ''';

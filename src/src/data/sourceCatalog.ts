@@ -11,6 +11,10 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
+  { city: 'Salem', label: 'TODO: Salem tree inventory source', url: 'TODO' },
+  { city: 'Whitby', label: 'TODO: Whitby tree inventory source', url: 'TODO' },
+  { city: 'York Region', label: 'TODO: York Region tree inventory source', url: 'TODO' },
+  { city: 'Seoul', label: 'TODO: Seoul tree inventory source', url: 'TODO' },
   { city: 'Port St. Lucie', label: 'City of Port St. Lucie - PSL Trees (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://www.arcgis.com/home/item.html?id=767ea62a6ae34d898185ec5050319c0d' },
   { city: 'Grand Junction', label: 'City of Grand Junction GIS and Parks Forestry - Trees (CC0 1.0)', url: 'https://www.arcgis.com/home/item.html?id=cef93c83233749eb9265914aca06b35c' },
   { city: 'Boise', label: 'City of Boise Parks and Recreation - Managed Park and Street Trees (CC BY 4.0)', url: 'https://opendata.cityofboise.org/datasets/61e4dc96bc0745ecb42c3f3892728bd6' },
@@ -193,6 +197,10 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
+  { city: 'Salem', label: 'TODO: Salem landmark source' },
+  { city: 'Whitby', label: 'TODO: Whitby landmark source' },
+  { city: 'York Region', label: 'TODO: York Region landmark source' },
+  { city: 'Seoul', label: 'TODO: Seoul landmark source' },
   { city: 'Port St. Lucie', label: 'City of Port St. Lucie - Parks (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://www.arcgis.com/home/item.html?id=65f2da9f968e463c8cf240ca452177f7' },
   { city: 'Grand Junction', label: 'City of Grand Junction - Historic Sites (CC0 1.0)', url: 'https://www.arcgis.com/home/item.html?id=474f2237f2c44e6bbe5b6588d7638a43' },
   { city: 'Grand Junction', label: 'National Park Service - National Register of Historic Places', url: 'https://www.nps.gov/subjects/nationalregister/data-downloads.htm' },

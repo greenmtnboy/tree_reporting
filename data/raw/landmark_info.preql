@@ -160,6 +160,10 @@ import usspf.springfield_landmarks;
 import usboi.boise_landmarks;
 import usgjt.grandjunction_landmarks;
 import uspsl.portstlucie_landmarks;
+import krsel.seoul_landmarks;
+import cayrk.yorkregion_landmarks;
+import cawhi.whitby_landmarks;
+import usslm.salem_landmarks;
 
 # The cross-city union is NOT declared here. It lives in
 # `full_landmark_publish.preql`, which reads the parquets these imports publish

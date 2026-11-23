@@ -150,5 +150,9 @@
   "USSPF": { "name": "Springfield", "center": [-93.2923, 37.209] },
   "USBOI": { "name": "Boise", "center": [-116.2023, 43.615] },
   "USGJT": { "name": "Grand Junction", "center": [-108.5506, 39.0639] },
-  "USPSL": { "name": "Port St. Lucie", "center": [-80.3582, 27.273] }
+  "USPSL": { "name": "Port St. Lucie", "center": [-80.3582, 27.273] },
+  "KRSEL": { "name": "Seoul", "center": [126.978, 37.5665] },
+  "CAYRK": { "name": "York Region", "center": [-79.45, 43.95] },
+  "CAWHI": { "name": "Whitby", "center": [-78.9429, 43.8975] },
+  "USSLM": { "name": "Salem", "center": [-123.0351, 44.9429] }
 }

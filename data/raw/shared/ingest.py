@@ -2249,6 +2249,10 @@ def _sanitize_taxon(value: str | None) -> str | None:
 # Keyed by city code so `community_source_for` can derive the community label
 # and so tests can assert the two lists agree.
 MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
+    "USSLM": ("SALEM_OPENDATA",),
+    "CAWHI": ("WHITBY_OPENDATA",),
+    "CAYRK": ("YORK_REGION_OPENDATA",),
+    "KRSEL": ("SEOUL_OPENDATA",),
     "USPSL": ("PORT_ST_LUCIE_OPENDATA",),
     "USGJT": ("GRAND_JUNCTION_OPENDATA",),
     "USBOI": ("BOISE_OPENDATA",),
@@ -2433,6 +2437,10 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # overlapping rows under one cluster id and publishes only the survivor — see
 # tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
+    "USSLM": "OSM_USSLM",
+    "CAWHI": "OSM_CAWHI",
+    "CAYRK": "OSM_CAYRK",
+    "KRSEL": "OSM_KRSEL",
     "USPSL": "OSM_USPSL",
     "USGJT": "OSM_USGJT",
     "USBOI": "OSM_USBOI",
@@ -3196,6 +3204,10 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
+    "USSLM": (44.83, 45.03, -123.14, -122.92),
+    "CAWHI": (43.83, 44.02, -79.01, -78.88),
+    "CAYRK": (43.74, 44.34, -79.73, -79.15),
+    "KRSEL": (37.42, 37.71, 126.76, 127.19),
     "USPSL": (27.19, 27.39, -80.5, -80.24),
     "USGJT": (39.01, 39.16, -108.7, -108.45),
     "USBOI": (43.53, 43.7, -116.37, -116.08),
@@ -3405,6 +3417,14 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "USSLM": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "CAWHI": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "CAYRK": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "KRSEL": 10,
     # osm_dedup_validation (2026-11-23): 6 m flags 41, 0 false, recall 55%;
     # 8 m adds 7 true for 2 false. OSM is sparse here (775 trees).
     "USPSL": 6,
@@ -4100,6 +4120,10 @@ DEDUP_CELL_METRES: dict[str, int] = {
 Box = tuple[float, float, float, float]
 
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
+    'USSLM': ((44.83, 45.03, -123.14, -122.92),),
+    'CAWHI': ((43.83, 44.02, -79.01, -78.88),),
+    'CAYRK': ((43.74, 44.34, -79.73, -79.15),),
+    'KRSEL': ((37.42, 37.71, 126.76, 127.19),),
     'USPSL': ((27.19, 27.39, -80.5, -80.24),),
     'USGJT': ((39.01, 39.16, -108.7, -108.45),),
     'USBOI': ((43.53, 43.7, -116.37, -116.08),),

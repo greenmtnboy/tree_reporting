@@ -151,6 +151,10 @@ import usspf.springfield_tree_info;
 import usboi.boise_tree_info;
 import usgjt.grandjunction_tree_info;
 import uspsl.portstlucie_tree_info;
+import krsel.seoul_tree_info;
+import cayrk.yorkregion_tree_info;
+import cawhi.whitby_tree_info;
+import usslm.salem_tree_info;
 
 # Each city models its originating dataset as its own enum key so Trilogy can
 # prove per-city partition coverage (see core.preql). Merging them here — and
@@ -309,6 +313,10 @@ merge usspf_source into data_source;
 merge usboi_source into data_source;
 merge usgjt_source into data_source;
 merge uspsl_source into data_source;
+merge krsel_source into data_source;
+merge cayrk_source into data_source;
+merge cawhi_source into data_source;
+merge usslm_source into data_source;
 
 # The dedup columns (`merged_sources`, `merged_tree_ids`) are
 # the one shared derivation in tree_dedup.preql, computed inside each city's
@@ -476,7 +484,11 @@ usbis_published_data_updated_through,
 usspf_published_data_updated_through,
 usboi_published_data_updated_through,
 usgjt_published_data_updated_through,
-uspsl_published_data_updated_through);
+uspsl_published_data_updated_through,
+krsel_published_data_updated_through,
+cayrk_published_data_updated_through,
+cawhi_published_data_updated_through,
+usslm_published_data_updated_through);
 # --- Merged union datasource ---
 
 datasource tree_info (
