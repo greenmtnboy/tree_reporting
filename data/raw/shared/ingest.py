@@ -2044,6 +2044,12 @@ SPECIES_MISSPELLINGS: dict[str, str] = {
     "Symcareia glomulifera": "Syncarpia glomulifera",  # Manningham
     "Syringia vulgaris": "Syringa vulgaris",  # Manningham
     "Syzigium": "Syzygium",  # Manningham
+    "Acer x freemanni": "Acer x freemanii",  # Whitby
+    "Acer freemanni": "Acer x freemanii",  # Whitby
+    "Assimina triloba": "Asimina triloba",  # Whitby
+    "Gleditsa triacanthos": "Gleditsia triacanthos",  # Whitby
+    "Tilia american": "Tilia americana",  # Whitby
+    "Plantus occidentalis": "Platanus occidentalis",  # Whitby
 }
 
 
@@ -3483,8 +3489,9 @@ DEDUP_CELL_METRES: dict[str, int] = {
     # osm_dedup_validation 2026-11-23: 8m is the last cell whose added
     # flags are mostly real (+13 true / +6 false); 10m adds as many false as true.
     "USSLM": 8,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "CAWHI": 10,
+    # osm_dedup_validation 2026-11-23: 6 m flags 111, 6 false (5.4%);
+    # 8 m adds 2 true for 4 false.
+    "CAWHI": 6,
     # osm_dedup_validation 2026-11-23: 6 m flags 349, 22 false (6.3%);
     # 8 m adds 29 true for 15 false.
     "CAYRK": 6,
