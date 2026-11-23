@@ -1,0 +1,23 @@
+import ..landmark_common;
+
+root datasource barcelona_landmarks_update_time (
+    data_updated_through: esbcn_landmark_data_updated_through
+)
+file `./barcelona_landmarks_probe.py`;
+
+# Barcelona's cultural points of interest (Open Data BCN,
+# `punts-informacio-turistica`, CC BY 4.0), read from the same CKAN portal as
+# the trees: no geocoding, no committed CSV and no staging object.  The
+# protected-heritage catalogue is published only as file downloads the portal
+# refuses outside its allow list; see barcelona_landmarks.py.
+root partial datasource raw_barcelona_landmark_info extends landmark_partition (
+)
+complete where city = 'ESBCN'
+file `./barcelona_landmarks.py`;
+
+partial datasource barcelona_landmark_info extends published_landmark_info (
+    esbcn_landmark_data_updated_through,
+)
+complete where city = 'ESBCN'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/esbcn_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/esbcn_landmark_info_v{data_version}.parquet`
+freshness by esbcn_landmark_data_updated_through;

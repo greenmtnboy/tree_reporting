@@ -51,6 +51,22 @@ property <*>.usden_data_updated_through datetime; # when Denver data is through
 # community column with the staged OSM one and nothing else.
 property <*>.ustem_osm_data_updated_through datetime; # mtime of Tempe's committed OSM staging parquet
 property <*>.usbos_osm_data_updated_through datetime;
+property <*>.sgsin_data_updated_through datetime; # when Singapore data is through
+property <*>.sgsin_osm_data_updated_through datetime; # GCS publication time of Singapore's staged OSM parquet
+property <*>.esbcn_data_updated_through datetime; # when Barcelona data is through
+property <*>.esbcn_osm_data_updated_through datetime; # GCS publication time of Barcelona's staged OSM parquet
+property <*>.aucol_data_updated_through datetime; # when Colac Otway data is through
+property <*>.aucol_osm_data_updated_through datetime; # GCS publication time of Colac Otway's staged OSM parquet
+property <*>.aubsd_data_updated_through datetime; # when Bassendean data is through
+property <*>.aubsd_osm_data_updated_through datetime; # GCS publication time of Bassendean's staged OSM parquet
+property <*>.cawld_data_updated_through datetime; # when Welland data is through
+property <*>.cawld_osm_data_updated_through datetime; # GCS publication time of Welland's staged OSM parquet
+property <*>.cafsj_data_updated_through datetime; # when Fort St. John data is through
+property <*>.cafsj_osm_data_updated_through datetime; # GCS publication time of Fort St. John's staged OSM parquet
+property <*>.capen_data_updated_through datetime; # when Penticton data is through
+property <*>.capen_osm_data_updated_through datetime; # GCS publication time of Penticton's staged OSM parquet
+property <*>.caprg_data_updated_through datetime; # when Prince George data is through
+property <*>.caprg_osm_data_updated_through datetime; # GCS publication time of Prince George's staged OSM parquet
 property <*>.campr_data_updated_through datetime; # when Maple Ridge data is through
 property <*>.campr_osm_data_updated_through datetime; # GCS publication time of Maple Ridge's staged OSM parquet
 property <*>.calng_data_updated_through datetime; # when Langley Township data is through

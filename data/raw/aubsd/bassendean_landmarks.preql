@@ -1,0 +1,30 @@
+import ..landmark_common;
+
+root datasource bassendean_landmarks_update_time (
+    data_updated_through: aubsd_landmark_data_updated_through
+)
+file `./bassendean_landmarks_probe.py`;
+
+# The Town of Bassendean Heritage List (adopted by Council 26 July 2022), read
+# live from the Town's ArcGIS layer on the same organisation as the trees. An
+# official designation registry, so there is no curated CSV and no staging
+# object; the probe is the layer's own edit date.
+root partial datasource raw_bassendean_landmark_info extends landmark_partition (
+    address: ?address,
+    protection_type: ?protection_type,
+    register_number: ?register_number,
+    category: ?category,
+)
+complete where city = 'AUBSD'
+file `./bassendean_landmarks.py`;
+
+partial datasource bassendean_landmark_info extends published_landmark_info (
+    ?address,
+    ?protection_type,
+    ?register_number,
+    ?category,
+    aubsd_landmark_data_updated_through,
+)
+complete where city = 'AUBSD'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/aubsd_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/aubsd_landmark_info_v{data_version}.parquet`
+freshness by aubsd_landmark_data_updated_through;

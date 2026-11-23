@@ -836,6 +836,54 @@ const CITY_DASHBOARD_CONTEXT: Record<
     biome: 'Temperate Conifer Forests',
     realm: 'nearctic',
   },
+  CAPRG: {
+    ecoregionId: 350, // Central British Columbia Mountain forests
+    usdaZone: 3,
+    biome: 'Temperate Conifer Forests',
+    realm: 'nearctic',
+  },
+  CAPEN: {
+    ecoregionId: 362, // Okanogan dry forests
+    usdaZone: 6,
+    biome: 'Temperate Conifer Forests',
+    realm: 'nearctic',
+  },
+  CAFSJ: {
+    ecoregionId: 376, // Mid-Canada Boreal Plains forests
+    usdaZone: 3,
+    biome: 'Boreal Forests/Taiga',
+    realm: 'nearctic',
+  },
+  CAWLD: {
+    ecoregionId: 342, // Southern Great Lakes forests
+    usdaZone: 6,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'nearctic',
+  },
+  AUBSD: {
+    ecoregionId: 206, // Southwest Australia woodlands
+    usdaZone: 10,
+    biome: 'Mediterranean Forests, Woodlands & Scrub',
+    realm: 'australasia',
+  },
+  AUCOL: {
+    ecoregionId: 176, // Southeast Australia temperate forests
+    usdaZone: 9,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'australasia',
+  },
+  ESBCN: {
+    ecoregionId: 799, // Northeast Spain and Southern France Mediterranean forests
+    usdaZone: 10,
+    biome: 'Mediterranean Forests, Woodlands & Scrub',
+    realm: 'palearctic',
+  },
+  SGSIN: {
+    ecoregionId: 265, // Peninsular Malaysian rain forests
+    usdaZone: 13,
+    biome: 'Tropical & Subtropical Moist Broadleaf Forests',
+    realm: 'indo_malay',
+  },
 }
 
 function escapeStringLiteral(value: string) {

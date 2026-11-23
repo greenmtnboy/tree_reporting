@@ -1,0 +1,30 @@
+import ..landmark_common;
+
+root datasource welland_landmarks_update_time (
+    data_updated_through: cawld_landmark_data_updated_through
+)
+file `./welland_landmarks_probe.py`;
+
+# Welland's designated heritage properties (by-law designations under the
+# Ontario Heritage Act), read live off the City's own ArcGIS Server layer --
+# an official register under the Open Government Licence - City of Welland,
+# so no geocoding and nothing to stage.  See welland_landmarks.py.
+root partial datasource raw_welland_landmark_info extends landmark_partition (
+    address: ?address,
+    property_type: ?property_type,
+    year_built: ?year_built,
+    year_designated: ?year_designated,
+)
+complete where city = 'CAWLD'
+file `./welland_landmarks.py`;
+
+partial datasource welland_landmark_info extends published_landmark_info (
+    ?address,
+    ?property_type,
+    ?year_built,
+    ?year_designated,
+    cawld_landmark_data_updated_through,
+)
+complete where city = 'CAWLD'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/cawld_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/cawld_landmark_info_v{data_version}.parquet`
+freshness by cawld_landmark_data_updated_through;

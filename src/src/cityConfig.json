@@ -134,5 +134,13 @@
   "AULTV": { "name": "Latrobe City", "center": [146.405, -38.235] },
   "CABAR": { "name": "Barrie", "center": [-79.6903, 44.3894] },
   "CALNG": { "name": "Langley Township", "center": [-122.58, 49.1044] },
-  "CAMPR": { "name": "Maple Ridge", "center": [-122.5984, 49.2193] }
+  "CAMPR": { "name": "Maple Ridge", "center": [-122.5984, 49.2193] },
+  "CAPRG": { "name": "Prince George", "center": [-122.7497, 53.9171] },
+  "CAPEN": { "name": "Penticton", "center": [-119.5937, 49.4991] },
+  "CAFSJ": { "name": "Fort St. John", "center": [-120.8476, 56.2465] },
+  "CAWLD": { "name": "Welland", "center": [-79.2483, 42.9922] },
+  "AUBSD": { "name": "Bassendean", "center": [115.9466, -31.9097] },
+  "AUCOL": { "name": "Colac Otway", "center": [143.5848, -38.3404] },
+  "ESBCN": { "name": "Barcelona", "center": [2.1686, 41.3874] },
+  "SGSIN": { "name": "Singapore", "center": [103.8198, 1.3521] }
 }

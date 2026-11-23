@@ -1,0 +1,24 @@
+import ..landmark_common;
+
+root datasource fortstjohn_landmarks_update_time (
+    data_updated_through: cafsj_landmark_data_updated_through
+)
+file `./fortstjohn_landmarks_probe.py`;
+
+# Fort St. John has no heritage register to read (see the ingest), so this is
+# the City's own parks layer and its points of interest filtered to named
+# public places, read live off the City's ArcGIS Online layers (Open
+# Government Licence - Fort St. John).
+root partial datasource raw_fortstjohn_landmark_info extends landmark_partition (
+    property_type: ?property_type,
+)
+complete where city = 'CAFSJ'
+file `./fortstjohn_landmarks.py`;
+
+partial datasource fortstjohn_landmark_info extends published_landmark_info (
+    ?property_type,
+    cafsj_landmark_data_updated_through,
+)
+complete where city = 'CAFSJ'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/cafsj_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/cafsj_landmark_info_v{data_version}.parquet`
+freshness by cafsj_landmark_data_updated_through;

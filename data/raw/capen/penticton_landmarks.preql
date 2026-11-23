@@ -1,0 +1,29 @@
+import ..landmark_common;
+
+root datasource penticton_landmarks_update_time (
+    data_updated_through: capen_landmark_data_updated_through
+)
+file `./penticton_landmarks_probe.py`;
+
+# Penticton's Community Heritage Register, read live off the City's own
+# ArcGIS Server (no licence stated; displayed with attribution only) -- an
+# official register, so nothing geocoded or staged.
+root partial datasource raw_penticton_landmark_info extends landmark_partition (
+    address: ?address,
+    year_built: ?year_built,
+    year_designated: ?year_designated,
+    property_type: ?property_type,
+)
+complete where city = 'CAPEN'
+file `./penticton_landmarks.py`;
+
+partial datasource penticton_landmark_info extends published_landmark_info (
+    ?address,
+    ?year_built,
+    ?year_designated,
+    ?property_type,
+    capen_landmark_data_updated_through,
+)
+complete where city = 'CAPEN'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/capen_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/capen_landmark_info_v{data_version}.parquet`
+freshness by capen_landmark_data_updated_through;

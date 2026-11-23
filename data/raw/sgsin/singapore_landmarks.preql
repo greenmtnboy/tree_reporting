@@ -1,0 +1,26 @@
+import ..landmark_common;
+
+root datasource singapore_landmarks_update_time (
+    data_updated_through: sgsin_landmark_data_updated_through
+)
+file `./singapore_landmarks_probe.py`;
+
+# The National Heritage Board's National Monuments and Historic Sites, two
+# GeoJSON datasets on data.gov.sg read directly (Singapore Open Data Licence
+# v1.0): no geocoding, no committed CSV and no staging object.  `category`
+# says which register a row came from.
+root partial datasource raw_singapore_landmark_info extends landmark_partition (
+    address: ?address,
+    category: ?category,
+)
+complete where city = 'SGSIN'
+file `./singapore_landmarks.py`;
+
+partial datasource singapore_landmark_info extends published_landmark_info (
+    ?address,
+    ?category,
+    sgsin_landmark_data_updated_through,
+)
+complete where city = 'SGSIN'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/sgsin_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/sgsin_landmark_info_v{data_version}.parquet`
+freshness by sgsin_landmark_data_updated_through;
