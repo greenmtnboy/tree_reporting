@@ -3521,14 +3521,18 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "USMHD": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "USEVN": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "USOPK": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "USBND": 10,
+    # Calibrated 2026-11-24 (osm_dedup_validation): 4m flags 1059, 2.8% false;
+    # 6m adds 73 true for 32 false (5.3% false).
+    "USMHD": 4,
+    # Calibrated 2026-11-24 (osm_dedup_validation): 4m flags 108, 2.8% false;
+    # 6m adds 16 true for 9 false (9.0% false).
+    "USEVN": 4,
+    # Calibrated 2026-11-24 (osm_dedup_validation): 8m flags 207, 2.9% false;
+    # marginal 3.3 true per false at 8m, 0.4 at 10m.
+    "USOPK": 8,
+    # Calibrated 2026-11-23 (osm_dedup_validation): 4m flags 303, 0 false;
+    # 6m adds 15 true for 9 false.
+    "USBND": 4,
     # Calibrated 2026-11-23 (osm_dedup_validation): 8m flags 232, 3.4% false;
     # marginal 4.0 true per false at 8m, 0.25 at 10m.
     "USPLN": 8,
