@@ -6,7 +6,7 @@ import ..boundaries;
 
 # Watertown was a partition of Boston's metro model until the map stopped needing
 # one parquet per metro (docs/SEAMLESS_WORLD.md); it is its own city now, with
-# its territory drawn by the town's real boundary (boundaries/uswat.geojson).
+# its territory drawn by the town's real boundary (boundaries/uswat.json).
 # Its `data_source` label, its tree ids and its ingest are what they were.
 
 auto uswat_published_data_updated_through <- greatest(uswat_data_updated_through, uswat_community_data_updated_through, uswat_osm_data_updated_through, uswat_satellite_data_updated_through, uswat_predicted_data_updated_through);

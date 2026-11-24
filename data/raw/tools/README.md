@@ -12,7 +12,7 @@ invocation assume:
 | tool | what it does |
 |------|--------------|
 | `new_city.py` | writes the mechanical registry edits a new city needs, from one spec. `--dry-run` first. See `EXTENDING.md`. |
-| `fetch_boundary.py` | downloads a US town's boundary (Census TIGER) into `boundaries/{code}.geojson` and prints its `CITY_TERRITORY` envelope. The file makes the town's territory a polygon; see "Register the code" in `EXTENDING.md`. |
+| `fetch_boundary.py` | downloads a US town's boundary (Census TIGER) into `boundaries/{code}.json` and prints its `CITY_TERRITORY` envelope. The file makes the town's territory a polygon; see "Register the code" in `EXTENDING.md`. |
 | `sync_osm_territory.py` | writes each city's territory into its model's OSM `where`, and `boundaries.preql` from the boundary files. Run after editing `CITY_TERRITORY` or adding a boundary. |
 | `osm_dedup_validation.py` | measures a city's mutual-nearest-neighbour rate per distance band, which is what its `DEDUP_CELL_METRES` row is calibrated from. Never copy a cell size from another city. |
 | `dedup_cells.py` | renders `DEDUP_CELL_METRES` into `tree_dedup.preql` as an inline `VALUES` table. `--check` is what `test_dedup_cells.py` asserts. |

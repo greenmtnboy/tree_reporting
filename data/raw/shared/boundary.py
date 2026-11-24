@@ -7,7 +7,7 @@ inside Boston): a staircase of rectangles fine enough to follow them is
 hundreds of boxes, slower to test and still a few metres wrong.  A city with
 a file in `data/raw/boundaries/` is its polygon instead:
 
-    boundaries/{code}.geojson   one Feature, a Polygon or MultiPolygon in
+    boundaries/{code}.json   one Feature, a Polygon or MultiPolygon in
                                 WGS84 (longitude, latitude), with where it
                                 came from in its properties
 
@@ -131,12 +131,12 @@ def rings_of(geometry: dict) -> list[Ring]:
 
 
 def boundary_path(city_code: str) -> Path:
-    return BOUNDARY_DIR / f"{city_code.lower()}.geojson"
+    return BOUNDARY_DIR / f"{city_code.lower()}.json"
 
 
 def boundary_codes() -> tuple[str, ...]:
     """Every city with a boundary file, sorted."""
-    return tuple(sorted(path.stem.upper() for path in BOUNDARY_DIR.glob("*.geojson")))
+    return tuple(sorted(path.stem.upper() for path in BOUNDARY_DIR.glob("*.json")))
 
 
 @lru_cache(maxsize=None)

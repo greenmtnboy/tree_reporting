@@ -6,7 +6,7 @@ import ..boundaries;
 
 # Somerville was a partition of Boston's metro model until the map stopped needing
 # one parquet per metro (docs/SEAMLESS_WORLD.md); it is its own city now, with
-# its territory drawn by the town's real boundary (boundaries/ussom.geojson).
+# its territory drawn by the town's real boundary (boundaries/ussom.json).
 # Its `data_source` label, its tree ids and its ingest are what they were.
 
 auto ussom_published_data_updated_through <- greatest(ussom_data_updated_through, ussom_community_data_updated_through, ussom_osm_data_updated_through, ussom_satellite_data_updated_through, ussom_predicted_data_updated_through);

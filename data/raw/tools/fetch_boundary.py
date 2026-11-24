@@ -3,7 +3,7 @@
 # requires-python = ">=3.13"
 # dependencies = ["requests"]
 # ///
-"""Download a US town's boundary into data/raw/boundaries/{code}.geojson.
+"""Download a US town's boundary into data/raw/boundaries/{code}.json.
 
     cd data/raw && uv run tools/fetch_boundary.py --code USCAM --state 25 --name Cambridge
 

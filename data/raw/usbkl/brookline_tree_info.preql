@@ -6,7 +6,7 @@ import ..boundaries;
 
 # Brookline was a partition of Boston's metro model until the map stopped needing
 # one parquet per metro (docs/SEAMLESS_WORLD.md); it is its own city now, with
-# its territory drawn by the town's real boundary (boundaries/usbkl.geojson).
+# its territory drawn by the town's real boundary (boundaries/usbkl.json).
 # Its `data_source` label, its tree ids and its ingest are what they were.
 
 auto usbkl_published_data_updated_through <- greatest(usbkl_data_updated_through, usbkl_community_data_updated_through, usbkl_osm_data_updated_through, usbkl_satellite_data_updated_through, usbkl_predicted_data_updated_through);

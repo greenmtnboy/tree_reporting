@@ -281,7 +281,7 @@ def test_the_boundaries_model_is_written_from_the_files():
     from tools.sync_osm_territory import BOUNDARIES_MODEL, boundaries_model
 
     assert BOUNDARIES_MODEL.read_text(encoding="utf-8") == boundaries_model(), (
-        "boundaries.preql is not boundaries/*.geojson; run `python tools/sync_osm_territory.py` from data/raw"
+        "boundaries.preql is not boundaries/*.json; run `python tools/sync_osm_territory.py` from data/raw"
     )
 
 

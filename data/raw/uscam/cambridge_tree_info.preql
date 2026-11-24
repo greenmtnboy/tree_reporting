@@ -7,7 +7,7 @@ import ..boundaries;
 
 # Cambridge was a partition of Boston's metro model until the map stopped needing
 # one parquet per metro (docs/SEAMLESS_WORLD.md); it is its own city now, with
-# its territory drawn by the town's real boundary (boundaries/uscam.geojson).
+# its territory drawn by the town's real boundary (boundaries/uscam.json).
 # Its `data_source` label, its tree ids and its ingest are what they were.
 
 property <*>.uscam_canopy_data_updated_through datetime; # GCS publication time of the staged LIDAR canopy-height lookup

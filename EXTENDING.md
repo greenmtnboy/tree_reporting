@@ -170,7 +170,7 @@ still metres wrong: on Boston's 2.98M published rows a bbox-prefiltered
 cd data/raw && uv run tools/fetch_boundary.py --code USCAM --state 25 --name Cambridge
 ```
 
-writes `boundaries/uscam.geojson` (US Census TIGER, public domain) and prints
+writes `boundaries/uscam.json` (US Census TIGER, public domain) and prints
 the `CITY_TERRITORY` line: the polygon's envelope, one rectangle. The file is
 the whole registration (`shared/boundary.py`):
 

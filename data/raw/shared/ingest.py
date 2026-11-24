@@ -4300,7 +4300,7 @@ DEDUP_CELL_METRES: dict[str, int] = {
 # extract through the new territory (see territory_where).
 #
 # Rectangles stop working where towns interlock street by street.  Such a
-# town has its real boundary in `boundaries/{code}.geojson` (shared/boundary.py)
+# town has its real boundary in `boundaries/{code}.json` (shared/boundary.py)
 # and is that polygon: its entry here is the polygon's envelope, kept so the
 # Overpass extract and every cheap pre-check still have a box, and membership
 # is the polygon inside it.  A polygon town is carved out of whichever

@@ -292,7 +292,7 @@ belongs to. `test_city_territory.py` checks every pair; a city that gains a
 neighbour has to carve both. Municipal ingests keep using the box.
 
 A town that interlocks with its neighbours is a polygon instead: its real
-boundary is `boundaries/{code}.geojson`, its `CITY_TERRITORY` entry is that
+boundary is `boundaries/{code}.json`, its `CITY_TERRITORY` entry is that
 polygon's envelope, and membership is the polygon (`shared/boundary.py`).
 It is carved out of whichever rectangle city its envelope sits in, so
 Boston's territory is its metro box less Cambridge, Somerville, Brookline,
