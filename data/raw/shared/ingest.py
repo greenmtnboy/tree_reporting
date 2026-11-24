@@ -908,6 +908,17 @@ SPECIES_SYNONYMS: dict[str, str] = {
 # `Celtis`/`Cercis occidentalis`, `Pinus`/`Prunus nigra` and
 # `Malus`/`Taxus baccata`.  Add an entry only with that check behind it.
 SPECIES_MISSPELLINGS: dict[str, str] = {
+    # --- Batch 18 (Oxnard, Evanston, Plano, Orland Park, Bend, Moorhead) ---
+    "Acacia cyclopsis": "Acacia cyclops",
+    "Ulmus thomasi": "Ulmus thomasii",
+    "Cornus drumondii": "Cornus drummondii",
+    "Fraxinus mandschurica": "Fraxinus mandshurica",
+    "Prosopsis glandulosa": "Prosopis glandulosa",
+    "Circidiphyllum japonicum": "Cercidiphyllum japonicum",
+    "Magnolia x soulangea": "Magnolia x soulangeana",
+    "Syringia": "Syringa",
+    "Plantanus x hispanica": "Platanus x hispanica",
+    "Shephardia argentea": "Shepherdia argentea",
     # --- Batch 16 (Bismarck, Springfield MO, Lansing, Port St. Lucie, Grand Junction, Boise) ---
     "Acer freemani": "Acer x freemanii",
     "Crataegus molis": "Crataegus mollis",
@@ -3518,14 +3529,18 @@ DEDUP_CELL_METRES: dict[str, int] = {
     "USOPK": 10,
     # NOT YET CALIBRATED: default; measure after the first build.
     "USBND": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "USPLN": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "USDVN": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "USRDL": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "USOXR": 10,
+    # Calibrated 2026-11-23 (osm_dedup_validation): 8m flags 232, 3.4% false;
+    # marginal 4.0 true per false at 8m, 0.25 at 10m.
+    "USPLN": 8,
+    # Calibrated 2026-11-23 (osm_dedup_validation): only 24 OSM trees sit on
+    # inventory trees; 4m flags 4, 0 false; 6m adds a false one.
+    "USDVN": 4,
+    # Calibrated 2026-11-23 (osm_dedup_validation): 4m flags 829, 2.3% false;
+    # 6m adds 78 true for 38 false (6.0% false).
+    "USRDL": 4,
+    # Calibrated 2026-11-23 (osm_dedup_validation): 8m flags 336, 2.7% false;
+    # marginal 5.2 true per false at 8m, 0.8 at 10m.
+    "USOXR": 8,
     # osm_dedup_validation 2026-11-23: 8m is the last cell whose added
     # flags are mostly real (+13 true / +6 false); 10m adds as many false as true.
     "USSLM": 8,
@@ -4233,7 +4248,17 @@ DEDUP_CELL_METRES: dict[str, int] = {
 Box = tuple[float, float, float, float]
 
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
-    'USMHD': ((46.8, 46.96, -96.82, -96.69),),
+    # Moorhead: a staircase along the inventory's western edge per latitude
+    # band, so the box stops at the Red River instead of taking in Fargo ND.
+    'USMHD': (
+        (46.80, 46.82, -96.802, -96.69),
+        (46.82, 46.84, -96.796, -96.69),
+        (46.84, 46.87, -96.788, -96.69),
+        (46.87, 46.88, -96.783, -96.69),
+        (46.88, 46.91, -96.775, -96.69),
+        (46.91, 46.93, -96.767, -96.69),
+        (46.93, 46.96, -96.776, -96.69),
+    ),
     'USEVN': ((42.0, 42.09, -87.75, -87.65),),
     'USOPK': ((41.54, 41.67, -87.93, -87.77),),
     'USBND': ((43.99, 44.13, -121.39, -121.23),),
