@@ -190,6 +190,14 @@ Currently has data from the following cities:
 - [York Region, ON, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CAYRK)
 - [Whitby, ON, Canada](https://greenmtnboy.github.io/tree_reporting/#/?city=CAWHI)
 - [Salem, Oregon](https://greenmtnboy.github.io/tree_reporting/#/?city=USSLM)
+- [Oxnard, California](https://greenmtnboy.github.io/tree_reporting/#/?city=USOXR)
+- [Redlands, California](https://greenmtnboy.github.io/tree_reporting/#/?city=USRDL)
+- [Davenport, Iowa](https://greenmtnboy.github.io/tree_reporting/#/?city=USDVN)
+- [Plano, Texas](https://greenmtnboy.github.io/tree_reporting/#/?city=USPLN)
+- [Bend, Oregon](https://greenmtnboy.github.io/tree_reporting/#/?city=USBND)
+- [Orland Park, Illinois](https://greenmtnboy.github.io/tree_reporting/#/?city=USOPK)
+- [Evanston, Illinois](https://greenmtnboy.github.io/tree_reporting/#/?city=USEVN)
+- [Moorhead, Minnesota](https://greenmtnboy.github.io/tree_reporting/#/?city=USMHD)
 
 **[Live page](https://greenmtnboy.github.io/tree_reporting/)**
 
@@ -372,6 +380,14 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 | York Region | Regional Municipality of York - Street Trees (York Region Open Data Licence) | https://insights-york.opendata.arcgis.com/datasets/york::street-trees |
 | Whitby | Town of Whitby - Trees (Open Government Licence - The Corporation of the Town of Whitby) | https://www.arcgis.com/home/item.html?id=5be6efcf4f264639874bf07009f155d2 |
 | Salem | City of Salem - City Trees (resale prohibited by the City; displayed with attribution only, not licensed for reuse) | https://www.arcgis.com/home/item.html?id=e5397978d59f46ec96f72a1dfc660919 |
+| Oxnard | City of Oxnard GIS Division - Trees (no licence stated; displayed with attribution only, not licensed for reuse) | https://www.arcgis.com/home/item.html?id=a5aa2d1dfd344ef79d61507d33cdbc02 |
+| Redlands | City of Redlands - Street Trees (no licence stated; displayed with attribution only, not licensed for reuse) | https://www.arcgis.com/home/item.html?id=9f9d4ad74a0d44fba8bf27c829e810f2 |
+| Davenport | City of Davenport GIS - Trees (no licence stated; displayed with attribution only, not licensed for reuse) | https://www.arcgis.com/home/item.html?id=1e73252e386144799b39e95dbaa684ef |
+| Plano | City of Plano - Shade Map Trees, PlanIT Geo inventory 2023 (no licence stated; displayed with attribution only, not licensed for reuse) | https://www.arcgis.com/home/item.html?id=a7e06ad57e2747738fb2b2117e23d68e |
+| Bend | City of Bend - Volunteer Tree Inventory (no licence stated; displayed with attribution only, not licensed for reuse) | https://www.arcgis.com/home/item.html?id=3a518917e1fc407cbc5d72ab4260101b |
+| Orland Park | Village of Orland Park - Public Trees (no licence stated; displayed with attribution only, not licensed for reuse) | https://www.arcgis.com/home/item.html?id=780d9c0a3883498b82e046ef231144c9 |
+| Evanston | City of Evanston Open Data - Trees (CC BY 4.0) | https://www.arcgis.com/home/item.html?id=845a3acb3dc0442a80b219691889f992 |
+| Moorhead | City of Moorhead GIS - TreePlotter inventory (no licence stated; displayed with attribution only, not licensed for reuse) | https://www.arcgis.com/home/item.html?id=efd9f39819d54020b610ef0f5f0c0c04 |
 | Bendigo | City of Greater Bendigo - Environment - Trees (CC BY 2.5 AU) | https://data.gov.au/data/dataset/city-of-greater-bendigo-environment-trees |
 | Melbourne | Melbourne Open Data - Urban Forest Trees | https://data.melbourne.vic.gov.au/explore/dataset/trees-with-species-and-dimensions-urban-forest/ |
 | Melbourne (Port Phillip) | City of Port Phillip - Trees (CC BY 2.5 AU) | https://data.gov.au/data/dataset/city-of-port-phillip-trees |
@@ -552,6 +568,19 @@ Every tree row carries a `data_source` column identifying which of the above it 
 | Whitby | Town of Whitby - Parks and Open Spaces; Town Facilities (Open Government Licence - The Corporation of the Town of Whitby) | https://geohub-whitby.hub.arcgis.com/ |
 | Salem | City of Salem - Historic Buildings (resale prohibited by the City; displayed with attribution only, not licensed for reuse) | https://www.arcgis.com/home/item.html?id=a49aaabfe16945ad90053f340b2c96bf |
 | Salem | National Park Service - National Register of Historic Places | https://www.nps.gov/subjects/nationalregister/data-downloads.htm |
+| Oxnard | City of Oxnard GIS Division - Ventura County Designated Historic Landmarks and Points of Interest (no licence stated; displayed with attribution only, not licensed for reuse) | https://maps.oxnard.org/arcgis/rest/services/HistoricData/MapServer/0 |
+| Oxnard | National Park Service - National Register of Historic Places | https://www.nps.gov/subjects/nationalregister/data-downloads.htm |
+| Redlands | City of Redlands - Historic Buildings and Structures (no licence stated; displayed with attribution only, not licensed for reuse) | https://www.arcgis.com/home/item.html?id=3701fa66edc9456d87a0584c9c011122 |
+| Redlands | National Park Service - National Register of Historic Places | https://www.nps.gov/subjects/nationalregister/data-downloads.htm |
+| Davenport | City of Davenport Planning and Zoning - Local Historic Landmarks (no licence stated; displayed with attribution only, not licensed for reuse) | https://gis.davenportiowa.com/arcgis/rest/services/Hosted/Individually_Listed_LHL/FeatureServer/3 |
+| Davenport | National Park Service - National Register of Historic Places | https://www.nps.gov/subjects/nationalregister/data-downloads.htm |
+| Plano | National Park Service - National Register of Historic Places | https://www.nps.gov/subjects/nationalregister/data-downloads.htm |
+| Bend | City of Bend - Historic Resources (no licence stated; displayed with attribution only, not licensed for reuse) | https://www.arcgis.com/home/item.html?id=70b88002805f42dfa94d0c470d49eec1 |
+| Bend | National Park Service - National Register of Historic Places | https://www.nps.gov/subjects/nationalregister/data-downloads.htm |
+| Orland Park | Village of Orland Park - Old Orland Historic District contributing structures (no licence stated; displayed with attribution only, not licensed for reuse) | https://www.arcgis.com/home/item.html?id=99feff2aaed940efab4e39b8898e128a |
+| Orland Park | National Park Service - National Register of Historic Places | https://www.nps.gov/subjects/nationalregister/data-downloads.htm |
+| Evanston | National Park Service - National Register of Historic Places | https://www.nps.gov/subjects/nationalregister/data-downloads.htm |
+| Moorhead | National Park Service - National Register of Historic Places | https://www.nps.gov/subjects/nationalregister/data-downloads.htm |
 | Bendigo | Heritage Victoria - Victorian Heritage Register via Vicmap (CC BY 4.0) | https://discover.data.vic.gov.au/dataset/victorian-heritage-register |
 | Sydney | Sydney LEP 2012 heritage items (NSW DPHI, CC BY) | https://data.nsw.gov.au/data/dataset/environmental-planning-instrument-heritage-her |
 | Eindhoven | Rijksdienst voor het Cultureel Erfgoed - Rijksmonumenten via PDOK (CC BY 4.0) | https://service.pdok.nl/rce/ps-ch/wfs/v1_0?request=GetCapabilities&service=WFS |

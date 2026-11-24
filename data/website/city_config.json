@@ -154,5 +154,13 @@
   "KRSEL": { "name": "Seoul", "center": [126.978, 37.5665] },
   "CAYRK": { "name": "York Region", "center": [-79.45, 43.95] },
   "CAWHI": { "name": "Whitby", "center": [-78.9429, 43.8975] },
-  "USSLM": { "name": "Salem", "center": [-123.0351, 44.9429] }
+  "USSLM": { "name": "Salem", "center": [-123.0351, 44.9429] },
+  "USOXR": { "name": "Oxnard", "center": [-119.1771, 34.1975] },
+  "USRDL": { "name": "Redlands", "center": [-117.1825, 34.0556] },
+  "USDVN": { "name": "Davenport", "center": [-90.5776, 41.5236] },
+  "USPLN": { "name": "Plano", "center": [-96.6989, 33.0198] },
+  "USBND": { "name": "Bend", "center": [-121.3153, 44.0582] },
+  "USOPK": { "name": "Orland Park", "center": [-87.8539, 41.6303] },
+  "USEVN": { "name": "Evanston", "center": [-87.6877, 42.0451] },
+  "USMHD": { "name": "Moorhead", "center": [-96.7678, 46.8738] }
 }

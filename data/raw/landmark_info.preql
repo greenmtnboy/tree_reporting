@@ -164,6 +164,14 @@ import krsel.seoul_landmarks;
 import cayrk.yorkregion_landmarks;
 import cawhi.whitby_landmarks;
 import usslm.salem_landmarks;
+import usoxr.oxnard_landmarks;
+import usrdl.redlands_landmarks;
+import usdvn.davenport_landmarks;
+import uspln.plano_landmarks;
+import usbnd.bend_landmarks;
+import usopk.orlandpark_landmarks;
+import usevn.evanston_landmarks;
+import usmhd.moorhead_landmarks;
 
 # The cross-city union is NOT declared here. It lives in
 # `full_landmark_publish.preql`, which reads the parquets these imports publish

@@ -155,6 +155,14 @@ import krsel.seoul_tree_info;
 import cayrk.yorkregion_tree_info;
 import cawhi.whitby_tree_info;
 import usslm.salem_tree_info;
+import usoxr.oxnard_tree_info;
+import usrdl.redlands_tree_info;
+import usdvn.davenport_tree_info;
+import uspln.plano_tree_info;
+import usbnd.bend_tree_info;
+import usopk.orlandpark_tree_info;
+import usevn.evanston_tree_info;
+import usmhd.moorhead_tree_info;
 
 # Each city models its originating dataset as its own enum key so Trilogy can
 # prove per-city partition coverage (see core.preql). Merging them here — and
@@ -317,6 +325,14 @@ merge krsel_source into data_source;
 merge cayrk_source into data_source;
 merge cawhi_source into data_source;
 merge usslm_source into data_source;
+merge usoxr_source into data_source;
+merge usrdl_source into data_source;
+merge usdvn_source into data_source;
+merge uspln_source into data_source;
+merge usbnd_source into data_source;
+merge usopk_source into data_source;
+merge usevn_source into data_source;
+merge usmhd_source into data_source;
 
 # The dedup columns (`merged_sources`, `merged_tree_ids`) are
 # the one shared derivation in tree_dedup.preql, computed inside each city's
@@ -488,7 +504,15 @@ uspsl_published_data_updated_through,
 krsel_published_data_updated_through,
 cayrk_published_data_updated_through,
 cawhi_published_data_updated_through,
-usslm_published_data_updated_through);
+usslm_published_data_updated_through,
+usoxr_published_data_updated_through,
+usrdl_published_data_updated_through,
+usdvn_published_data_updated_through,
+uspln_published_data_updated_through,
+usbnd_published_data_updated_through,
+usopk_published_data_updated_through,
+usevn_published_data_updated_through,
+usmhd_published_data_updated_through);
 # --- Merged union datasource ---
 
 datasource tree_info (

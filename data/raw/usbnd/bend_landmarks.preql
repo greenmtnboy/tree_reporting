@@ -1,0 +1,35 @@
+import ..landmark_common;
+
+root datasource bend_landmarks_update_time (
+    data_updated_through: usbnd_landmark_data_updated_through
+)
+file `./bend_landmarks_probe.py`;
+
+# The City of Bend's Historic Resources (its Council-, State- and NPS-designated
+# landmarks, Bend Development Code 10.20, on the City's ArcGIS Online
+# organisation), topped up with the National Park Service's National Register
+# listings in Bend the City layer does not carry -- registers read live, so no
+# Nominatim geocoding, no committed CSV and no staging object.  `lm_type` names
+# the register; `register_number` is the City's HR resource number on a City
+# row and the NRIS reference number on an NPS one.
+root partial datasource raw_bend_landmark_info extends landmark_partition (
+    address: ?address,
+    lm_type: ?lm_type,
+    register_number: ?register_number,
+    year_built: ?year_built,
+    year_designated: ?year_designated,
+)
+complete where city = 'USBND'
+file `./bend_landmarks.py`;
+
+partial datasource bend_landmark_info extends published_landmark_info (
+    ?address,
+    ?lm_type,
+    ?register_number,
+    ?year_built,
+    ?year_designated,
+    usbnd_landmark_data_updated_through,
+)
+complete where city = 'USBND'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/usbnd_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/usbnd_landmark_info_v{data_version}.parquet`
+freshness by usbnd_landmark_data_updated_through;

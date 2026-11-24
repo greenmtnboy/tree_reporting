@@ -956,6 +956,54 @@ const CITY_DASHBOARD_CONTEXT: Record<
     biome: 'Temperate Grasslands, Savannas & Shrublands',
     realm: 'nearctic',
   },
+  USOXR: {
+    ecoregionId: 422, // California coastal sage and chaparral
+    usdaZone: 10,
+    biome: 'Mediterranean Forests, Woodlands & Scrub',
+    realm: 'nearctic',
+  },
+  USRDL: {
+    ecoregionId: 422, // California coastal sage and chaparral
+    usdaZone: 9,
+    biome: 'Mediterranean Forests, Woodlands & Scrub',
+    realm: 'nearctic',
+  },
+  USDVN: {
+    ecoregionId: 388, // Central Tallgrass prairie
+    usdaZone: 5,
+    biome: 'Temperate Grasslands, Savannas & Shrublands',
+    realm: 'nearctic',
+  },
+  USPLN: {
+    ecoregionId: 401, // Texas blackland prairies
+    usdaZone: 8,
+    biome: 'Temperate Grasslands, Savannas & Shrublands',
+    realm: 'nearctic',
+  },
+  USBND: {
+    ecoregionId: 354, // Eastern Cascades forests
+    usdaZone: 6,
+    biome: 'Temperate Conifer Forests',
+    realm: 'nearctic',
+  },
+  USOPK: {
+    ecoregionId: 387, // Central US forest-grasslands transition
+    usdaZone: 6,
+    biome: 'Temperate Grasslands, Savannas & Shrublands',
+    realm: 'nearctic',
+  },
+  USEVN: {
+    ecoregionId: 387, // Central US forest-grasslands transition
+    usdaZone: 6,
+    biome: 'Temperate Grasslands, Savannas & Shrublands',
+    realm: 'nearctic',
+  },
+  USMHD: {
+    ecoregionId: 397, // Northern Tallgrass prairie
+    usdaZone: 4,
+    biome: 'Temperate Grasslands, Savannas & Shrublands',
+    realm: 'nearctic',
+  },
 }
 
 function escapeStringLiteral(value: string) {

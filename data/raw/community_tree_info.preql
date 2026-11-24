@@ -166,6 +166,14 @@ property <*>.krsel_community_data_updated_through datetime; # when approved comm
 property <*>.cayrk_community_data_updated_through datetime; # when approved community submissions for CAYRK are through
 property <*>.cawhi_community_data_updated_through datetime; # when approved community submissions for CAWHI are through
 property <*>.usslm_community_data_updated_through datetime; # when approved community submissions for USSLM are through
+property <*>.usoxr_community_data_updated_through datetime; # when approved community submissions for USOXR are through
+property <*>.usrdl_community_data_updated_through datetime; # when approved community submissions for USRDL are through
+property <*>.usdvn_community_data_updated_through datetime; # when approved community submissions for USDVN are through
+property <*>.uspln_community_data_updated_through datetime; # when approved community submissions for USPLN are through
+property <*>.usbnd_community_data_updated_through datetime; # when approved community submissions for USBND are through
+property <*>.usopk_community_data_updated_through datetime; # when approved community submissions for USOPK are through
+property <*>.usevn_community_data_updated_through datetime; # when approved community submissions for USEVN are through
+property <*>.usmhd_community_data_updated_through datetime; # when approved community submissions for USMHD are through
 
 # The community *rows* are declared per city too, in each city's own tree model,
 # as a `complete where city = 'X' and {code}_source = 'COMMUNITY_X'` partition.

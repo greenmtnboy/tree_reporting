@@ -159,6 +159,27 @@ def common_name_key(value: str | None) -> str:
 # below species.  Grouped by genus, because that is how it was checked.
 
 COMMON_NAME_SPECIES: dict[str, str] = {
+    # --- Batch 18 (Bend, Plano, Moorhead) ---
+    "western juniper": "Juniperus occidentalis",
+    "canada red choke cherry": "Prunus virginiana",
+    "lodgepole pine": "Pinus contorta",
+    "canadian serviceberry": "Amelanchier canadensis",
+    "common hawthorn": "Crataegus monogyna",
+    "silver buffaloberry": "Shepherdia argentea",
+    "gray birch": "Betula populifolia",
+    "black hills white spruce": "Picea glauca",
+    "grand fir": "Abies grandis",
+    "catalpa tree": "Catalpa",
+    "cut leaf mahogany": "Cercocarpus ledifolius",
+    "tree lilac": "Syringa reticulata",
+    "blue cedar": "Cedrus atlantica",
+    "apricot": "Prunus armeniaca",
+    "mountain hemlock": "Tsuga mertensiana",
+    "vine maple": "Acer circinatum",
+    "australian black pine": "Pinus nigra",
+    "alta magnolia": "Magnolia grandiflora",
+    "red push pistache": "Pistacia",
+    "green vase japanese zelcova": "Zelkova serrata",
     # --- Batch 16 (Port St. Lucie, Grand Junction) ---
     "sabal palm": "Sabal palmetto",
     "southern slash pine": "Pinus elliottii",
