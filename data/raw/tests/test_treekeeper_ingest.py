@@ -20,8 +20,8 @@ def _load(name: str, relative: str):
     return module
 
 
-somerville = _load("somerville_tree_info", "usbos/somerville_tree_info.py")
-belmont = _load("belmont_tree_info", "usbos/belmont_tree_info.py")
+somerville = _load("somerville_tree_info", "ussom/somerville_tree_info.py")
+belmont = _load("belmont_tree_info", "usbel/belmont_tree_info.py")
 
 
 class TestLabels:

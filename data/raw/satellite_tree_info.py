@@ -61,7 +61,7 @@ from shared.ingest import (  # noqa: E402
     SATELLITE_DATA_SOURCES,
     emit,
     enforce_tree_schema,
-    in_city_territory,
+    territory_city,
     normalize_species,
     parse_pushdown_filters,
 )
@@ -122,12 +122,11 @@ def records_to_table(records: Iterable[Mapping[str, Any]]) -> pa.Table:
                 file=sys.stderr,
             )
             continue
-        city = str(record.get("city") or "").upper().strip()
-        data_source = SATELLITE_DATA_SOURCES.get(city)
-        if not tree_id or data_source is None:
+        named = str(record.get("city") or "").upper().strip()
+        if not tree_id or named not in SATELLITE_DATA_SOURCES:
             print(
                 f"Satellite ingest: skipping {tree_id or '<unknown>'}; "
-                f"{city!r} has no satellite partition",
+                f"{named!r} has no satellite partition",
                 file=sys.stderr,
             )
             continue
@@ -140,9 +139,13 @@ def records_to_table(records: Iterable[Mapping[str, Any]]) -> pa.Table:
                 file=sys.stderr,
             )
             continue
-        if not in_city_territory(city, latitude, longitude):
+        # The tile a detection was reviewed on names the imagery run's city;
+        # the tree belongs to the member of that city's family it stands in.
+        city = territory_city(named, latitude, longitude)
+        data_source = SATELLITE_DATA_SOURCES.get(city or "")
+        if city is None or data_source is None:
             print(
-                f"Satellite ingest: skipping {tree_id}; coordinates outside {city}",
+                f"Satellite ingest: skipping {tree_id}; coordinates outside {named}",
                 file=sys.stderr,
             )
             continue

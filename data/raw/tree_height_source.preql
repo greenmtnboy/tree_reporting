@@ -33,4 +33,5 @@ root datasource published_tree_heights (
 grain (tree_id)
 file [
     f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usbos_tree_info_v{data_version}.parquet`,
+    f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uscam_tree_info_v{data_version}.parquet`,
 ];

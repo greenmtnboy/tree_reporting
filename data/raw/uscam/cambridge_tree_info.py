@@ -362,7 +362,7 @@ def build_table(records: list[dict]) -> pa.Table:
 
         raw_id = rec.get("treeid")
         tree_ids.append(f"cam-{raw_id}" if raw_id else None)
-        cities.append("USBOS")
+        cities.append("USCAM")
         species_list.append(species)
         cultivars.append(_text(rec, "cultivar") or None)
 
@@ -443,6 +443,6 @@ if __name__ == "__main__":
             f"Cambridge ingest: dropped {dropped_null_species} rows with null species",
             file=sys.stderr,
         )
-    table = validate_coordinates(table, city="Cambridge", city_code="USBOS")
+    table = validate_coordinates(table, city="Cambridge", city_code="USCAM")
     table = enforce_tree_schema(table, city="Cambridge", data_source="CAMBRIDGE")
     emit(table)

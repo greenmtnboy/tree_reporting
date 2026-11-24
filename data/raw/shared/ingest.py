@@ -23,10 +23,13 @@ import time
 import unicodedata
 from datetime import date, datetime, timezone
 from email.utils import parsedate_to_datetime
+from functools import lru_cache
 from typing import TYPE_CHECKING
 
 import pyarrow as pa
 from trilogy.io.arrow import emit_arrow as emit  # noqa: F401  (re-exported)
+
+from shared.boundary import boundary_codes, city_boundary
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Iterator
@@ -2329,6 +2332,11 @@ def _sanitize_taxon(value: str | None) -> str | None:
 # Keyed by city code so `community_source_for` can derive the community label
 # and so tests can assert the two lists agree.
 MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
+    "USSOM": ("SOMERVILLE",),
+    "USWAT": ("WATERTOWN",),
+    "USBEL": ("BELMONT",),
+    "USBKL": ("BROOKLINE",),
+    "USCAM": ("CAMBRIDGE",),
     "USMHD": ("MOORHEAD_OPENDATA",),
     "USEVN": ("EVANSTON_OPENDATA",),
     "USOPK": ("ORLAND_PARK_OPENDATA",),
@@ -2477,7 +2485,7 @@ MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
     "CACAL": ("CALGARY_OPENDATA",),
     "USSFO": ("SF_OPENDATA",),
     "USNYC": ("NYC_OPENDATA",),
-    "USBOS": ("CITY_OF_BOSTON", "ARNOLD_ARBORETUM", "CAMBRIDGE", "BROOKLINE", "SOMERVILLE", "BELMONT", "WATERTOWN", "NORTHEASTERN"),
+    "USBOS": ("CITY_OF_BOSTON", "ARNOLD_ARBORETUM", "NORTHEASTERN"),
     "FRPAR": ("PARIS_OPENDATA",),
     "USBTV": ("BURLINGTON_OPENDATA",),
     "CAVAN": ("VANCOUVER_OPENDATA",),
@@ -2525,6 +2533,11 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # overlapping rows under one cluster id and publishes only the survivor — see
 # tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
+    "USSOM": "OSM_USSOM",
+    "USWAT": "OSM_USWAT",
+    "USBEL": "OSM_USBEL",
+    "USBKL": "OSM_USBKL",
+    "USCAM": "OSM_USCAM",
     "USMHD": "OSM_USMHD",
     "USEVN": "OSM_USEVN",
     "USOPK": "OSM_USOPK",
@@ -2714,6 +2727,11 @@ def satellite_source_for(city_code: str) -> str:
 SATELLITE_DATA_SOURCES: dict[str, str] = {
     "USSFO": satellite_source_for("USSFO"),
     "USBOS": satellite_source_for("USBOS"),
+    "USBEL": satellite_source_for("USBEL"),
+    "USBKL": satellite_source_for("USBKL"),
+    "USCAM": satellite_source_for("USCAM"),
+    "USSOM": satellite_source_for("USSOM"),
+    "USWAT": satellite_source_for("USWAT"),
     "USNYC": satellite_source_for("USNYC"),
 }
 
@@ -2733,6 +2751,24 @@ def predicted_source_for(city_code: str) -> str:
 PREDICTED_DATA_SOURCES: dict[str, str] = {
     "USSFO": predicted_source_for("USSFO"),
     "USBOS": predicted_source_for("USBOS"),
+    "USBEL": predicted_source_for("USBEL"),
+    "USBKL": predicted_source_for("USBKL"),
+    "USCAM": predicted_source_for("USCAM"),
+    "USSOM": predicted_source_for("USSOM"),
+    "USWAT": predicted_source_for("USWAT"),
+}
+
+# A prediction run covers the ground it was pointed at, not a city: Boston's
+# is a circle over the whole metro, staged as one file under USBOS.  A town
+# carved out of that ground reads the same file and keeps the rows inside its
+# own territory (predicted_tree_info.py), so the imagery side stages one file
+# per run and never needs to know where a town line is.
+PREDICTED_STAGED_WITH: dict[str, str] = {
+    "USBEL": "USBOS",
+    "USBKL": "USBOS",
+    "USCAM": "USBOS",
+    "USSOM": "USBOS",
+    "USWAT": "USBOS",
 }
 
 
@@ -3300,6 +3336,11 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
+    "USSOM": (42.36, 42.43, -71.15, -71.06),
+    "USWAT": (42.35, 42.4, -71.23, -71.13),
+    "USBEL": (42.36, 42.43, -71.22, -71.14),
+    "USBKL": (42.28, 42.36, -71.19, -71.09),
+    "USCAM": (42.34, 42.42, -71.17, -71.05),
     "USMHD": (46.8, 46.96, -96.82, -96.69),
     "USEVN": (42.0, 42.09, -87.75, -87.65),
     "USOPK": (41.54, 41.67, -87.93, -87.77),
@@ -3521,6 +3562,15 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
+    # Boston's cell, not a copy of it: these five towns' inventories were
+    # partitions of Boston's model when its cell was grounded at the 5 m
+    # break, so that measurement was taken over these rows.  Re-measure a
+    # town on its own once it has published (osm_dedup_validation.py).
+    "USSOM": 10,
+    "USWAT": 10,
+    "USBEL": 10,
+    "USBKL": 10,
+    "USCAM": 10,
     # Calibrated 2026-11-24 (osm_dedup_validation): 4m flags 1059, 2.8% false;
     # 6m adds 73 true for 32 false (5.3% false).
     "USMHD": 4,
@@ -4178,8 +4228,8 @@ DEDUP_CELL_METRES: dict[str, int] = {
     "USSFO": 10,
     # 53.3% over n=5,059: a coin flip, so the band is left unmatched.
     "USNYC": 10,
-    # Grounded with the validation script at the 5 m break; four municipal
-    # partitions share the one cell.
+    # Grounded with the validation script at the 5 m break, while four
+    # municipal partitions (now cities of their own, above) shared the cell.
     "USBOS": 10,
     # 15.9% over n=5,042, and Paris's 3,906 osm_ref exact-id matches break at
     # the same 5 m line -- the strongest confirmation the method has.
@@ -4248,10 +4298,28 @@ DEDUP_CELL_METRES: dict[str, int] = {
 # `new_city.py` writes that.  A city that gains a neighbour has to carve both,
 # then run `tools/sync_osm_territory.py` so both models read their staged OSM
 # extract through the new territory (see territory_where).
+#
+# Rectangles stop working where towns interlock street by street.  Such a
+# town has its real boundary in `boundaries/{code}.geojson` (shared/boundary.py)
+# and is that polygon: its entry here is the polygon's envelope, kept so the
+# Overpass extract and every cheap pre-check still have a box, and membership
+# is the polygon inside it.  A polygon town is carved out of whichever
+# rectangle city its envelope sits in -- Boston's metro box is everything in
+# it that is not Cambridge, Somerville, Brookline, Belmont or Watertown --
+# with nothing to declare: the file is the registration (`carved_out_of`).
+# A polygon is exact where a staircase is not, so a polygon town's own
+# inventory is clipped to it too (`validate_coordinates`), and so is the
+# inventory of the city it was carved from: a border tree two neighbours both
+# record publishes once, from the town it stands in.
 
 Box = tuple[float, float, float, float]
 
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
+    'USSOM': ((42.3725, 42.4182, -71.1347, -71.0726),),
+    'USWAT': ((42.3584, 42.3861, -71.2171, -71.1399),),
+    'USBEL': ((42.375, 42.4154, -71.2113, -71.1522),),
+    'USBKL': ((42.2945, 42.3519, -71.179, -71.1055),),
+    'USCAM': ((42.3524, 42.4043, -71.1604, -71.0639),),
     # Moorhead: a staircase along the inventory's western edge per latitude
     # band, so the box stops at the Red River instead of taking in Fargo ND.
     'USMHD': (
@@ -4914,14 +4982,101 @@ def city_territory(city_code: str) -> tuple[Box, ...]:
     return CITY_TERRITORY[city_code]
 
 
-def in_city_territory(city_code: str, latitude, longitude) -> bool:
-    """Whether a point falls in the city's territory (half-open on every edge)."""
-    if latitude is None or longitude is None:
-        return False
-    return any(
+@lru_cache(maxsize=None)
+def carved_out_of(city_code: str) -> tuple[str, ...]:
+    """The polygon towns whose ground is taken out of *city_code*'s rectangles.
+
+    Derived, not declared: every city with a boundary file whose envelope
+    reaches into one of this city's boxes.  A polygon town carves nothing
+    itself -- its neighbours are polygons of the same tessellation, which
+    already meet without overlapping.
+    """
+    if city_boundary(city_code) is not None:
+        return ()
+    return tuple(
+        other
+        for other in boundary_codes()
+        if other in CITY_TERRITORY
+        and any(boxes_intersect(box, city_boundary(other).box) for box in CITY_TERRITORY[city_code])
+    )
+
+
+@lru_cache(maxsize=None)
+def territory_family(city_code: str) -> tuple[str, ...]:
+    """*city_code* and every city it shares a carved border with, sorted.
+
+    A row that names one member may stand in another: Cambridge's approvals
+    were recorded as Boston's while Boston's model published the metro, and a
+    submission still names whichever centre the phone was nearest.  The
+    shared ingests re-home such a row within its family (`territory_city`),
+    and the per-city freshness probes move a family together.
+    """
+    carved = carved_out_of(city_code)
+    parents = [code for code in CITY_TERRITORY if city_code in carved_out_of(code)]
+    family = {city_code, *carved, *parents}
+    for parent in parents:
+        family.update(carved_out_of(parent))
+    return tuple(sorted(family))
+
+
+def _in_own_ground(city_code: str, latitude: float, longitude: float) -> bool:
+    if not any(
         lat_min <= latitude < lat_max and lon_min <= longitude < lon_max
         for lat_min, lat_max, lon_min, lon_max in CITY_TERRITORY[city_code]
-    )
+    ):
+        return False
+    boundary = city_boundary(city_code)
+    return boundary is None or boundary.contains(latitude, longitude)
+
+
+def in_city_territory(city_code: str, latitude, longitude) -> bool:
+    """Whether a point falls in the city's territory.
+
+    Half-open on every rectangle edge; inside the polygon for a city with a
+    boundary file; and for a rectangle city, outside every polygon town
+    carved out of it.
+    """
+    if latitude is None or longitude is None:
+        return False
+    if not _in_own_ground(city_code, latitude, longitude):
+        return False
+    return not any(city_boundary(other).contains(latitude, longitude) for other in carved_out_of(city_code))
+
+
+def territory_city(named_city: str, latitude, longitude) -> str | None:
+    """The city a row belongs to, given the city it names: that city when the
+    point is in its territory, else the member of its family the point is in,
+    else None (the row is outside every city that could publish it)."""
+    if named_city not in CITY_TERRITORY:
+        return None
+    if in_city_territory(named_city, latitude, longitude):
+        return named_city
+    for code in territory_family(named_city):
+        if code != named_city and in_city_territory(code, latitude, longitude):
+            return code
+    return None
+
+
+def boundary_concept(city_code: str) -> str:
+    """The constant in boundaries.preql that holds a polygon town's boundary."""
+    return f"{city_code.lower()}_boundary"
+
+
+def city_territory_where(city_code: str) -> str:
+    """`territory_where` for a city by code: its rectangles, then its polygon
+    (`geo_contains`, pytrilogy 0.3.540) or the polygons carved out of it.  A
+    city of rectangles alone renders exactly as `territory_where` does."""
+    rendered = territory_where(CITY_TERRITORY[city_code])
+    point = "geo_point(raw_longitude, raw_latitude)"
+    clauses = []
+    if city_boundary(city_code) is not None:
+        clauses.append(f"geo_contains({boundary_concept(city_code)}, {point})")
+    clauses.extend(f"not geo_contains({boundary_concept(other)}, {point})" for other in carved_out_of(city_code))
+    if not clauses:
+        return rendered
+    if len(CITY_TERRITORY[city_code]) > 1:
+        rendered = f"({rendered})"
+    return "\n    and ".join([rendered, *clauses])
 
 
 def territory_where(boxes: tuple[Box, ...]) -> str:
@@ -5086,6 +5241,9 @@ def validate_coordinates(
     1. Raises ValueError if the table has 0 rows or >threshold null lat/lon.
     2. If *city_code* matches a CITY_BOUNDS entry, drops rows outside the
        bounding box and logs the count to stderr.
+    3. If the city's territory is drawn by a polygon -- its own boundary, or
+       the towns carved out of it -- drops rows outside the territory too
+       (`clip_to_polygon_territory`).
 
     Parameters
     ----------
@@ -5173,9 +5331,43 @@ def validate_coordinates(
                 f"{city_code} location (" + ", ".join(parts) + ")",
                 file=sys.stderr,
             )
-        return filtered
+        return clip_to_polygon_territory(filtered, city=city, city_code=city_code)
 
     return table
+
+
+def clip_to_polygon_territory(table: pa.Table, city: str = "", city_code: str = "") -> pa.Table:
+    """Drop an inventory's rows that stand in a neighbouring polygon town.
+
+    Only where a polygon draws the line: a city of rectangles keeps every row
+    its portal attributes to it, because a staircase is too coarse to overrule
+    the publisher.  A polygon is not, and two towns that meet at a street both
+    inventory the trees on it (Cambridge and Somerville record ~100 of the
+    same trees): keeping each tree only in the town it stands in is what
+    publishes it once.  The price is the tree one town maintains a few metres
+    past its line that the neighbour does not record, logged here by count.
+    """
+    if city_boundary(city_code) is None and not carved_out_of(city_code):
+        return table
+    inside = pa.array(
+        [
+            in_city_territory(city_code, latitude, longitude)
+            for latitude, longitude in zip(
+                table["latitude"].to_pylist(), table["longitude"].to_pylist()
+            )
+        ],
+        type=pa.bool_(),
+    )
+    clipped = table.filter(inside)
+    dropped = table.num_rows - clipped.num_rows
+    if dropped:
+        prefix = f"{city} ingest" if city else "Ingest"
+        print(
+            f"{prefix}: dropped {dropped} of {table.num_rows} rows that stand outside "
+            f"{city_code}'s boundary, in a neighbouring town's territory",
+            file=sys.stderr,
+        )
+    return clipped
 
 
 # ---------------------------------------------------------------------------

@@ -291,6 +291,29 @@ decides which city an unattributed tree (OSM node, community submission)
 belongs to. `test_city_territory.py` checks every pair; a city that gains a
 neighbour has to carve both. Municipal ingests keep using the box.
 
+A town that interlocks with its neighbours is a polygon instead: its real
+boundary is `boundaries/{code}.geojson`, its `CITY_TERRITORY` entry is that
+polygon's envelope, and membership is the polygon (`shared/boundary.py`).
+It is carved out of whichever rectangle city its envelope sits in, so
+Boston's territory is its metro box less Cambridge, Somerville, Brookline,
+Belmont and Watertown. Three things follow where a polygon draws the line,
+and only there:
+
+- **Inventories are clipped to it** (`clip_to_polygon_territory`): a town's
+  own rows outside its polygon are dropped, and so are the surrounding
+  city's rows inside it. This is the border dedup (below).
+- **An unattributed row goes to the town it stands in** whatever city it
+  names (`territory_city`), within the family of cities carved from one
+  another: every community, satellite and predicted row in those five towns
+  was recorded as Boston's. The per-city community and satellite freshness
+  columns move a family together for the same reason.
+- **The staged OSM read is `geo_contains`** on the constants in
+  `boundaries.preql`, both written by `tools/sync_osm_territory.py`.
+
+A prediction run and a LIDAR table cover ground, not a city, so a carved town
+reads the metro's staged file for each (`PREDICTED_STAGED_WITH`,
+`CANOPY_STAGED_WITH`) and keeps what falls in its own territory.
+
 ## Position correction (`raw/tree_position.preql`)
 
 A tree whose coordinates fall inside an Overture building footprint or a
@@ -359,12 +382,11 @@ exactly one row per tree, and none for a tree reported gone.
   band to 15 m), so calibrate such a match against a distinct-tree control
   and read `d1/d2`.
 - For the same reason two neighbouring cities' inventories are never merged
-  with each other, and Boston's metro model holds four that meet: about 95
-  trees on the Somerville-Cambridge border and 6 on Brookline-Boston publish
-  twice. The fix belongs in `usbos/boston_tree_info.preql`, the one model
-  that sees every metro source; `docs/BORDER_DEDUP.md` has the model block,
-  the measurements, the three planner bugs it is waiting on, and what the
-  language would need to make it a few lines in the shared merge.
+  with each other. Where the line between them is a polygon each inventory
+  is clipped to its own side, so a tree both record publishes once (Boston
+  and the five towns once in its model). Where one model still unions
+  neighbouring councils (Melbourne) a rank-and-genus block in that model
+  drops the later inventory's copy; `docs/BORDER_DEDUP.md` has both.
 - Needs pytrilogy 0.3.348 or later for the target-side `where`.
 - The cross-city rollup does not carry the dedup columns, and
   `tree_info.preql` derives nothing.

@@ -28,6 +28,7 @@ sys.path.insert(0, str(RAW_DIR))
 
 from shared.canopy import (  # noqa: E402
     CANOPY_LAYERS,
+    CANOPY_STAGED_WITH,
     CROWN_SCHEMA,
     RADIUS_MAX_M,
     RADIUS_MIN_M,
@@ -278,13 +279,16 @@ def height_cities() -> list[str]:
 
 
 def test_importing_and_staging_agree():
-    assert set(height_cities()) == set(CANOPY_LAYERS), (
-        "a city importing tree_height and CANOPY_LAYERS in shared/canopy.py must "
-        "agree, or the lookup is either never built or never read"
+    assert set(height_cities()) == set(CANOPY_LAYERS) | set(CANOPY_STAGED_WITH), (
+        "a city importing tree_height must have a survey in CANOPY_LAYERS or read "
+        "another city's table (CANOPY_STAGED_WITH) in shared/canopy.py, or the "
+        "lookup is either never built or never read"
     )
+    assert set(CANOPY_STAGED_WITH.values()) <= set(CANOPY_LAYERS), "a city reads a table nothing builds"
+    assert not set(CANOPY_STAGED_WITH) & set(CANOPY_LAYERS), "a city both builds a table and reads another's"
 
 
-@pytest.mark.parametrize("code", sorted(CANOPY_LAYERS))
+@pytest.mark.parametrize("code", sorted({*CANOPY_LAYERS, *CANOPY_STAGED_WITH}))
 def test_a_height_city_is_fully_wired(code: str):
     lower = code.lower()
     model = city_models()[code]
@@ -305,6 +309,9 @@ def test_a_height_city_is_fully_wired(code: str):
     for column in ("height_source", "height_crown_id", "canopy_crown_id", "canopy_source"):
         assert column not in target, f"{code}'s target publishes {column}"
 
+    if code in CANOPY_STAGED_WITH:
+        # It reads the table of the city it names, whose model and job build it.
+        return
     staging = DATA_DIR / "canopy_staging" / f"{lower}_canopy_staging.preql"
     assert staging.exists(), f"{code} has no canopy staging model"
     staging_text = statements(staging)

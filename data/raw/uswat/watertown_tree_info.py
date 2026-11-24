@@ -13,11 +13,12 @@ public CARTO named map; how it is read is `shared.platforms.carto`.  The
 city's older OpenTreeMap (opentreemap.org/watertownma) no longer serves data.
 
 The inventory is a snapshot: every site was added and last modified in 2022.
-So there is no freshness probe; were the city to edit it, the edit would
-publish with the next change to any other Boston source.
+So its probe emits that date (`watertown_update_time.py`); were the city to
+edit the layer, the edit would publish with the weekly OSM extract.
 
-Watertown borders Cambridge, Belmont and Boston (Brighton), all inventories in
-this model; trees two of them record are resolved in `boston_tree_info.preql`.
+Watertown borders Cambridge, Belmont and Boston (Brighton), which inventory
+their own side of the shared streets; `validate_coordinates` clips each
+inventory to its town's boundary, so a tree two of them record publishes once.
 """
 
 import sys
@@ -91,7 +92,7 @@ def build_table(rows: list[dict]) -> tuple[pa.Table, dict[str, int]]:
     table = pa.table(
         {
             "tree_id": pa.array(tree_ids, type=pa.string()),
-            "city": pa.array(["USBOS"] * len(tree_ids), type=pa.string()),
+            "city": pa.array(["USWAT"] * len(tree_ids), type=pa.string()),
             "species": pa.array(species_list, type=pa.string()),
             "latitude": pa.array(latitudes, type=pa.float64()),
             "longitude": pa.array(longitudes, type=pa.float64()),
@@ -106,6 +107,6 @@ if __name__ == "__main__":
     for reason, count in dropped.items():
         if count:
             print(f"Watertown ingest: dropped {count} sites with {reason}", file=sys.stderr)
-    table = validate_coordinates(table, city="Watertown", city_code="USBOS")
+    table = validate_coordinates(table, city="Watertown", city_code="USWAT")
     table = enforce_tree_schema(table, city="Watertown", data_source="WATERTOWN")
     emit(table)

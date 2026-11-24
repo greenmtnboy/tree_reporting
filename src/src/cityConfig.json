@@ -162,5 +162,10 @@
   "USBND": { "name": "Bend", "center": [-121.3153, 44.0582] },
   "USOPK": { "name": "Orland Park", "center": [-87.8539, 41.6303] },
   "USEVN": { "name": "Evanston", "center": [-87.6877, 42.0451] },
-  "USMHD": { "name": "Moorhead", "center": [-96.7678, 46.8738] }
+  "USMHD": { "name": "Moorhead", "center": [-96.7678, 46.8738] },
+  "USCAM": { "name": "Cambridge", "center": [-71.1097, 42.3736] },
+  "USBKL": { "name": "Brookline", "center": [-71.1212, 42.3318] },
+  "USBEL": { "name": "Belmont", "center": [-71.1787, 42.3959] },
+  "USWAT": { "name": "Watertown", "center": [-71.1828, 42.3709] },
+  "USSOM": { "name": "Somerville", "center": [-71.0995, 42.3876] }
 }

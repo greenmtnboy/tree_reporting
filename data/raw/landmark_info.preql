@@ -172,6 +172,11 @@ import usbnd.bend_landmarks;
 import usopk.orlandpark_landmarks;
 import usevn.evanston_landmarks;
 import usmhd.moorhead_landmarks;
+import uscam.cambridge_landmarks;
+import usbkl.brookline_landmarks;
+import usbel.belmont_landmarks;
+import uswat.watertown_landmarks;
+import ussom.somerville_landmarks;
 
 # The cross-city union is NOT declared here. It lives in
 # `full_landmark_publish.preql`, which reads the parquets these imports publish

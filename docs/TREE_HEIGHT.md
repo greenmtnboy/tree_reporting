@@ -110,6 +110,10 @@ Sanity checks:
 - **Survey vintage.** 2024. A tree planted since then has no crown, and a
   tree felled since then still lends its crown's height to anything standing
   where it was.
+- **One table, two cities.** Cambridge is its own city (`uscam/`), and its
+  model reads the metro's table rather than staging one (`CANOPY_STAGED_WITH`
+  in `shared/canopy.py`): a crown on the town line shades trees on both
+  sides, and `canopy-usbos` rasterises both surveys.
 - **Edges of the surveys.** Boston's layer stops at its city limit and
   Cambridge's at its own. They overlap in a thin seam along the Charles
   (12 of the 100 m bins hold crowns from both). Where they do, the

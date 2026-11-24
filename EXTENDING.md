@@ -48,7 +48,7 @@ everything in memory, so a failure leaves the tree untouched.
 Then the checks:
 
 ```bash
-cd data/raw && uv run --no-project --with pytest --with pyarrow --with "pytrilogy>=0.3.511" --with "duckdb<2" --with requests python -m pytest tests -q
+cd data/raw && uv run --no-project --with pytest --with pyarrow --with "pytrilogy>=0.3.540" --with "duckdb<2" --with requests python -m pytest tests -q
 cd data && trilogy refresh --dry-run raw/{code}/{slug}_tree_info.preql
 cd data && trilogy refresh --dry-run osm_staging/{code}_osm_staging.preql
 ```
@@ -158,6 +158,34 @@ The scaffolder does this: the `city` enum in `core.preql`, the source label in
 OSM node or community submission belongs to). **If the city has a neighbour on
 the map, carve both territories along the real boundary**; the scaffolder
 writes the envelope, and `test_city_territory.py` fails on an overlap.
+
+**A town that interlocks with its neighbours is a polygon, not a staircase.**
+Where a river separates two cities a few rectangles follow it. Where towns
+meet street by street (Cambridge and Somerville, Brookline inside Boston) a
+staircase fine enough is hundreds of boxes, slower than the polygon and
+still metres wrong: on Boston's 2.98M published rows a bbox-prefiltered
+`ST_Contains` took 21-465 ms against 1.8-31 s for the staircase. So:
+
+```bash
+cd data/raw && uv run tools/fetch_boundary.py --code USCAM --state 25 --name Cambridge
+```
+
+writes `boundaries/uscam.geojson` (US Census TIGER, public domain) and prints
+the `CITY_TERRITORY` line: the polygon's envelope, one rectangle. The file is
+the whole registration (`shared/boundary.py`):
+
+- the town's territory is the polygon inside that envelope;
+- any rectangle city the envelope reaches into gives up that ground
+  (`carved_out_of`), with nothing to declare on its side;
+- both inventories are clipped to the line on the way in
+  (`clip_to_polygon_territory`, inside `validate_coordinates`), so a border
+  tree two towns record publishes once, from the town it stands in;
+- `tools/sync_osm_territory.py` writes `boundaries.preql` (one geography
+  constant per town) and each affected model's OSM `where` as `geo_contains`
+  on it (pytrilogy 0.3.540+), adding `import ..boundaries;`.
+
+A town outside the US needs its own boundary source; write the same
+one-feature file and say where it came from in its properties.
 
 ### 4. The freshness probe (mandatory)
 
@@ -297,6 +325,52 @@ URL, the chat's model glob and the `pnpm test:queries` sweep. Then
 ODbL: credit OpenStreetMap contributors), and a display label in
 `src/src/data/dataSources.ts`.
 
+## Splitting a metro into its towns
+
+A model that unions several municipalities' inventories (Melbourne's councils,
+Adelaide's, Edmonton's with St. Albert) dates from when the map browsed one
+city file at a time. The map reads world blocks now (`docs/SEAMLESS_WORLD.md`),
+so each municipality is its own city. Boston's split (Cambridge, Somerville,
+Brookline, Belmont, Watertown) is the worked example; per town:
+
+1. **Scaffold it** with `new_city.py`, passing the town's existing
+   `--source-label` unchanged: a `data_source` value and a tree id never
+   change in a split, so check-ins and links survive.
+2. **`git mv` its ingest and probe** out of the metro's directory over the
+   scaffolder's stubs and change the city code they pass to
+   `validate_coordinates`, `enforce_tree_schema` and `emit_freshness`. A
+   source with no date of its own, which used to publish when a sibling moved,
+   needs a probe now (Belmont's emits the inventory's date and lets the weekly
+   OSM extract re-read the portal).
+3. **Fetch its boundary** (above) and set its `CITY_TERRITORY` envelope.
+4. **Carry over every class of row the metro published there.** Rows with no
+   municipal attribution were recorded under the metro's code, and the shared
+   ingests re-home them within a carved family (`territory_city`), but only
+   into a city that has the partition: add the town to
+   `SATELLITE_DATA_SOURCES` and `PREDICTED_DATA_SOURCES` if the metro is in
+   them, to `PREDICTED_STAGED_WITH` (it reads the metro run's staged file)
+   and, where the metro's LIDAR table covers it, `CANOPY_STAGED_WITH`.
+   `tests/test_split_towns.py` holds Boston's towns to this.
+5. **Take the town out of the metro's model**: its partition, probe, enum
+   value, `@source_kept` line, and any border-dedup block (the clip replaces
+   it; `docs/BORDER_DEDUP.md`).
+6. `tools/sync_osm_territory.py`, `tools/sync_city_derived.py`, the tests,
+   and a dry run of each model.
+
+Rollout, in this order, because the metro's published parquet still holds the
+towns' trees until it rebuilds:
+
+1. Before merge: bootstrap each town's OSM staging object and publish its
+   tree and landmark parquets (below). Nothing reads them yet.
+2. Merge, Cloud Sync, then at once force the metro's OSM extract and its city
+   target with `--skip-validation`: it sheds the towns' rows, which trips
+   `@kept` and the OSM `@source_kept` (that is what those guards are for).
+3. The core chain by hand: `urban-tree-full`, validate, the browser
+   projections, world blocks, rollups, rankings, website.
+
+Between 2's merge and its rebuild the rollup holds the towns' trees under
+both codes; keep that window short.
+
 ## Community-only cities
 
 A city with no municipal inventory has an empty `MUNICIPAL_DATA_SOURCES`
@@ -410,7 +484,7 @@ Refresh before you deploy either way.
 ## After adding a city
 
 ```bash
-cd data/raw && uv run --no-project --with pytest --with pyarrow --with "pytrilogy>=0.3.511" --with "duckdb<2" --with requests python -m pytest tests -q
+cd data/raw && uv run --no-project --with pytest --with pyarrow --with "pytrilogy>=0.3.540" --with "duckdb<2" --with requests python -m pytest tests -q
 cd data && trilogy refresh --dry-run raw/{code}/{slug}_tree_info.preql        # one asset
 cd data && trilogy refresh --dry-run osm_staging/{code}_osm_staging.preql     # one asset
 cd data/raw && uv run tree_enrichment_probe.py                                # lists species needing enrichment

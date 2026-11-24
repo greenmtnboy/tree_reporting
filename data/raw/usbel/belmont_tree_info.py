@@ -3,22 +3,25 @@
 # requires-python = ">=3.13"
 # dependencies = ["pyarrow", "requests", "pytrilogy"]
 # ///
-"""Somerville MA public trees, from the city's TreeKeeper inventory.
+"""Belmont MA public trees, from the town's TreeKeeper inventory.
 
-Somerville publishes no tree dataset on its open-data portal; the inventory
-lives in Davey's TreeKeeper (https://somervillema.treekeepersoftware.com),
-which the Urban Forestry page links as the public map.  Davey re-inventoried
-the city in 2024 and staff keep it current, so it is the live record.  How
-the public map is read is `shared.platforms.treekeeper`.
+Belmont publishes no tree dataset on an open-data portal; the inventory lives
+in Davey's TreeKeeper (https://belmontma.treekeepersoftware.com), which the
+town's website links as its public tree map.  The 2022 inventory recorded
+some 8,000 trees along streets, in parks, around public buildings and in the
+cemeteries, and staff keep it current.  How the public map is read is
+`shared.platforms.treekeeper`.
 
-Somerville borders Cambridge for most of its southern edge, and both cities
-inventory the trees on the streets they share.  That overlap is resolved in
-`boston_tree_info.preql`, which sees every metro source; this ingest knows
-only its own portal.
+Belmont's public grid exposes no date column (no inventory date, no last
+edit), so its probe emits a fixed date and an edit publishes with the city's
+weekly OSM extract (`belmont_update_time.py`).
+
+Belmont borders Cambridge and Watertown, which inventory their own side of
+the shared streets; `validate_coordinates` clips each inventory to its town's
+boundary, so a tree two of them record publishes once.
 """
 
 import sys
-from datetime import date, datetime
 from pathlib import Path
 
 import pyarrow as pa
@@ -34,34 +37,22 @@ from shared.ingest import (  # noqa: E402
 from shared.platforms.treekeeper import (  # noqa: E402
     TreeKeeperSite,
     fetch_sites,
-    newest_value,
     split_label,
 )
 
-# The "Smart Tree Inventory" layer; the box is generously around the city
-# (42.373-42.418N, 71.134-71.075W).
+# The "Tree Sites" layer; the box is generously around the town
+# (42.375-42.415N, 71.205-71.154W).  The "Memorial Tree" layer is a styled
+# view of the same sites, not more of them.
 SITE = TreeKeeperSite(
-    "https://somervillema.treekeepersoftware.com/",
-    map_layer="main_layer14",
-    grid_layer=14,
-    bbox=(42.33, 42.46, -71.20, -71.00),
+    "https://belmontma.treekeepersoftware.com/",
+    map_layer="main_layer",
+    grid_layer=1,
+    bbox=(42.33, 42.46, -71.30, -71.10),
 )
 
 # Grid columns (`SITE_ATTR*` are per-project).
-SPECIES = "SITE_ATTR41"  # "maple: Norway (Acer platanoides)"
-DBH_INCHES = "SITE_ATTR25"
-INVENTORY_DATE = "SITE_INVENTORYDATE"  # "7/21/2024"
-
-
-def parse_inventory_date(raw: str | None) -> date | None:
-    if not raw:
-        return None
-    return datetime.strptime(raw, "%m/%d/%Y").date()
-
-
-def newest_inventory_date() -> date | None:
-    """The latest `Inventory Date` on any site."""
-    return parse_inventory_date(newest_value(SITE, INVENTORY_DATE))
+SPECIES = "SITE_ATTR1"  # "Maple, Norway (Acer platanoides)"
+DBH_INCHES = "SITE_ATTR7"  # whole inches; 0 on every vacant site and some trees
 
 
 def build_table(rows: list[dict]) -> tuple[pa.Table, dict[str, int]]:
@@ -83,17 +74,19 @@ def build_table(rows: list[dict]) -> tuple[pa.Table, dict[str, int]]:
         if species is None:
             dropped["no species"] += 1
             continue
-        tree_ids.append(f"som-{row['SITE_ID']}")
+        tree_ids.append(f"bel-{row['SITE_ID']}")
         species_list.append(species)
         latitudes.append(row.get("LATITUDE"))
         longitudes.append(row.get("LONGITUDE"))
+        # A zero is the unmeasured default, not a sapling under half an inch:
+        # it is what every vacant site carries.
         dbh = row.get(DBH_INCHES)
-        dbhs.append(float(dbh) if dbh is not None else None)
+        dbhs.append(float(dbh) if dbh else None)
 
     table = pa.table(
         {
             "tree_id": pa.array(tree_ids, type=pa.string()),
-            "city": pa.array(["USBOS"] * len(tree_ids), type=pa.string()),
+            "city": pa.array(["USBEL"] * len(tree_ids), type=pa.string()),
             "species": pa.array(species_list, type=pa.string()),
             "latitude": pa.array(latitudes, type=pa.float64()),
             "longitude": pa.array(longitudes, type=pa.float64()),
@@ -107,7 +100,7 @@ if __name__ == "__main__":
     table, dropped = build_table(fetch_sites(SITE))
     for reason, count in dropped.items():
         if count:
-            print(f"Somerville ingest: dropped {count} sites with {reason}", file=sys.stderr)
-    table = validate_coordinates(table, city="Somerville", city_code="USBOS")
-    table = enforce_tree_schema(table, city="Somerville", data_source="SOMERVILLE")
+            print(f"Belmont ingest: dropped {count} sites with {reason}", file=sys.stderr)
+    table = validate_coordinates(table, city="Belmont", city_code="USBEL")
+    table = enforce_tree_schema(table, city="Belmont", data_source="BELMONT")
     emit(table)

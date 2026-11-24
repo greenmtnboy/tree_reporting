@@ -589,8 +589,15 @@ def localize(files: dict[str, Path], sql: str) -> str:
     The `read_parquet` URLs the planner names are pointed at the local
     parquets, and the const bind parameters are filled from the model text.
     """
+    # A file list that names the pattern anywhere is one local parquet: the
+    # height source lists every height city's file, and the fixture is one.
+    quoted = r"'[^']*'"
     for pattern, path in files.items():
-        sql = re.sub(rf"read_parquet\(\[?'[^']*{pattern}[^']*'\]?\)", f"read_parquet('{path.as_posix()}')", sql)
+        sql = re.sub(
+            rf"read_parquet\(\[?(?:{quoted},\s*)*'[^']*{pattern}[^']*'(?:,\s*{quoted})*\]?\)",
+            f"read_parquet('{path.as_posix()}')",
+            sql,
+        )
     for name, value in model_consts().items():
         sql = re.sub(rf":{name}\b", repr(value), sql)
     assert "uv_run" not in sql, "the probe should not be needed for these columns"

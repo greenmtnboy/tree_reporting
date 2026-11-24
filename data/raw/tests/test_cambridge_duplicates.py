@@ -28,7 +28,7 @@ CAMBRIDGE_LAT = 42.3736
 @pytest.fixture(scope="module")
 def cam():
     spec = importlib.util.spec_from_file_location(
-        "cambridge_tree_info", RAW_DIR / "usbos" / "cambridge_tree_info.py"
+        "cambridge_tree_info", RAW_DIR / "uscam" / "cambridge_tree_info.py"
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

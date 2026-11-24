@@ -89,7 +89,7 @@ def build_table(features: list[dict]) -> pa.Table:
             continue
 
         tree_ids.append(f"bkl-{obj_id}" if obj_id is not None else None)
-        cities.append("USBOS")
+        cities.append("USBKL")
         species_list.append(species)
 
         plant_dates.append(yr_to_date(attrs.get("YR_PLANT")))
@@ -155,6 +155,6 @@ if __name__ == "__main__":
             file=sys.stderr,
         )
     table = build_table(features)
-    table = validate_coordinates(table, city="Brookline", city_code="USBOS")
+    table = validate_coordinates(table, city="Brookline", city_code="USBKL")
     table = enforce_tree_schema(table, city="Brookline", data_source="BROOKLINE")
     emit(table)
