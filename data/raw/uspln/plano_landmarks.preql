@@ -1,0 +1,29 @@
+import ..landmark_common;
+
+root datasource plano_landmarks_update_time (
+    data_updated_through: uspln_landmark_data_updated_through
+)
+file `./plano_landmarks_probe.py`;
+
+# STUB. Every city needs a landmarks model even if it yields zero rows -- a
+# missing file fails the landmark lane for every city, and the agent has no
+# geographic context for this one.
+#
+# Point the raw datasource at whichever source this city has, in preference
+# order: an official designation registry, the same portal as the trees, an
+# Overpass extract (STAGE it -- do not fetch at refresh time), or a curated CSV
+# geocoded via Nominatim (then add a `landmarks-uspln` job with NO cron).
+#
+# Both datasources extend ../landmark_common.preql's templates: add the
+# register's own attributes to both, mapped in one and stored in the other.
+root partial datasource raw_plano_landmark_info extends landmark_partition (
+)
+complete where city = 'USPLN'
+file `./plano_landmarks.py`;
+
+partial datasource plano_landmark_info extends published_landmark_info (
+    uspln_landmark_data_updated_through,
+)
+complete where city = 'USPLN'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/uspln_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/uspln_landmark_info_v{data_version}.parquet`
+freshness by uspln_landmark_data_updated_through;

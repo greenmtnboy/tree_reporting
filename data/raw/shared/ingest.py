@@ -2318,6 +2318,14 @@ def _sanitize_taxon(value: str | None) -> str | None:
 # Keyed by city code so `community_source_for` can derive the community label
 # and so tests can assert the two lists agree.
 MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
+    "USMHD": ("MOORHEAD_OPENDATA",),
+    "USEVN": ("EVANSTON_OPENDATA",),
+    "USOPK": ("ORLAND_PARK_OPENDATA",),
+    "USBND": ("BEND_OPENDATA",),
+    "USPLN": ("PLANO_OPENDATA",),
+    "USDVN": ("DAVENPORT_OPENDATA",),
+    "USRDL": ("REDLANDS_OPENDATA",),
+    "USOXR": ("OXNARD_OPENDATA",),
     "USSLM": ("SALEM_OPENDATA",),
     "CAWHI": ("WHITBY_OPENDATA",),
     "CAYRK": ("YORK_REGION_OPENDATA",),
@@ -2506,6 +2514,14 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # overlapping rows under one cluster id and publishes only the survivor — see
 # tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
+    "USMHD": "OSM_USMHD",
+    "USEVN": "OSM_USEVN",
+    "USOPK": "OSM_USOPK",
+    "USBND": "OSM_USBND",
+    "USPLN": "OSM_USPLN",
+    "USDVN": "OSM_USDVN",
+    "USRDL": "OSM_USRDL",
+    "USOXR": "OSM_USOXR",
     "USSLM": "OSM_USSLM",
     "CAWHI": "OSM_CAWHI",
     "CAYRK": "OSM_CAYRK",
@@ -3273,6 +3289,14 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
+    "USMHD": (46.8, 46.96, -96.82, -96.69),
+    "USEVN": (42.0, 42.09, -87.75, -87.65),
+    "USOPK": (41.54, 41.67, -87.93, -87.77),
+    "USBND": (43.99, 44.13, -121.39, -121.23),
+    "USPLN": (32.99, 33.14, -96.87, -96.61),
+    "USDVN": (41.45, 41.63, -90.7, -90.49),
+    "USRDL": (34.0, 34.1, -117.26, -117.09),
+    "USOXR": (34.13, 34.27, -119.26, -119.11),
     "USSLM": (44.83, 45.03, -123.14, -122.92),
     "CAWHI": (43.81, 44.03, -79.05, -78.87),
     "CAYRK": (43.74, 44.34, -79.73, -79.15),
@@ -3486,6 +3510,22 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "USMHD": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "USEVN": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "USOPK": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "USBND": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "USPLN": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "USDVN": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "USRDL": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "USOXR": 10,
     # osm_dedup_validation 2026-11-23: 8m is the last cell whose added
     # flags are mostly real (+13 true / +6 false); 10m adds as many false as true.
     "USSLM": 8,
@@ -4193,6 +4233,14 @@ DEDUP_CELL_METRES: dict[str, int] = {
 Box = tuple[float, float, float, float]
 
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
+    'USMHD': ((46.8, 46.96, -96.82, -96.69),),
+    'USEVN': ((42.0, 42.09, -87.75, -87.65),),
+    'USOPK': ((41.54, 41.67, -87.93, -87.77),),
+    'USBND': ((43.99, 44.13, -121.39, -121.23),),
+    'USPLN': ((32.99, 33.14, -96.87, -96.61),),
+    'USDVN': ((41.45, 41.63, -90.7, -90.49),),
+    'USRDL': ((34.0, 34.1, -117.26, -117.09),),
+    'USOXR': ((34.13, 34.27, -119.26, -119.11),),
     'USSLM': ((44.83, 45.03, -123.14, -122.92),),
     # Whitby west of Ajax: latitude bands cut at the Town's western boundary
     # (Lakeridge Rd, then the Pickering line); see CAAJX.

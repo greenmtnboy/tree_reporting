@@ -51,6 +51,22 @@ property <*>.usden_data_updated_through datetime; # when Denver data is through
 # community column with the staged OSM one and nothing else.
 property <*>.ustem_osm_data_updated_through datetime; # mtime of Tempe's committed OSM staging parquet
 property <*>.usbos_osm_data_updated_through datetime;
+property <*>.usmhd_data_updated_through datetime; # when Moorhead data is through
+property <*>.usmhd_osm_data_updated_through datetime; # GCS publication time of Moorhead's staged OSM parquet
+property <*>.usevn_data_updated_through datetime; # when Evanston data is through
+property <*>.usevn_osm_data_updated_through datetime; # GCS publication time of Evanston's staged OSM parquet
+property <*>.usopk_data_updated_through datetime; # when Orland Park data is through
+property <*>.usopk_osm_data_updated_through datetime; # GCS publication time of Orland Park's staged OSM parquet
+property <*>.usbnd_data_updated_through datetime; # when Bend data is through
+property <*>.usbnd_osm_data_updated_through datetime; # GCS publication time of Bend's staged OSM parquet
+property <*>.uspln_data_updated_through datetime; # when Plano data is through
+property <*>.uspln_osm_data_updated_through datetime; # GCS publication time of Plano's staged OSM parquet
+property <*>.usdvn_data_updated_through datetime; # when Davenport data is through
+property <*>.usdvn_osm_data_updated_through datetime; # GCS publication time of Davenport's staged OSM parquet
+property <*>.usrdl_data_updated_through datetime; # when Redlands data is through
+property <*>.usrdl_osm_data_updated_through datetime; # GCS publication time of Redlands's staged OSM parquet
+property <*>.usoxr_data_updated_through datetime; # when Oxnard data is through
+property <*>.usoxr_osm_data_updated_through datetime; # GCS publication time of Oxnard's staged OSM parquet
 property <*>.usslm_data_updated_through datetime; # when Salem data is through
 property <*>.usslm_osm_data_updated_through datetime; # GCS publication time of Salem's staged OSM parquet
 property <*>.cawhi_data_updated_through datetime; # when Whitby data is through

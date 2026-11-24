@@ -11,6 +11,14 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
+  { city: 'Moorhead', label: 'TODO: Moorhead tree inventory source', url: 'TODO' },
+  { city: 'Evanston', label: 'TODO: Evanston tree inventory source', url: 'TODO' },
+  { city: 'Orland Park', label: 'TODO: Orland Park tree inventory source', url: 'TODO' },
+  { city: 'Bend', label: 'TODO: Bend tree inventory source', url: 'TODO' },
+  { city: 'Plano', label: 'TODO: Plano tree inventory source', url: 'TODO' },
+  { city: 'Davenport', label: 'TODO: Davenport tree inventory source', url: 'TODO' },
+  { city: 'Redlands', label: 'TODO: Redlands tree inventory source', url: 'TODO' },
+  { city: 'Oxnard', label: 'TODO: Oxnard tree inventory source', url: 'TODO' },
   { city: 'Salem', label: 'City of Salem - City Trees (resale prohibited by the City; displayed with attribution only, not licensed for reuse)', url: 'https://www.arcgis.com/home/item.html?id=e5397978d59f46ec96f72a1dfc660919' },
   { city: 'Whitby', label: 'Town of Whitby - Trees (Open Government Licence - The Corporation of the Town of Whitby)', url: 'https://www.arcgis.com/home/item.html?id=5be6efcf4f264639874bf07009f155d2' },
   { city: 'York Region', label: 'Regional Municipality of York - Street Trees (York Region Open Data Licence)', url: 'https://insights-york.opendata.arcgis.com/datasets/york::street-trees' },
@@ -204,6 +212,14 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
+  { city: 'Moorhead', label: 'TODO: Moorhead landmark source' },
+  { city: 'Evanston', label: 'TODO: Evanston landmark source' },
+  { city: 'Orland Park', label: 'TODO: Orland Park landmark source' },
+  { city: 'Bend', label: 'TODO: Bend landmark source' },
+  { city: 'Plano', label: 'TODO: Plano landmark source' },
+  { city: 'Davenport', label: 'TODO: Davenport landmark source' },
+  { city: 'Redlands', label: 'TODO: Redlands landmark source' },
+  { city: 'Oxnard', label: 'TODO: Oxnard landmark source' },
   { city: 'Salem', label: 'City of Salem - Historic Buildings (resale prohibited by the City; displayed with attribution only, not licensed for reuse)', url: 'https://www.arcgis.com/home/item.html?id=a49aaabfe16945ad90053f340b2c96bf' },
   { city: 'Salem', label: 'National Park Service - National Register of Historic Places', url: 'https://www.nps.gov/subjects/nationalregister/data-downloads.htm' },
   { city: 'Whitby', label: 'Town of Whitby - Parks and Open Spaces; Town Facilities (Open Government Licence - The Corporation of the Town of Whitby)', url: 'https://geohub-whitby.hub.arcgis.com/' },
