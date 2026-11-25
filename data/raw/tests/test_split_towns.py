@@ -31,6 +31,7 @@ from shared.ingest import (  # noqa: E402
     PREDICTED_STAGED_WITH,
     SATELLITE_DATA_SOURCES,
     carved_out_of,
+    territory_family,
     clip_to_polygon_territory,
     validate_coordinates,
 )
@@ -75,7 +76,10 @@ def points(*places) -> pa.Table:
 
 
 def test_the_towns_are_cities_and_boston_no_longer_claims_them():
-    assert carved_out_of("USBOS") == TOWNS
+    # Boston is its own polygon, so nothing is carved: the towns are its
+    # neighbours in one tessellation, and the family still holds them.
+    assert carved_out_of("USBOS") == ()
+    assert set(TOWNS) < set(territory_family("USBOS"))
     assert MUNICIPAL_DATA_SOURCES["USBOS"] == ("CITY_OF_BOSTON", "ARNOLD_ARBORETUM", "NORTHEASTERN")
     labels = {code: MUNICIPAL_DATA_SOURCES[code] for code in TOWNS}
     # The labels the rows were always published under: a split must not rename
@@ -108,9 +112,9 @@ def test_an_inventory_row_in_the_next_town_is_dropped(capsys):
     assert "dropped 1 of 2 rows that stand outside USCAM's boundary" in capsys.readouterr().err
 
 
-def test_boston_gives_up_the_rows_inside_a_town_and_keeps_the_ring():
+def test_boston_keeps_only_the_rows_inside_its_own_line():
     kept = clip_to_polygon_territory(points(BOSTON_COMMON, COOLIDGE_CORNER, NEWTON), city_code="USBOS")
-    assert kept["tree_id"].to_pylist() == ["t0", "t2"]
+    assert kept["tree_id"].to_pylist() == ["t0"]
 
 
 def test_a_city_of_rectangles_keeps_what_its_portal_attributes_to_it():
@@ -196,7 +200,9 @@ def test_each_prediction_of_the_metro_run_publishes_in_exactly_one_city(tmp_path
                 assert row["tree_id"] not in published, f"{row['tree_id']} published by two cities"
                 assert row["data_source"] == f"PREDICTED_{code}" and row["city"] == code
                 published[row["tree_id"]] = code
-    assert published == {"pred-cam": "USCAM", "pred-som": "USSOM", "pred-bos": "USBOS", "pred-ring": "USBOS"}
+    assert published == {"pred-cam": "USCAM", "pred-som": "USSOM", "pred-bos": "USBOS"}, (
+        "a prediction in a town that is not yet a city (Newton) publishes nowhere"
+    )
 
 
 def test_rows_far_from_a_town_are_dropped_before_they_become_records():
