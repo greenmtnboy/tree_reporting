@@ -48,7 +48,7 @@ everything in memory, so a failure leaves the tree untouched.
 Then the checks:
 
 ```bash
-cd data/raw && uv run --no-project --with pytest --with pyarrow --with "pytrilogy>=0.3.540" --with "duckdb<2" --with requests python -m pytest tests -q
+cd data/raw && uv run --no-project --with pytest --with pyarrow --with "pytrilogy>=0.3.541" --with "duckdb<2" --with requests python -m pytest tests -q
 cd data && trilogy refresh --dry-run raw/{code}/{slug}_tree_info.preql
 cd data && trilogy refresh --dry-run osm_staging/{code}_osm_staging.preql
 ```
@@ -512,7 +512,7 @@ Refresh before you deploy either way.
 ## After adding a city
 
 ```bash
-cd data/raw && uv run --no-project --with pytest --with pyarrow --with "pytrilogy>=0.3.540" --with "duckdb<2" --with requests python -m pytest tests -q
+cd data/raw && uv run --no-project --with pytest --with pyarrow --with "pytrilogy>=0.3.541" --with "duckdb<2" --with requests python -m pytest tests -q
 cd data/raw && uv run tools/sync_app_models.py --check                          # tree_info.preql reads the new city
 cd data && trilogy refresh --dry-run raw/{code}/{slug}_tree_info.preql        # one asset
 cd data && trilogy refresh --dry-run osm_staging/{code}_osm_staging.preql     # one asset
