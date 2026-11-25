@@ -102,6 +102,17 @@ _CIRCUMFERENCE_RE = re.compile(r"^\s*(\d+(?:[.,]\d+)?)\s*(cm|m)?\s*$", re.I)
 # that type", which is a long way from "you forgot a column".  London is the
 # only instance today.
 OSM_CITY_NAMES: dict[str, str] = {
+    "USCAN": "Canton",
+    "USWNC": "Winchester",
+    "USDAN": "Danvers",
+    "USNAH": "Nahant",
+    "USWEL": "Wellesley",
+    "USMRS": "Melrose",
+    "USLYF": "Lynnfield",
+    "USBEV": "Beverly",
+    "USWNT": "Winthrop",
+    "USCHE": "Chelsea",
+    "USEVE": "Everett",
     "USMLD": "Malden",
     "USREV": "Revere",
     "USMBH": "Marblehead",

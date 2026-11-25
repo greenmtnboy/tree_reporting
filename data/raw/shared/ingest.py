@@ -2335,6 +2335,17 @@ def _sanitize_taxon(value: str | None) -> str | None:
 # Keyed by city code so `community_source_for` can derive the community label
 # and so tests can assert the two lists agree.
 MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
+    "USCAN": (),
+    "USWNC": (),
+    "USDAN": (),
+    "USNAH": (),
+    "USWEL": (),
+    "USMRS": (),
+    "USLYF": (),
+    "USBEV": (),
+    "USWNT": (),
+    "USCHE": (),
+    "USEVE": (),
     "USMLD": (),
     "USREV": (),
     "USMBH": (),
@@ -2552,6 +2563,17 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # overlapping rows under one cluster id and publishes only the survivor — see
 # tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
+    "USCAN": "OSM_USCAN",
+    "USWNC": "OSM_USWNC",
+    "USDAN": "OSM_USDAN",
+    "USNAH": "OSM_USNAH",
+    "USWEL": "OSM_USWEL",
+    "USMRS": "OSM_USMRS",
+    "USLYF": "OSM_USLYF",
+    "USBEV": "OSM_USBEV",
+    "USWNT": "OSM_USWNT",
+    "USCHE": "OSM_USCHE",
+    "USEVE": "OSM_USEVE",
     "USMLD": "OSM_USMLD",
     "USREV": "OSM_USREV",
     "USMBH": "OSM_USMBH",
@@ -2784,6 +2806,17 @@ SATELLITE_DATA_SOURCES: dict[str, str] = {
     "USMBH": satellite_source_for("USMBH"),
     "USREV": satellite_source_for("USREV"),
     "USMLD": satellite_source_for("USMLD"),
+    "USEVE": satellite_source_for("USEVE"),
+    "USCHE": satellite_source_for("USCHE"),
+    "USWNT": satellite_source_for("USWNT"),
+    "USBEV": satellite_source_for("USBEV"),
+    "USLYF": satellite_source_for("USLYF"),
+    "USMRS": satellite_source_for("USMRS"),
+    "USWEL": satellite_source_for("USWEL"),
+    "USNAH": satellite_source_for("USNAH"),
+    "USDAN": satellite_source_for("USDAN"),
+    "USWNC": satellite_source_for("USWNC"),
+    "USCAN": satellite_source_for("USCAN"),
 }
 
 def predicted_source_for(city_code: str) -> str:
@@ -2823,6 +2856,17 @@ PREDICTED_DATA_SOURCES: dict[str, str] = {
     "USMBH": predicted_source_for("USMBH"),
     "USREV": predicted_source_for("USREV"),
     "USMLD": predicted_source_for("USMLD"),
+    "USEVE": predicted_source_for("USEVE"),
+    "USCHE": predicted_source_for("USCHE"),
+    "USWNT": predicted_source_for("USWNT"),
+    "USBEV": predicted_source_for("USBEV"),
+    "USLYF": predicted_source_for("USLYF"),
+    "USMRS": predicted_source_for("USMRS"),
+    "USWEL": predicted_source_for("USWEL"),
+    "USNAH": predicted_source_for("USNAH"),
+    "USDAN": predicted_source_for("USDAN"),
+    "USWNC": predicted_source_for("USWNC"),
+    "USCAN": predicted_source_for("USCAN"),
 }
 
 # A prediction run covers the ground it was pointed at, not a city: Boston's
@@ -2852,6 +2896,17 @@ PREDICTED_STAGED_WITH: dict[str, str] = {
     "USMBH": "USBOS",
     "USREV": "USBOS",
     "USMLD": "USBOS",
+    "USEVE": "USBOS",
+    "USCHE": "USBOS",
+    "USWNT": "USBOS",
+    "USBEV": "USBOS",
+    "USLYF": "USBOS",
+    "USMRS": "USBOS",
+    "USWEL": "USBOS",
+    "USNAH": "USBOS",
+    "USDAN": "USBOS",
+    "USWNC": "USBOS",
+    "USCAN": "USBOS",
 }
 
 
@@ -3419,6 +3474,17 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
+    "USCAN": (42.1376, 42.228, -71.1781, -71.0666),
+    "USWNC": (42.4355, 42.4739, -71.1897, -71.1095),
+    "USDAN": (42.5403, 42.6133, -71.0029, -70.9079),
+    "USNAH": (42.384, 42.4569, -70.9621, -70.8514),
+    "USWEL": (42.2696, 42.3281, -71.3298, -71.2275),
+    "USMRS": (42.4388, 42.476, -71.083, -71.0258),
+    "USLYF": (42.5016, 42.5741, -71.0752, -70.9869),
+    "USBEV": (42.4959, 42.5916, -70.9224, -70.7335),
+    "USWNT": (42.3535, 42.4075, -71.0104, -70.9178),
+    "USCHE": (42.3832, 42.4143, -71.0553, -71.0093),
+    "USEVE": (42.3865, 42.4243, -71.0765, -71.0282),
     "USMLD": (42.4125, 42.4448, -71.0895, -71.0203),
     "USREV": (42.3881, 42.4502, -71.0332, -70.9507),
     "USMBH": (42.4554, 42.5288, -70.8991, -70.7675),
@@ -3661,6 +3727,20 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
+    # Everett, Chelsea, Winthrop, Beverly, Lynnfield, Melrose, Wellesley,
+    # Nahant, Danvers, Winchester, Canton: no inventory, so nothing to
+    # calibrate against.  Default.
+    "USEVE": 10,
+    "USCHE": 10,
+    "USWNT": 10,
+    "USBEV": 10,
+    "USLYF": 10,
+    "USMRS": 10,
+    "USWEL": 10,
+    "USNAH": 10,
+    "USDAN": 10,
+    "USWNC": 10,
+    "USCAN": 10,
     # Arlington, MA measured 2026-11-25 against its staged extract
     # (osm_dedup_validation.py with the ingest's local parquet, 116 OSM
     # trees): mutual-NN 100% under 5m, 67% in 5-10m, 43% in 10-20m.  The
@@ -4449,6 +4529,17 @@ DEDUP_CELL_METRES: dict[str, int] = {
 Box = tuple[float, float, float, float]
 
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
+    'USCAN': ((42.1376, 42.228, -71.1781, -71.0666),),
+    'USWNC': ((42.4355, 42.4739, -71.1897, -71.1095),),
+    'USDAN': ((42.5403, 42.6133, -71.0029, -70.9079),),
+    'USNAH': ((42.384, 42.4569, -70.9621, -70.8514),),
+    'USWEL': ((42.2696, 42.3281, -71.3298, -71.2275),),
+    'USMRS': ((42.4388, 42.476, -71.083, -71.0258),),
+    'USLYF': ((42.5016, 42.5741, -71.0752, -70.9869),),
+    'USBEV': ((42.4959, 42.5916, -70.9224, -70.7335),),
+    'USWNT': ((42.3535, 42.4075, -71.0104, -70.9178),),
+    'USCHE': ((42.3832, 42.4143, -71.0553, -71.0093),),
+    'USEVE': ((42.3865, 42.4243, -71.0765, -71.0282),),
     'USMLD': ((42.4125, 42.4448, -71.0895, -71.0203),),
     'USREV': ((42.3881, 42.4502, -71.0332, -70.9507),),
     'USMBH': ((42.4554, 42.5288, -70.8991, -70.7675),),

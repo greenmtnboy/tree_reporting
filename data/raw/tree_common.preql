@@ -64,6 +64,17 @@ property <*>.uswlt_osm_data_updated_through datetime; # GCS publication time of 
 property <*>.usmbh_osm_data_updated_through datetime; # GCS publication time of Marblehead's staged OSM parquet
 property <*>.usrev_osm_data_updated_through datetime; # GCS publication time of Revere's staged OSM parquet
 property <*>.usmld_osm_data_updated_through datetime; # GCS publication time of Malden's staged OSM parquet
+property <*>.useve_osm_data_updated_through datetime; # GCS publication time of Everett's staged OSM parquet
+property <*>.usche_osm_data_updated_through datetime; # GCS publication time of Chelsea's staged OSM parquet
+property <*>.uswnt_osm_data_updated_through datetime; # GCS publication time of Winthrop's staged OSM parquet
+property <*>.usbev_osm_data_updated_through datetime; # GCS publication time of Beverly's staged OSM parquet
+property <*>.uslyf_osm_data_updated_through datetime; # GCS publication time of Lynnfield's staged OSM parquet
+property <*>.usmrs_osm_data_updated_through datetime; # GCS publication time of Melrose's staged OSM parquet
+property <*>.uswel_osm_data_updated_through datetime; # GCS publication time of Wellesley's staged OSM parquet
+property <*>.usnah_osm_data_updated_through datetime; # GCS publication time of Nahant's staged OSM parquet
+property <*>.usdan_osm_data_updated_through datetime; # GCS publication time of Danvers's staged OSM parquet
+property <*>.uswnc_osm_data_updated_through datetime; # GCS publication time of Winchester's staged OSM parquet
+property <*>.uscan_osm_data_updated_through datetime; # GCS publication time of Canton's staged OSM parquet
 property <*>.usarl_data_updated_through datetime; # when Arlington, MA data is through
 property <*>.usarl_osm_data_updated_through datetime; # GCS publication time of Arlington, MA's staged OSM parquet
 property <*>.usded_data_updated_through datetime; # when Dedham data is through
@@ -349,6 +360,17 @@ property <*>.usarl_predicted_data_updated_through datetime; # GCS publication ti
 property <*>.usmbh_predicted_data_updated_through datetime; # GCS publication time of the Boston metro run Marblehead reads its predictions from (PREDICTED_STAGED_WITH)
 property <*>.usrev_predicted_data_updated_through datetime; # GCS publication time of the Boston metro run Revere reads its predictions from (PREDICTED_STAGED_WITH)
 property <*>.usmld_predicted_data_updated_through datetime; # GCS publication time of the Boston metro run Malden reads its predictions from (PREDICTED_STAGED_WITH)
+property <*>.useve_predicted_data_updated_through datetime; # GCS publication time of the Boston metro run Everett reads its predictions from (PREDICTED_STAGED_WITH)
+property <*>.usche_predicted_data_updated_through datetime; # GCS publication time of the Boston metro run Chelsea reads its predictions from (PREDICTED_STAGED_WITH)
+property <*>.uswnt_predicted_data_updated_through datetime; # GCS publication time of the Boston metro run Winthrop reads its predictions from (PREDICTED_STAGED_WITH)
+property <*>.usbev_predicted_data_updated_through datetime; # GCS publication time of the Boston metro run Beverly reads its predictions from (PREDICTED_STAGED_WITH)
+property <*>.uslyf_predicted_data_updated_through datetime; # GCS publication time of the Boston metro run Lynnfield reads its predictions from (PREDICTED_STAGED_WITH)
+property <*>.usmrs_predicted_data_updated_through datetime; # GCS publication time of the Boston metro run Melrose reads its predictions from (PREDICTED_STAGED_WITH)
+property <*>.uswel_predicted_data_updated_through datetime; # GCS publication time of the Boston metro run Wellesley reads its predictions from (PREDICTED_STAGED_WITH)
+property <*>.usnah_predicted_data_updated_through datetime; # GCS publication time of the Boston metro run Nahant reads its predictions from (PREDICTED_STAGED_WITH)
+property <*>.usdan_predicted_data_updated_through datetime; # GCS publication time of the Boston metro run Danvers reads its predictions from (PREDICTED_STAGED_WITH)
+property <*>.uswnc_predicted_data_updated_through datetime; # GCS publication time of the Boston metro run Winchester reads its predictions from (PREDICTED_STAGED_WITH)
+property <*>.uscan_predicted_data_updated_through datetime; # GCS publication time of the Boston metro run Canton reads its predictions from (PREDICTED_STAGED_WITH)
 property <*>.uswas_osm_data_updated_through datetime; # GCS publication time of Washington DC's staged OSM parquet
 property <*>.uslax_osm_data_updated_through datetime; # GCS publication time of Los Angeles's staged OSM parquet
 property <*>.arbue_osm_data_updated_through datetime; # GCS publication time of Buenos Aires's staged OSM parquet

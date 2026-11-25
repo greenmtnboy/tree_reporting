@@ -183,5 +183,16 @@
   "USARL": { "name": "Arlington, MA", "center": [-71.1565, 42.4154] },
   "USMBH": { "name": "Marblehead", "center": [-70.8578, 42.5001] },
   "USREV": { "name": "Revere", "center": [-71.012, 42.4084] },
-  "USMLD": { "name": "Malden", "center": [-71.0662, 42.4251] }
+  "USMLD": { "name": "Malden", "center": [-71.0662, 42.4251] },
+  "USEVE": { "name": "Everett", "center": [-71.0537, 42.4084] },
+  "USCHE": { "name": "Chelsea", "center": [-71.0328, 42.3918] },
+  "USWNT": { "name": "Winthrop", "center": [-70.9828, 42.3757] },
+  "USBEV": { "name": "Beverly", "center": [-70.88, 42.5584] },
+  "USLYF": { "name": "Lynnfield", "center": [-71.0481, 42.5387] },
+  "USMRS": { "name": "Melrose", "center": [-71.0662, 42.4584] },
+  "USWEL": { "name": "Wellesley", "center": [-71.2924, 42.2968] },
+  "USNAH": { "name": "Nahant", "center": [-70.9195, 42.4265] },
+  "USDAN": { "name": "Danvers", "center": [-70.9301, 42.575] },
+  "USWNC": { "name": "Winchester", "center": [-71.137, 42.4523] },
+  "USCAN": { "name": "Canton", "center": [-71.1448, 42.1584] }
 }
