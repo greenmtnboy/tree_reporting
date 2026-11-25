@@ -13,11 +13,12 @@
 #                            `publish-full` job, and the only writer
 #   this file                reads it, unmanaged — imported by consumers whose
 #                            job must not rebuild it
-#   tree_info.preql          the seventeen-city *union model*, which is not a
-#                            job entrypoint at all: it is what the app's
-#                            dashboard queries resolve against, and its per-city
-#                            partitions are what let the planner answer a
-#                            single-city chart from that city's parquet
+#   tree_info.preql          the app's tree model, which is not a job
+#                            entrypoint at all: it is what the app's dashboard
+#                            queries resolve against, and its per-city parquet
+#                            datasources (tools/sync_app_models.py) are what let
+#                            the planner answer a single-city chart from that
+#                            city's parquet
 #
 # The datasource name matters and is not cosmetic. trilogy-cloud derives a
 # schedule tick's ordering from asset identity, and an address built from an

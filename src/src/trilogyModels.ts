@@ -1,29 +1,30 @@
+// The preql files the hosted resolver may import, sent with every dashboard
+// and chat request: the app's *consumption* models, which read published
+// parquets, and nothing that builds one.
+//
+// No city build model is here. `tree_info.preql` is written from them by
+// data/raw/tools/sync_app_models.py: one root partial datasource per city's
+// published parquet with that city's `complete where`, plus the cross-city
+// rollup, and no raw partitions, dedup, position or height derivations, merges
+// or watermarks. The resolver parses every source it is sent on every request,
+// so this list is a per-request cost; data/raw/tests/test_app_models.py checks
+// that tree_info.preql reads only published files, and
+// `tests/trilogyModels.test.ts` that every import below resolves.
 import TREE_ENRICHMENT_MODEL from '../../data/raw/tree_enrichment.preql?raw'
 import TREE_INFO_MODEL from '../../data/raw/tree_info.preql?raw'
 import TREE_COMMON_MODEL from '../../data/raw/tree_common.preql?raw'
+// The columns a published tree parquet carries that tree_common does not
+// declare (`data_source`, LIDAR heights); see data/raw/tree_published_columns.preql.
+import TREE_PUBLISHED_COLUMNS_MODEL from '../../data/raw/tree_published_columns.preql?raw'
 import CORE_MODEL from '../../data/raw/core.preql?raw'
 import ECOREGION_COMMON_MODEL from '../../data/raw/ecoregion_common.preql?raw'
 import ECOREGION_INFO_MODEL from '../../data/raw/ecoregion_info.preql?raw'
 // Each city's own ecoregion, the dimension's second role; see
 // data/raw/city_ecoregion.preql.
 import CITY_ECOREGION_MODEL from '../../data/raw/city_ecoregion.preql?raw'
-import LANDMARK_COMMON_MODEL from '../../data/raw/landmark_common.preql?raw'
+// The published cross-city landmark union, which the map chat imports as
+// `landmark`; see data/raw/landmark_info.preql.
 import LANDMARK_INFO_MODEL from '../../data/raw/landmark_info.preql?raw'
-// Imported by every city tree model, so the resolver needs it even though it
-// is not a per-city file the glob below would pick up.
-import COMMUNITY_TREE_INFO_MODEL from '../../data/raw/community_tree_info.preql?raw'
-import TREE_DEDUP_MODEL from '../../data/raw/tree_dedup.preql?raw'
-// The polygon towns' boundaries as geography constants, imported by the
-// city models whose territory a polygon draws (Boston and the towns carved
-// out of it); see data/raw/boundaries.preql.
-import BOUNDARIES_MODEL from '../../data/raw/boundaries.preql?raw'
-import SATELLITE_TREE_INFO_MODEL from '../../data/raw/satellite_tree_info.preql?raw'
-// The Overture position correction, imported by the cities that opt in
-// (Burlington first); see data/raw/tree_position.preql.
-import TREE_POSITION_MODEL from '../../data/raw/tree_position.preql?raw'
-// LIDAR tree height, imported by the cities with a canopy survey (Boston
-// first); see data/raw/tree_height.preql.
-import TREE_HEIGHT_MODEL from '../../data/raw/tree_height.preql?raw'
 // The (city, species) tree-count summary the dashboard scope imports, so the
 // planner can answer a per-species count without the city's tree file; see
 // data/raw/tree_rollups.preql.
@@ -38,41 +39,17 @@ import TREE_SUMMARY_GRAINS_MODEL from '../../data/raw/tree_summary_grains.preql?
 // for the rule's own import list (MAP_RULE_IMPORTS).
 import MAP_TREES_MODEL from './models/map_trees.preql?raw'
 
-// Auto-discover all per-city preql files — no changes needed here when adding a city.
-// Matches data/raw/{city}/{city}_tree_info.preql and data/raw/{city}/{city}_landmarks.preql
-const cityTreeModels = import.meta.glob('../../data/raw/*/*_tree_info.preql', { eager: true, query: '?raw' })
-const cityLandmarkModels = import.meta.glob('../../data/raw/*/*_landmarks.preql', { eager: true, query: '?raw' })
-
-function pathToAlias(path: string): string {
-  // '../../data/raw/burlington/burlington_tree_info.preql' → 'burlington.burlington_tree_info'
-  const parts = path.split('/')
-  const dir = parts[parts.length - 2]
-  const file = parts[parts.length - 1].replace('.preql', '')
-  return `${dir}.${file}`
-}
-
 export const ALL_MODEL_SOURCES = [
   { alias: 'tree_enrichment', contents: TREE_ENRICHMENT_MODEL },
   { alias: 'tree_info', contents: TREE_INFO_MODEL },
   { alias: 'tree_common', contents: TREE_COMMON_MODEL },
+  { alias: 'tree_published_columns', contents: TREE_PUBLISHED_COLUMNS_MODEL },
   { alias: 'core', contents: CORE_MODEL },
   { alias: 'ecoregion_common', contents: ECOREGION_COMMON_MODEL },
   { alias: 'ecoregion_info', contents: ECOREGION_INFO_MODEL },
   { alias: 'city_ecoregion', contents: CITY_ECOREGION_MODEL },
-  { alias: 'landmark_common', contents: LANDMARK_COMMON_MODEL },
   { alias: 'landmark_info', contents: LANDMARK_INFO_MODEL },
-  { alias: 'community_tree_info', contents: COMMUNITY_TREE_INFO_MODEL },
-  { alias: 'tree_dedup', contents: TREE_DEDUP_MODEL },
-  { alias: 'boundaries', contents: BOUNDARIES_MODEL },
-  // Reviewed aerial-imagery detections: the freshness columns the wired
-  // city models (SF, Boston, NYC) import; see data/raw/satellite_tree_info.preql.
-  { alias: 'satellite_tree_info', contents: SATELLITE_TREE_INFO_MODEL },
-  { alias: 'tree_position', contents: TREE_POSITION_MODEL },
-  { alias: 'tree_height', contents: TREE_HEIGHT_MODEL },
   { alias: 'tree_rollup_source', contents: TREE_ROLLUP_SOURCE_MODEL },
   { alias: 'tree_summary_grains', contents: TREE_SUMMARY_GRAINS_MODEL },
   { alias: 'map_trees', contents: MAP_TREES_MODEL },
-  ...[...Object.entries(cityTreeModels), ...Object.entries(cityLandmarkModels)].map(
-    ([path, mod]) => ({ alias: pathToAlias(path), contents: (mod as { default: string }).default })
-  ),
 ]

@@ -1,562 +1,748 @@
+# The app's tree model: what the browser's dashboards and chat resolve against.
+# Written by tools/sync_app_models.py from every city's published target: edit
+# that, not this.
+#
+# It reads published parquets and builds nothing, so it is no job's entrypoint
+# and carries no `freshness by`. Each city's parquet is a root partial
+# datasource with the `complete where city = '...'` of the target that writes
+# it, which is what lets the planner answer a single-city chart from that
+# city's file instead of the cross-city rollup (`tree_info`, over
+# full_tree_info_v{n}.parquet), and the rollup answers everything else.
+#
+# No city build model is imported and nothing is merged. A city's parquet
+# already stores the merged columns its build derived, and its `data_source`
+# under that name, so each column binds straight to the shared concept.
+
 import tree_common;
-import ussfo.sf_tree_info;
-import usnyc.nyc_tree_info;
-import usbos.boston_tree_info;
-import frpar.paris_tree_info;
-import usbtv.burlington_tree_info;
-import cavan.vancouver_tree_info;
-import deber.berlin_tree_info;
-import nlams.amsterdam_tree_info;
-import gblon.london_tree_info;
-import aumel.melbourne_tree_info;
-import arbue.buenosaires_tree_info;
-import uslax.losangeles_tree_info;
-import uswas.washingtondc_tree_info;
-import ustem.tempe_tree_info;
-import grath.athens_tree_info;
-import grmlo.milos_tree_info;
-import grsan.santorini_tree_info;
-import usden.denver_tree_info;
-import cacal.calgary_tree_info;
-import caedm.edmonton_tree_info;
-import cawpg.winnipeg_tree_info;
-import cator.toronto_tree_info;
-import camtl.montreal_tree_info;
-import caque.quebec_tree_info;
-import calon.longueuil_tree_info;
-import cahfx.halifax_tree_info;
-import cakgn.kingston_tree_info;
-import calet.lethbridge_tree_info;
-import cavic.victoria_tree_info;
-import cakel.kelowna_tree_info;
-import canwe.new_westminster_tree_info;
-import camis.mississauga_tree_info;
-import caott.ottawa_tree_info;
-import cabur.burlington_on_tree_info;
-import caajx.ajax_tree_info;
-import camon.moncton_tree_info;
-import jptyo.tokyo_tree_info;
-import cobog.bogota_tree_info;
-import twtpe.taipei_tree_info;
-import dkcph.copenhagen_tree_info;
-import fihel.helsinki_tree_info;
-import ussto.stoughton_tree_info;
-import czprg.prague_tree_info;
-import usnva.nova_tree_info;
-import usaus.austin_tree_info;
-import ushou.houston_tree_info;
-import usdur.durham_tree_info;
-import usnol.new_orleans_tree_info;
-import usatl.atlanta_tree_info;
-import usnap.naples_tree_info;
-import usclt.charlotte_tree_info;
-import itmil.milan_tree_info;
-import usbou.boulder_tree_info;
-import usnpv.naperville_tree_info;
-import auadl.adelaide_tree_info;
-import auper.perth_tree_info;
-import aubal.ballarat_tree_info;
-import auwod.wodonga_tree_info;
-import uscol.columbus_tree_info;
-import atvie.vienna_tree_info;
-import useug.eugene_tree_info;
-import chzur.zurich_tree_info;
-import gbnot.nottingham_tree_info;
-import chbas.basel_tree_info;
-import ussea.seattle_tree_info;
-import uspor.portland_tree_info;
-import usphl.philadelphia_tree_info;
-import uspit.pittsburgh_tree_info;
-import ussjc.sanjose_tree_info;
-import ussac.sacramento_tree_info;
-import deham.hamburg_tree_info;
-import frlyo.lyon_tree_info;
-import esmad.madrid_tree_info;
-import usbal.baltimore_tree_info;
-import decgn.cologne_tree_info;
-import defra.frankfurt_tree_info;
-import nzchc.christchurch_tree_info;
-import iefin.fingal_tree_info;
-import aucbr.canberra_tree_info;
-import ptlis.lisbon_tree_info;
-import begnt.ghent_tree_info;
-import gbbrs.bristol_tree_info;
-import caham.hamilton_tree_info;
-import nlutc.utrecht_tree_info;
-import frtls.toulouse_tree_info;
-import chgva.geneva_tree_info;
-import delej.leipzig_tree_info;
-import nzwlg.wellington_tree_info;
-import frbod.bordeaux_tree_info;
-import frsxb.strasbourg_tree_info;
-import nlein.eindhoven_tree_info;
-import chbrn.bern_tree_info;
-import frrns.rennes_tree_info;
-import beanr.antwerp_tree_info;
-import ussan.sandiego_tree_info;
-import cakit.kitchener_tree_info;
-import uslou.louisville_tree_info;
-import frmpl.montpellier_tree_info;
-import frgnb.grenoble_tree_info;
-import ausyd.sydney_tree_info;
-import usmsn.madison_tree_info;
-import usric.richmond_tree_info;
-import usgeg.spokane_tree_info;
-import cawat.waterloo_tree_info;
-import frnte.nantes_tree_info;
-import ussmo.santa_monica_tree_info;
-import caoak.oakville_tree_info;
-import usroc.rochester_tree_info;
-import ussyr.syracuse_tree_info;
-import uslas.las_vegas_tree_info;
-import frbes.brest_tree_info;
-import nlgrq.groningen_tree_info;
-import usral.riverside_tree_info;
-import usoak.oakland_tree_info;
-import gbedi.edinburgh_tree_info;
-import gbbfs.belfast_tree_info;
-import caglp.guelph_tree_info;
-import uspvd.providence_tree_info;
-import auckb.cockburn_tree_info;
-import aubxg.bendigo_tree_info;
-import gbbsk.basingstoke_tree_info;
-import gbyrk.york_tree_info;
-import nzhas.hastings_tree_info;
-import cared.red_deer_tree_info;
-import gbfar.fareham_tree_info;
-import cafre.fredericton_tree_info;
-import camht.medicinehat_tree_info;
-import aulst.launceston_tree_info;
-import aumrs.macedon_tree_info;
-import ausht.shepparton_tree_info;
-import usfsd.siouxfalls_tree_info;
-import casry.surrey_tree_info;
-import aultv.latrobe_tree_info;
-import cabar.barrie_tree_info;
-import calng.langley_tree_info;
-import campr.mapleridge_tree_info;
-import caprg.princegeorge_tree_info;
-import capen.penticton_tree_info;
-import cafsj.fortstjohn_tree_info;
-import cawld.welland_tree_info;
-import aubsd.bassendean_tree_info;
-import aucol.colacotway_tree_info;
-import esbcn.barcelona_tree_info;
-import sgsin.singapore_tree_info;
-import usbtr.batonrouge_tree_info;
-import uslan.lansing_tree_info;
-import usmso.missoula_tree_info;
-import usbis.bismarck_tree_info;
-import usspf.springfield_tree_info;
-import usboi.boise_tree_info;
-import usgjt.grandjunction_tree_info;
-import uspsl.portstlucie_tree_info;
-import krsel.seoul_tree_info;
-import cayrk.yorkregion_tree_info;
-import cawhi.whitby_tree_info;
-import usslm.salem_tree_info;
-import usoxr.oxnard_tree_info;
-import usrdl.redlands_tree_info;
-import usdvn.davenport_tree_info;
-import uspln.plano_tree_info;
-import usbnd.bend_tree_info;
-import usopk.orlandpark_tree_info;
-import usevn.evanston_tree_info;
-import usmhd.moorhead_tree_info;
-import uscam.cambridge_tree_info;
-import usbkl.brookline_tree_info;
-import usbel.belmont_tree_info;
-import uswat.watertown_tree_info;
-import ussom.somerville_tree_info;
+import tree_published_columns;
 
-# Each city models its originating dataset as its own enum key so Trilogy can
-# prove per-city partition coverage (see core.preql). Merging them here — and
-# only here — gives the cross-city Parquet a single `data_source` concept
-# without disturbing how each city model resolves.
-key data_source string; # originating dataset for the tree record
-merge ussfo_source into data_source;
-merge usnyc_source into data_source;
-merge usbos_source into data_source;
-merge frpar_source into data_source;
-merge usbtv_source into data_source;
-merge cavan_source into data_source;
-merge deber_source into data_source;
-merge nlams_source into data_source;
-merge gblon_source into data_source;
-merge aumel_source into data_source;
-merge arbue_source into data_source;
-merge uslax_source into data_source;
-merge uswas_source into data_source;
-merge ustem_source into data_source;
-merge grath_source into data_source;
-merge grmlo_source into data_source;
-merge grsan_source into data_source;
-merge usden_source into data_source;
-merge cacal_source into data_source;
-merge caedm_source into data_source;
-merge cawpg_source into data_source;
-merge cator_source into data_source;
-merge camtl_source into data_source;
-merge caque_source into data_source;
-merge calon_source into data_source;
-merge cahfx_source into data_source;
-merge cakgn_source into data_source;
-merge calet_source into data_source;
-merge cavic_source into data_source;
-merge cakel_source into data_source;
-merge canwe_source into data_source;
-merge camis_source into data_source;
-merge caott_source into data_source;
-merge cabur_source into data_source;
-merge caajx_source into data_source;
-merge camon_source into data_source;
-merge jptyo_source into data_source;
-merge cobog_source into data_source;
-merge twtpe_source into data_source;
-merge dkcph_source into data_source;
-merge fihel_source into data_source;
-merge ussto_source into data_source;
-merge czprg_source into data_source;
-merge usnva_source into data_source;
-merge usaus_source into data_source;
-merge ushou_source into data_source;
-merge usdur_source into data_source;
-merge usnol_source into data_source;
-merge usatl_source into data_source;
-merge usnap_source into data_source;
-merge usclt_source into data_source;
-merge itmil_source into data_source;
-merge usbou_source into data_source;
-merge usnpv_source into data_source;
-merge auadl_source into data_source;
-merge auper_source into data_source;
-merge aubal_source into data_source;
-merge auwod_source into data_source;
-merge uscol_source into data_source;
-merge atvie_source into data_source;
-merge useug_source into data_source;
-merge chzur_source into data_source;
-merge gbnot_source into data_source;
-merge chbas_source into data_source;
-merge ussea_source into data_source;
-merge uspor_source into data_source;
-merge usphl_source into data_source;
-merge uspit_source into data_source;
-merge ussjc_source into data_source;
-merge ussac_source into data_source;
-merge deham_source into data_source;
-merge frlyo_source into data_source;
-merge esmad_source into data_source;
-merge usbal_source into data_source;
-merge decgn_source into data_source;
-merge defra_source into data_source;
-merge nzchc_source into data_source;
-merge iefin_source into data_source;
-merge aucbr_source into data_source;
-merge ptlis_source into data_source;
-merge begnt_source into data_source;
-merge gbbrs_source into data_source;
-merge caham_source into data_source;
-merge nlutc_source into data_source;
-merge frtls_source into data_source;
-merge chgva_source into data_source;
-merge delej_source into data_source;
-merge nzwlg_source into data_source;
-merge frbod_source into data_source;
-merge frsxb_source into data_source;
-merge nlein_source into data_source;
-merge chbrn_source into data_source;
-merge frrns_source into data_source;
-merge beanr_source into data_source;
-merge ussan_source into data_source;
-merge cakit_source into data_source;
-merge uslou_source into data_source;
-merge frmpl_source into data_source;
-merge frgnb_source into data_source;
-merge ausyd_source into data_source;
-merge usmsn_source into data_source;
-merge usric_source into data_source;
-merge usgeg_source into data_source;
-merge cawat_source into data_source;
-merge frnte_source into data_source;
-merge ussmo_source into data_source;
-merge caoak_source into data_source;
-merge usroc_source into data_source;
-merge ussyr_source into data_source;
-merge uslas_source into data_source;
-merge frbes_source into data_source;
-merge nlgrq_source into data_source;
-merge usral_source into data_source;
-merge usoak_source into data_source;
-merge gbedi_source into data_source;
-merge gbbfs_source into data_source;
-merge caglp_source into data_source;
-merge uspvd_source into data_source;
-merge auckb_source into data_source;
-merge aubxg_source into data_source;
-merge gbbsk_source into data_source;
-merge gbyrk_source into data_source;
-merge nzhas_source into data_source;
-merge cared_source into data_source;
-merge gbfar_source into data_source;
-merge cafre_source into data_source;
-merge camht_source into data_source;
-merge aulst_source into data_source;
-merge aumrs_source into data_source;
-merge ausht_source into data_source;
-merge usfsd_source into data_source;
-merge casry_source into data_source;
-merge aultv_source into data_source;
-merge cabar_source into data_source;
-merge calng_source into data_source;
-merge campr_source into data_source;
-merge caprg_source into data_source;
-merge capen_source into data_source;
-merge cafsj_source into data_source;
-merge cawld_source into data_source;
-merge aubsd_source into data_source;
-merge aucol_source into data_source;
-merge esbcn_source into data_source;
-merge sgsin_source into data_source;
-merge usbtr_source into data_source;
-merge uslan_source into data_source;
-merge usmso_source into data_source;
-merge usbis_source into data_source;
-merge usspf_source into data_source;
-merge usboi_source into data_source;
-merge usgjt_source into data_source;
-merge uspsl_source into data_source;
-merge krsel_source into data_source;
-merge cayrk_source into data_source;
-merge cawhi_source into data_source;
-merge usslm_source into data_source;
-merge usoxr_source into data_source;
-merge usrdl_source into data_source;
-merge usdvn_source into data_source;
-merge uspln_source into data_source;
-merge usbnd_source into data_source;
-merge usopk_source into data_source;
-merge usevn_source into data_source;
-merge usmhd_source into data_source;
-merge uscam_source into data_source;
-merge usbkl_source into data_source;
-merge usbel_source into data_source;
-merge uswat_source into data_source;
-merge ussom_source into data_source;
-
-# The dedup columns (`merged_sources`, `merged_tree_ids`) are
-# the one shared derivation in tree_dedup.preql, computed inside each city's
-# own build over that city's rows; the city parquets carry them and nothing is
-# derived or merged for them here.  Asking the planner to resolve the cluster
-# aggregate over the union of every city fails outright:
-#
-#   UnresolvableQueryException: Planner emitted a keyless join between
-#   row-bearing sources that share a join axis: ...unioned_at_local_data_source
-#   _local_tree_id_grouped_by_local.usbos_cell_a... This would render as a
-#   cross join (ON 1=1) and fan out; the join axis was lost upstream.
-#
-# The cross-city Parquet does not carry them.  The browser worker only ever
-# loads the per-city Parquet, so it filters on that column and skips the
-# filter on the full-file fallback path.
-
-auto latest_update_through <- greatest(ussfo_published_data_updated_through,
-usnyc_published_data_updated_through,
-usbos_published_data_updated_through,
-frpar_published_data_updated_through,
-usbtv_published_data_updated_through,
-cavan_published_data_updated_through,
-deber_published_data_updated_through,
-nlams_published_data_updated_through,
-gblon_published_data_updated_through,
-aumel_published_data_updated_through,
-arbue_published_data_updated_through,
-uslax_published_data_updated_through,
-uswas_published_data_updated_through,
-ustem_published_data_updated_through,
-grath_published_data_updated_through,
-grmlo_published_data_updated_through,
-grsan_published_data_updated_through,
-usden_published_data_updated_through,
-cacal_published_data_updated_through,
-caedm_published_data_updated_through,
-cawpg_published_data_updated_through,
-cator_published_data_updated_through,
-camtl_published_data_updated_through,
-caque_published_data_updated_through,
-calon_published_data_updated_through,
-cahfx_published_data_updated_through,
-cakgn_published_data_updated_through,
-calet_published_data_updated_through,
-cavic_published_data_updated_through,
-cakel_published_data_updated_through,
-canwe_published_data_updated_through,
-camis_published_data_updated_through,
-caott_published_data_updated_through,
-cabur_published_data_updated_through,
-caajx_published_data_updated_through,
-camon_published_data_updated_through,
-jptyo_published_data_updated_through,
-cobog_published_data_updated_through,
-twtpe_published_data_updated_through,
-dkcph_published_data_updated_through,
-fihel_published_data_updated_through,
-ussto_published_data_updated_through,
-czprg_published_data_updated_through,
-usnva_published_data_updated_through,
-usaus_published_data_updated_through,
-ushou_published_data_updated_through,
-usdur_published_data_updated_through,
-usnol_published_data_updated_through,
-usatl_published_data_updated_through,
-usnap_published_data_updated_through,
-usclt_published_data_updated_through,
-itmil_published_data_updated_through,
-usbou_published_data_updated_through,
-usnpv_published_data_updated_through,
-auadl_published_data_updated_through,
-auper_published_data_updated_through,
-aubal_published_data_updated_through,
-auwod_published_data_updated_through,
-uscol_published_data_updated_through,
-atvie_published_data_updated_through,
-useug_published_data_updated_through,
-chzur_published_data_updated_through,
-gbnot_published_data_updated_through,
-chbas_published_data_updated_through,
-ussea_published_data_updated_through,
-uspor_published_data_updated_through,
-usphl_published_data_updated_through,
-uspit_published_data_updated_through,
-ussjc_published_data_updated_through,
-ussac_published_data_updated_through,
-deham_published_data_updated_through,
-frlyo_published_data_updated_through,
-esmad_published_data_updated_through,
-usbal_published_data_updated_through,
-decgn_published_data_updated_through,
-defra_published_data_updated_through,
-nzchc_published_data_updated_through,
-iefin_published_data_updated_through,
-aucbr_published_data_updated_through,
-ptlis_published_data_updated_through,
-begnt_published_data_updated_through,
-gbbrs_published_data_updated_through,
-caham_published_data_updated_through,
-nlutc_published_data_updated_through,
-frtls_published_data_updated_through,
-chgva_published_data_updated_through,
-delej_published_data_updated_through,
-nzwlg_published_data_updated_through,
-frbod_published_data_updated_through,
-frsxb_published_data_updated_through,
-nlein_published_data_updated_through,
-chbrn_published_data_updated_through,
-frrns_published_data_updated_through,
-beanr_published_data_updated_through,
-ussan_published_data_updated_through,
-cakit_published_data_updated_through,
-uslou_published_data_updated_through,
-frmpl_published_data_updated_through,
-frgnb_published_data_updated_through,
-ausyd_published_data_updated_through,
-usmsn_published_data_updated_through,
-usric_published_data_updated_through,
-usgeg_published_data_updated_through,
-cawat_published_data_updated_through,
-frnte_published_data_updated_through,
-ussmo_published_data_updated_through,
-caoak_published_data_updated_through,
-usroc_published_data_updated_through,
-ussyr_published_data_updated_through,
-uslas_published_data_updated_through,
-frbes_published_data_updated_through,
-nlgrq_published_data_updated_through,
-usral_published_data_updated_through,
-usoak_published_data_updated_through,
-gbedi_published_data_updated_through,
-gbbfs_published_data_updated_through,
-caglp_published_data_updated_through,
-uspvd_published_data_updated_through,
-auckb_published_data_updated_through,
-aubxg_published_data_updated_through,
-gbbsk_published_data_updated_through,
-gbyrk_published_data_updated_through,
-nzhas_published_data_updated_through,
-cared_published_data_updated_through,
-gbfar_published_data_updated_through,
-cafre_published_data_updated_through,
-camht_published_data_updated_through,
-aulst_published_data_updated_through,
-aumrs_published_data_updated_through,
-ausht_published_data_updated_through,
-usfsd_published_data_updated_through,
-casry_published_data_updated_through,
-aultv_published_data_updated_through,
-cabar_published_data_updated_through,
-calng_published_data_updated_through,
-campr_published_data_updated_through,
-caprg_published_data_updated_through,
-capen_published_data_updated_through,
-cafsj_published_data_updated_through,
-cawld_published_data_updated_through,
-aubsd_published_data_updated_through,
-aucol_published_data_updated_through,
-esbcn_published_data_updated_through,
-sgsin_published_data_updated_through,
-usbtr_published_data_updated_through,
-uslan_published_data_updated_through,
-usmso_published_data_updated_through,
-usbis_published_data_updated_through,
-usspf_published_data_updated_through,
-usboi_published_data_updated_through,
-usgjt_published_data_updated_through,
-uspsl_published_data_updated_through,
-krsel_published_data_updated_through,
-cayrk_published_data_updated_through,
-cawhi_published_data_updated_through,
-usslm_published_data_updated_through,
-usoxr_published_data_updated_through,
-usrdl_published_data_updated_through,
-usdvn_published_data_updated_through,
-uspln_published_data_updated_through,
-usbnd_published_data_updated_through,
-usopk_published_data_updated_through,
-usevn_published_data_updated_through,
-usmhd_published_data_updated_through,
-uscam_published_data_updated_through,
-usbkl_published_data_updated_through,
-usbel_published_data_updated_through,
-uswat_published_data_updated_through,
-ussom_published_data_updated_through);
-# --- Merged union datasource ---
-
-datasource tree_info (
-    tree_id,
-    city,
-    data_source,
-    species,
-    ?tree_name,
-    ?significance,
-    ?significance_source,
-    ?plant_date,
-    ?diameter_at_breast_height,
-    ?latitude,
-    ?longitude,
-    ?submission_photo_url,
-    latest_update_through
+template datasource app_city_trees (
+    tree_id: tree_id,
+    city: city,
+    data_source: data_source,
+    species: species,
+    tree_name: ?tree_name,
+    plant_date: ?plant_date,
+    diameter_at_breast_height: ?diameter_at_breast_height,
+    latitude: ?latitude,
+    longitude: ?longitude,
+    submission_photo_url: ?submission_photo_url,
+    cultivar: ?cultivar,
+    crown_width_m: ?crown_width_m,
+    significance: ?significance,
+    significance_source: ?significance_source,
 )
-grain (tree_id)
-# No `freshness by`, deliberately: this rollup is NOT built from this
-# environment. Planned here, with the merge in scope, the planner loses the
-# partition-completeness proofs and published the rollup as OSM-only for 15
-# of 16 cities. raw/full_tree_publish.preql (the `urban-tree-full` cloud
-# job) copies it unconditionally from the seventeen city parquets instead;
-# without a watermark this datasource is never stale, so no refresh that
-# imports this file can rebuild it wrongly.
-#
-# This file is not an entrypoint for any job, and must not become one. It is
-# the model the *app's* dashboard queries resolve against: `dashboard_context`
-# imports it, and it is the per-city `complete where city = 'X'` partitions it
-# brings with it that let the planner answer a single-city chart from that
-# city's parquet rather than downloading this whole rollup into the browser.
-file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/full_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/full_tree_info_v{data_version}.parquet`;
+grain (tree_id);
+
+root datasource tree_info extends app_city_trees ()
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/full_tree_info_v{data_version}.parquet`;
+
+root partial datasource buenosaires_tree_info extends app_city_trees ()
+complete where city = 'ARBUE'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/arbue_tree_info_v{data_version}.parquet`;
+
+root partial datasource vienna_tree_info extends app_city_trees (
+    borough: ?borough,
+)
+complete where city = 'ATVIE'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/atvie_tree_info_v{data_version}.parquet`;
+
+root partial datasource adelaide_tree_info extends app_city_trees ()
+complete where city = 'AUADL'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/auadl_tree_info_v{data_version}.parquet`;
+
+root partial datasource ballarat_tree_info extends app_city_trees ()
+complete where city = 'AUBAL'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/aubal_tree_info_v{data_version}.parquet`;
+
+root partial datasource bassendean_tree_info extends app_city_trees ()
+complete where city = 'AUBSD'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/aubsd_tree_info_v{data_version}.parquet`;
+
+root partial datasource bendigo_tree_info extends app_city_trees ()
+complete where city = 'AUBXG'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/aubxg_tree_info_v{data_version}.parquet`;
+
+root partial datasource canberra_tree_info extends app_city_trees ()
+complete where city = 'AUCBR'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/aucbr_tree_info_v{data_version}.parquet`;
+
+root partial datasource cockburn_tree_info extends app_city_trees ()
+complete where city = 'AUCKB'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/auckb_tree_info_v{data_version}.parquet`;
+
+root partial datasource colacotway_tree_info extends app_city_trees ()
+complete where city = 'AUCOL'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/aucol_tree_info_v{data_version}.parquet`;
+
+root partial datasource launceston_tree_info extends app_city_trees ()
+complete where city = 'AULST'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/aulst_tree_info_v{data_version}.parquet`;
+
+root partial datasource latrobe_tree_info extends app_city_trees ()
+complete where city = 'AULTV'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/aultv_tree_info_v{data_version}.parquet`;
+
+root partial datasource melbourne_tree_info extends app_city_trees ()
+complete where city = 'AUMEL'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/aumel_tree_info_v{data_version}.parquet`;
+
+root partial datasource macedon_tree_info extends app_city_trees ()
+complete where city = 'AUMRS'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/aumrs_tree_info_v{data_version}.parquet`;
+
+root partial datasource perth_tree_info extends app_city_trees ()
+complete where city = 'AUPER'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/auper_tree_info_v{data_version}.parquet`;
+
+root partial datasource shepparton_tree_info extends app_city_trees ()
+complete where city = 'AUSHT'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ausht_tree_info_v{data_version}.parquet`;
+
+root partial datasource sydney_tree_info extends app_city_trees ()
+complete where city = 'AUSYD'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ausyd_tree_info_v{data_version}.parquet`;
+
+root partial datasource wodonga_tree_info extends app_city_trees ()
+complete where city = 'AUWOD'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/auwod_tree_info_v{data_version}.parquet`;
+
+root partial datasource antwerp_tree_info extends app_city_trees ()
+complete where city = 'BEANR'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/beanr_tree_info_v{data_version}.parquet`;
+
+root partial datasource ghent_tree_info extends app_city_trees ()
+complete where city = 'BEGNT'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/begnt_tree_info_v{data_version}.parquet`;
+
+root partial datasource ajax_tree_info extends app_city_trees ()
+complete where city = 'CAAJX'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/caajx_tree_info_v{data_version}.parquet`;
+
+root partial datasource barrie_tree_info extends app_city_trees ()
+complete where city = 'CABAR'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cabar_tree_info_v{data_version}.parquet`;
+
+root partial datasource burlington_on_tree_info extends app_city_trees ()
+complete where city = 'CABUR'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cabur_tree_info_v{data_version}.parquet`;
+
+root partial datasource calgary_tree_info extends app_city_trees ()
+complete where city = 'CACAL'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cacal_tree_info_v{data_version}.parquet`;
+
+root partial datasource edmonton_tree_info extends app_city_trees ()
+complete where city = 'CAEDM'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/caedm_tree_info_v{data_version}.parquet`;
+
+root partial datasource fredericton_tree_info extends app_city_trees ()
+complete where city = 'CAFRE'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cafre_tree_info_v{data_version}.parquet`;
+
+root partial datasource fortstjohn_tree_info extends app_city_trees ()
+complete where city = 'CAFSJ'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cafsj_tree_info_v{data_version}.parquet`;
+
+root partial datasource guelph_tree_info extends app_city_trees ()
+complete where city = 'CAGLP'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/caglp_tree_info_v{data_version}.parquet`;
+
+root partial datasource hamilton_tree_info extends app_city_trees ()
+complete where city = 'CAHAM'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/caham_tree_info_v{data_version}.parquet`;
+
+root partial datasource halifax_tree_info extends app_city_trees ()
+complete where city = 'CAHFX'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cahfx_tree_info_v{data_version}.parquet`;
+
+root partial datasource kelowna_tree_info extends app_city_trees ()
+complete where city = 'CAKEL'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cakel_tree_info_v{data_version}.parquet`;
+
+root partial datasource kingston_tree_info extends app_city_trees ()
+complete where city = 'CAKGN'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cakgn_tree_info_v{data_version}.parquet`;
+
+root partial datasource kitchener_tree_info extends app_city_trees ()
+complete where city = 'CAKIT'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cakit_tree_info_v{data_version}.parquet`;
+
+root partial datasource lethbridge_tree_info extends app_city_trees ()
+complete where city = 'CALET'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/calet_tree_info_v{data_version}.parquet`;
+
+root partial datasource langley_tree_info extends app_city_trees ()
+complete where city = 'CALNG'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/calng_tree_info_v{data_version}.parquet`;
+
+root partial datasource longueuil_tree_info extends app_city_trees ()
+complete where city = 'CALON'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/calon_tree_info_v{data_version}.parquet`;
+
+root partial datasource medicinehat_tree_info extends app_city_trees ()
+complete where city = 'CAMHT'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/camht_tree_info_v{data_version}.parquet`;
+
+root partial datasource mississauga_tree_info extends app_city_trees ()
+complete where city = 'CAMIS'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/camis_tree_info_v{data_version}.parquet`;
+
+root partial datasource moncton_tree_info extends app_city_trees ()
+complete where city = 'CAMON'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/camon_tree_info_v{data_version}.parquet`;
+
+root partial datasource mapleridge_tree_info extends app_city_trees ()
+complete where city = 'CAMPR'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/campr_tree_info_v{data_version}.parquet`;
+
+root partial datasource montreal_tree_info extends app_city_trees ()
+complete where city = 'CAMTL'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/camtl_tree_info_v{data_version}.parquet`;
+
+root partial datasource new_westminster_tree_info extends app_city_trees ()
+complete where city = 'CANWE'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/canwe_tree_info_v{data_version}.parquet`;
+
+root partial datasource oakville_tree_info extends app_city_trees ()
+complete where city = 'CAOAK'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/caoak_tree_info_v{data_version}.parquet`;
+
+root partial datasource ottawa_tree_info extends app_city_trees ()
+complete where city = 'CAOTT'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/caott_tree_info_v{data_version}.parquet`;
+
+root partial datasource penticton_tree_info extends app_city_trees ()
+complete where city = 'CAPEN'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/capen_tree_info_v{data_version}.parquet`;
+
+root partial datasource princegeorge_tree_info extends app_city_trees ()
+complete where city = 'CAPRG'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/caprg_tree_info_v{data_version}.parquet`;
+
+root partial datasource quebec_tree_info extends app_city_trees ()
+complete where city = 'CAQUE'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/caque_tree_info_v{data_version}.parquet`;
+
+root partial datasource red_deer_tree_info extends app_city_trees ()
+complete where city = 'CARED'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cared_tree_info_v{data_version}.parquet`;
+
+root partial datasource surrey_tree_info extends app_city_trees ()
+complete where city = 'CASRY'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/casry_tree_info_v{data_version}.parquet`;
+
+root partial datasource toronto_tree_info extends app_city_trees ()
+complete where city = 'CATOR'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cator_tree_info_v{data_version}.parquet`;
+
+root partial datasource vancouver_tree_info extends app_city_trees ()
+complete where city = 'CAVAN'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cavan_tree_info_v{data_version}.parquet`;
+
+root partial datasource victoria_tree_info extends app_city_trees ()
+complete where city = 'CAVIC'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cavic_tree_info_v{data_version}.parquet`;
+
+root partial datasource waterloo_tree_info extends app_city_trees ()
+complete where city = 'CAWAT'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cawat_tree_info_v{data_version}.parquet`;
+
+root partial datasource whitby_tree_info extends app_city_trees ()
+complete where city = 'CAWHI'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cawhi_tree_info_v{data_version}.parquet`;
+
+root partial datasource welland_tree_info extends app_city_trees ()
+complete where city = 'CAWLD'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cawld_tree_info_v{data_version}.parquet`;
+
+root partial datasource winnipeg_tree_info extends app_city_trees ()
+complete where city = 'CAWPG'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cawpg_tree_info_v{data_version}.parquet`;
+
+root partial datasource yorkregion_tree_info extends app_city_trees ()
+complete where city = 'CAYRK'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cayrk_tree_info_v{data_version}.parquet`;
+
+root partial datasource basel_tree_info extends app_city_trees (
+    borough: ?borough,
+)
+complete where city = 'CHBAS'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/chbas_tree_info_v{data_version}.parquet`;
+
+root partial datasource bern_tree_info extends app_city_trees ()
+complete where city = 'CHBRN'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/chbrn_tree_info_v{data_version}.parquet`;
+
+root partial datasource geneva_tree_info extends app_city_trees ()
+complete where city = 'CHGVA'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/chgva_tree_info_v{data_version}.parquet`;
+
+root partial datasource zurich_tree_info extends app_city_trees ()
+complete where city = 'CHZUR'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/chzur_tree_info_v{data_version}.parquet`;
+
+root partial datasource bogota_tree_info extends app_city_trees (
+    borough: ?borough,
+)
+complete where city = 'COBOG'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/cobog_tree_info_v{data_version}.parquet`;
+
+root partial datasource prague_tree_info extends app_city_trees ()
+complete where city = 'CZPRG'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/czprg_tree_info_v{data_version}.parquet`;
+
+root partial datasource berlin_tree_info extends app_city_trees ()
+complete where city = 'DEBER'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/deber_tree_info_v{data_version}.parquet`;
+
+root partial datasource cologne_tree_info extends app_city_trees ()
+complete where city = 'DECGN'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/decgn_tree_info_v{data_version}.parquet`;
+
+root partial datasource frankfurt_tree_info extends app_city_trees ()
+complete where city = 'DEFRA'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/defra_tree_info_v{data_version}.parquet`;
+
+root partial datasource hamburg_tree_info extends app_city_trees ()
+complete where city = 'DEHAM'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/deham_tree_info_v{data_version}.parquet`;
+
+root partial datasource leipzig_tree_info extends app_city_trees ()
+complete where city = 'DELEJ'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/delej_tree_info_v{data_version}.parquet`;
+
+root partial datasource copenhagen_tree_info extends app_city_trees (
+    borough: ?borough,
+)
+complete where city = 'DKCPH'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/dkcph_tree_info_v{data_version}.parquet`;
+
+root partial datasource barcelona_tree_info extends app_city_trees ()
+complete where city = 'ESBCN'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/esbcn_tree_info_v{data_version}.parquet`;
+
+root partial datasource madrid_tree_info extends app_city_trees ()
+complete where city = 'ESMAD'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/esmad_tree_info_v{data_version}.parquet`;
+
+root partial datasource helsinki_tree_info extends app_city_trees ()
+complete where city = 'FIHEL'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/fihel_tree_info_v{data_version}.parquet`;
+
+root partial datasource brest_tree_info extends app_city_trees ()
+complete where city = 'FRBES'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/frbes_tree_info_v{data_version}.parquet`;
+
+root partial datasource bordeaux_tree_info extends app_city_trees ()
+complete where city = 'FRBOD'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/frbod_tree_info_v{data_version}.parquet`;
+
+root partial datasource grenoble_tree_info extends app_city_trees ()
+complete where city = 'FRGNB'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/frgnb_tree_info_v{data_version}.parquet`;
+
+root partial datasource lyon_tree_info extends app_city_trees (
+    borough: ?borough,
+)
+complete where city = 'FRLYO'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/frlyo_tree_info_v{data_version}.parquet`;
+
+root partial datasource montpellier_tree_info extends app_city_trees ()
+complete where city = 'FRMPL'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/frmpl_tree_info_v{data_version}.parquet`;
+
+root partial datasource nantes_tree_info extends app_city_trees ()
+complete where city = 'FRNTE'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/frnte_tree_info_v{data_version}.parquet`;
+
+root partial datasource paris_tree_info extends app_city_trees ()
+complete where city = 'FRPAR'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/frpar_tree_info_v{data_version}.parquet`;
+
+root partial datasource rennes_tree_info extends app_city_trees ()
+complete where city = 'FRRNS'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/frrns_tree_info_v{data_version}.parquet`;
+
+root partial datasource strasbourg_tree_info extends app_city_trees ()
+complete where city = 'FRSXB'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/frsxb_tree_info_v{data_version}.parquet`;
+
+root partial datasource toulouse_tree_info extends app_city_trees ()
+complete where city = 'FRTLS'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/frtls_tree_info_v{data_version}.parquet`;
+
+root partial datasource belfast_tree_info extends app_city_trees ()
+complete where city = 'GBBFS'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/gbbfs_tree_info_v{data_version}.parquet`;
+
+root partial datasource bristol_tree_info extends app_city_trees ()
+complete where city = 'GBBRS'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/gbbrs_tree_info_v{data_version}.parquet`;
+
+root partial datasource basingstoke_tree_info extends app_city_trees ()
+complete where city = 'GBBSK'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/gbbsk_tree_info_v{data_version}.parquet`;
+
+root partial datasource edinburgh_tree_info extends app_city_trees ()
+complete where city = 'GBEDI'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/gbedi_tree_info_v{data_version}.parquet`;
+
+root partial datasource fareham_tree_info extends app_city_trees ()
+complete where city = 'GBFAR'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/gbfar_tree_info_v{data_version}.parquet`;
+
+root partial datasource london_tree_info extends app_city_trees (
+    borough: ?borough,
+)
+complete where city = 'GBLON'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/gblon_tree_info_v{data_version}.parquet`;
+
+root partial datasource nottingham_tree_info extends app_city_trees ()
+complete where city = 'GBNOT'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/gbnot_tree_info_v{data_version}.parquet`;
+
+root partial datasource york_tree_info extends app_city_trees ()
+complete where city = 'GBYRK'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/gbyrk_tree_info_v{data_version}.parquet`;
+
+root partial datasource athens_tree_info extends app_city_trees ()
+complete where city = 'GRATH'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/grath_tree_info_v{data_version}.parquet`;
+
+root partial datasource milos_tree_info extends app_city_trees ()
+complete where city = 'GRMLO'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/grmlo_tree_info_v{data_version}.parquet`;
+
+root partial datasource santorini_tree_info extends app_city_trees ()
+complete where city = 'GRSAN'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/grsan_tree_info_v{data_version}.parquet`;
+
+root partial datasource fingal_tree_info extends app_city_trees ()
+complete where city = 'IEFIN'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/iefin_tree_info_v{data_version}.parquet`;
+
+root partial datasource milan_tree_info extends app_city_trees ()
+complete where city = 'ITMIL'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/itmil_tree_info_v{data_version}.parquet`;
+
+root partial datasource tokyo_tree_info extends app_city_trees (
+    borough: ?borough,
+)
+complete where city = 'JPTYO'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/jptyo_tree_info_v{data_version}.parquet`;
+
+root partial datasource seoul_tree_info extends app_city_trees (
+    borough: ?borough,
+)
+complete where city = 'KRSEL'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/krsel_tree_info_v{data_version}.parquet`;
+
+root partial datasource amsterdam_tree_info extends app_city_trees ()
+complete where city = 'NLAMS'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/nlams_tree_info_v{data_version}.parquet`;
+
+root partial datasource eindhoven_tree_info extends app_city_trees ()
+complete where city = 'NLEIN'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/nlein_tree_info_v{data_version}.parquet`;
+
+root partial datasource groningen_tree_info extends app_city_trees ()
+complete where city = 'NLGRQ'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/nlgrq_tree_info_v{data_version}.parquet`;
+
+root partial datasource utrecht_tree_info extends app_city_trees ()
+complete where city = 'NLUTC'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/nlutc_tree_info_v{data_version}.parquet`;
+
+root partial datasource christchurch_tree_info extends app_city_trees ()
+complete where city = 'NZCHC'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/nzchc_tree_info_v{data_version}.parquet`;
+
+root partial datasource hastings_tree_info extends app_city_trees ()
+complete where city = 'NZHAS'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/nzhas_tree_info_v{data_version}.parquet`;
+
+root partial datasource wellington_tree_info extends app_city_trees ()
+complete where city = 'NZWLG'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/nzwlg_tree_info_v{data_version}.parquet`;
+
+root partial datasource lisbon_tree_info extends app_city_trees ()
+complete where city = 'PTLIS'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ptlis_tree_info_v{data_version}.parquet`;
+
+root partial datasource singapore_tree_info extends app_city_trees ()
+complete where city = 'SGSIN'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/sgsin_tree_info_v{data_version}.parquet`;
+
+root partial datasource taipei_tree_info extends app_city_trees (
+    borough: ?borough,
+)
+complete where city = 'TWTPE'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/twtpe_tree_info_v{data_version}.parquet`;
+
+root partial datasource atlanta_tree_info extends app_city_trees ()
+complete where city = 'USATL'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usatl_tree_info_v{data_version}.parquet`;
+
+root partial datasource austin_tree_info extends app_city_trees ()
+complete where city = 'USAUS'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usaus_tree_info_v{data_version}.parquet`;
+
+root partial datasource baltimore_tree_info extends app_city_trees ()
+complete where city = 'USBAL'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usbal_tree_info_v{data_version}.parquet`;
+
+root partial datasource belmont_tree_info extends app_city_trees (
+    species: ?species,
+)
+complete where city = 'USBEL'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usbel_tree_info_v{data_version}.parquet`;
+
+root partial datasource bismarck_tree_info extends app_city_trees ()
+complete where city = 'USBIS'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usbis_tree_info_v{data_version}.parquet`;
+
+root partial datasource brookline_tree_info extends app_city_trees (
+    species: ?species,
+)
+complete where city = 'USBKL'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usbkl_tree_info_v{data_version}.parquet`;
+
+root partial datasource bend_tree_info extends app_city_trees ()
+complete where city = 'USBND'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usbnd_tree_info_v{data_version}.parquet`;
+
+root partial datasource boise_tree_info extends app_city_trees ()
+complete where city = 'USBOI'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usboi_tree_info_v{data_version}.parquet`;
+
+root partial datasource boston_tree_info extends app_city_trees (
+    species: ?species,
+    height_m: ?height_m,
+    height_crown_radius_m: ?height_crown_radius_m,
+)
+complete where city = 'USBOS'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usbos_tree_info_v{data_version}.parquet`;
+
+root partial datasource boulder_tree_info extends app_city_trees ()
+complete where city = 'USBOU'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usbou_tree_info_v{data_version}.parquet`;
+
+root partial datasource batonrouge_tree_info extends app_city_trees ()
+complete where city = 'USBTR'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usbtr_tree_info_v{data_version}.parquet`;
+
+root partial datasource burlington_tree_info extends app_city_trees ()
+complete where city = 'USBTV'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usbtv_tree_info_v{data_version}.parquet`;
+
+root partial datasource cambridge_tree_info extends app_city_trees (
+    species: ?species,
+    height_m: ?height_m,
+    height_crown_radius_m: ?height_crown_radius_m,
+)
+complete where city = 'USCAM'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uscam_tree_info_v{data_version}.parquet`;
+
+root partial datasource charlotte_tree_info extends app_city_trees ()
+complete where city = 'USCLT'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usclt_tree_info_v{data_version}.parquet`;
+
+root partial datasource columbus_tree_info extends app_city_trees ()
+complete where city = 'USCOL'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uscol_tree_info_v{data_version}.parquet`;
+
+root partial datasource denver_tree_info extends app_city_trees ()
+complete where city = 'USDEN'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usden_tree_info_v{data_version}.parquet`;
+
+root partial datasource durham_tree_info extends app_city_trees ()
+complete where city = 'USDUR'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usdur_tree_info_v{data_version}.parquet`;
+
+root partial datasource davenport_tree_info extends app_city_trees ()
+complete where city = 'USDVN'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usdvn_tree_info_v{data_version}.parquet`;
+
+root partial datasource eugene_tree_info extends app_city_trees ()
+complete where city = 'USEUG'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/useug_tree_info_v{data_version}.parquet`;
+
+root partial datasource evanston_tree_info extends app_city_trees ()
+complete where city = 'USEVN'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usevn_tree_info_v{data_version}.parquet`;
+
+root partial datasource siouxfalls_tree_info extends app_city_trees ()
+complete where city = 'USFSD'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usfsd_tree_info_v{data_version}.parquet`;
+
+root partial datasource spokane_tree_info extends app_city_trees ()
+complete where city = 'USGEG'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usgeg_tree_info_v{data_version}.parquet`;
+
+root partial datasource grandjunction_tree_info extends app_city_trees ()
+complete where city = 'USGJT'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usgjt_tree_info_v{data_version}.parquet`;
+
+root partial datasource houston_tree_info extends app_city_trees ()
+complete where city = 'USHOU'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ushou_tree_info_v{data_version}.parquet`;
+
+root partial datasource lansing_tree_info extends app_city_trees ()
+complete where city = 'USLAN'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uslan_tree_info_v{data_version}.parquet`;
+
+root partial datasource las_vegas_tree_info extends app_city_trees ()
+complete where city = 'USLAS'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uslas_tree_info_v{data_version}.parquet`;
+
+root partial datasource losangeles_tree_info extends app_city_trees ()
+complete where city = 'USLAX'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uslax_tree_info_v{data_version}.parquet`;
+
+root partial datasource louisville_tree_info extends app_city_trees ()
+complete where city = 'USLOU'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uslou_tree_info_v{data_version}.parquet`;
+
+root partial datasource moorhead_tree_info extends app_city_trees ()
+complete where city = 'USMHD'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usmhd_tree_info_v{data_version}.parquet`;
+
+root partial datasource madison_tree_info extends app_city_trees ()
+complete where city = 'USMSN'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usmsn_tree_info_v{data_version}.parquet`;
+
+root partial datasource missoula_tree_info extends app_city_trees ()
+complete where city = 'USMSO'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usmso_tree_info_v{data_version}.parquet`;
+
+root partial datasource naples_tree_info extends app_city_trees ()
+complete where city = 'USNAP'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usnap_tree_info_v{data_version}.parquet`;
+
+root partial datasource new_orleans_tree_info extends app_city_trees ()
+complete where city = 'USNOL'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usnol_tree_info_v{data_version}.parquet`;
+
+root partial datasource naperville_tree_info extends app_city_trees ()
+complete where city = 'USNPV'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usnpv_tree_info_v{data_version}.parquet`;
+
+root partial datasource nova_tree_info extends app_city_trees ()
+complete where city = 'USNVA'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usnva_tree_info_v{data_version}.parquet`;
+
+root partial datasource nyc_tree_info extends app_city_trees ()
+complete where city = 'USNYC'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usnyc_tree_info_v{data_version}.parquet`;
+
+root partial datasource oakland_tree_info extends app_city_trees ()
+complete where city = 'USOAK'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usoak_tree_info_v{data_version}.parquet`;
+
+root partial datasource orlandpark_tree_info extends app_city_trees ()
+complete where city = 'USOPK'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usopk_tree_info_v{data_version}.parquet`;
+
+root partial datasource oxnard_tree_info extends app_city_trees ()
+complete where city = 'USOXR'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usoxr_tree_info_v{data_version}.parquet`;
+
+root partial datasource philadelphia_tree_info extends app_city_trees ()
+complete where city = 'USPHL'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usphl_tree_info_v{data_version}.parquet`;
+
+root partial datasource pittsburgh_tree_info extends app_city_trees ()
+complete where city = 'USPIT'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uspit_tree_info_v{data_version}.parquet`;
+
+root partial datasource plano_tree_info extends app_city_trees ()
+complete where city = 'USPLN'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uspln_tree_info_v{data_version}.parquet`;
+
+root partial datasource portland_tree_info extends app_city_trees ()
+complete where city = 'USPOR'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uspor_tree_info_v{data_version}.parquet`;
+
+root partial datasource portstlucie_tree_info extends app_city_trees ()
+complete where city = 'USPSL'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uspsl_tree_info_v{data_version}.parquet`;
+
+root partial datasource providence_tree_info extends app_city_trees ()
+complete where city = 'USPVD'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uspvd_tree_info_v{data_version}.parquet`;
+
+root partial datasource riverside_tree_info extends app_city_trees ()
+complete where city = 'USRAL'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usral_tree_info_v{data_version}.parquet`;
+
+root partial datasource redlands_tree_info extends app_city_trees ()
+complete where city = 'USRDL'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usrdl_tree_info_v{data_version}.parquet`;
+
+root partial datasource richmond_tree_info extends app_city_trees ()
+complete where city = 'USRIC'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usric_tree_info_v{data_version}.parquet`;
+
+root partial datasource rochester_tree_info extends app_city_trees ()
+complete where city = 'USROC'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usroc_tree_info_v{data_version}.parquet`;
+
+root partial datasource sacramento_tree_info extends app_city_trees ()
+complete where city = 'USSAC'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ussac_tree_info_v{data_version}.parquet`;
+
+root partial datasource sandiego_tree_info extends app_city_trees ()
+complete where city = 'USSAN'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ussan_tree_info_v{data_version}.parquet`;
+
+root partial datasource seattle_tree_info extends app_city_trees ()
+complete where city = 'USSEA'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ussea_tree_info_v{data_version}.parquet`;
+
+root partial datasource sf_tree_info extends app_city_trees ()
+complete where city = 'USSFO'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ussfo_tree_info_v{data_version}.parquet`;
+
+root partial datasource sanjose_tree_info extends app_city_trees ()
+complete where city = 'USSJC'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ussjc_tree_info_v{data_version}.parquet`;
+
+root partial datasource salem_tree_info extends app_city_trees ()
+complete where city = 'USSLM'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usslm_tree_info_v{data_version}.parquet`;
+
+root partial datasource santa_monica_tree_info extends app_city_trees ()
+complete where city = 'USSMO'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ussmo_tree_info_v{data_version}.parquet`;
+
+root partial datasource somerville_tree_info extends app_city_trees (
+    species: ?species,
+)
+complete where city = 'USSOM'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ussom_tree_info_v{data_version}.parquet`;
+
+root partial datasource springfield_tree_info extends app_city_trees ()
+complete where city = 'USSPF'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usspf_tree_info_v{data_version}.parquet`;
+
+root partial datasource stoughton_tree_info extends app_city_trees ()
+complete where city = 'USSTO'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ussto_tree_info_v{data_version}.parquet`;
+
+root partial datasource syracuse_tree_info extends app_city_trees ()
+complete where city = 'USSYR'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ussyr_tree_info_v{data_version}.parquet`;
+
+root partial datasource tempe_tree_info extends app_city_trees ()
+complete where city = 'USTEM'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ustem_tree_info_v{data_version}.parquet`;
+
+root partial datasource washingtondc_tree_info extends app_city_trees ()
+complete where city = 'USWAS'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uswas_tree_info_v{data_version}.parquet`;
+
+root partial datasource watertown_tree_info extends app_city_trees (
+    species: ?species,
+)
+complete where city = 'USWAT'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uswat_tree_info_v{data_version}.parquet`;

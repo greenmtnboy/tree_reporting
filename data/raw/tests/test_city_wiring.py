@@ -3,8 +3,8 @@
 Adding a city means editing roughly twenty files across four languages, and
 the failure mode for almost every one of them is *silence*: a city missing from
 `city_ecoregion.preql` gets a null home ecoregion, one missing from
-`tree_info.preql`'s `latest_update_through` never marks the rollup stale, one
-missing from `cityConfig.json` simply never appears in the UI.  None of those
+`tree_info.preql` is invisible to every chart, one missing from
+`cityConfig.json` simply never appears in the UI.  None of those
 raise.
 
 The existing suites cover the parts that were bought with an outage --
@@ -205,41 +205,18 @@ def test_landmark_freshness_is_declared_and_aggregated(code: str):
 # ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize("code", CITY_CODES)
-def test_cross_city_tree_model_wires_the_city(code: str):
-    """`tree_info.preql` needs all three of import, merge and watermark.
+def test_cross_city_tree_model_reads_the_city(code: str):
+    """`tree_info.preql` reads the city's published parquet.
 
     This is the model the *app's* dashboard queries resolve against, so a city
     missing here is invisible to every chart even with a perfectly healthy
-    pipeline of its own.
+    pipeline of its own.  tools/sync_app_models.py writes it, and
+    tests/test_app_models.py checks what each datasource binds.
     """
     text = read(RAW_DIR / "tree_info.preql")
-    stem = tree_model(code).stem
-    assert f"import {code.lower()}.{stem};" in text, (
-        f"{code}: tree_info.preql is missing "
-        f"`import {code.lower()}.{stem};`"
-    )
-    assert f"merge {code.lower()}_source into data_source;" in text, (
-        f"{code}: tree_info.preql is missing "
-        f"`merge {code.lower()}_source into data_source;`, so this city's rows "
-        f"carry no data_source in the cross-city view"
-    )
-    rollup = re.search(
-        r"auto latest_update_through <- greatest\((.*?)\);", text, re.S
-    )
-    assert rollup, "tree_info.preql declares no latest_update_through"
-    assert f"{code.lower()}_published_data_updated_through" in rollup.group(1), (
-        f"{code}: {code.lower()}_published_data_updated_through is missing "
-        f"from `latest_update_through` in tree_info.preql"
-    )
-
-
-@pytest.mark.parametrize("code", CITY_CODES)
-def test_landmark_lane_imports_the_city(code: str):
-    text = read(RAW_DIR / "landmark_info.preql")
-    stem = landmark_model(code).stem
-    assert f"import {code.lower()}.{stem};" in text, (
-        f"{code}: landmark_info.preql is missing "
-        f"`import {code.lower()}.{stem};`"
+    assert f"complete where city = '{code}'" in text and f"trees/{code.lower()}_tree_info_v" in text, (
+        f"{code}: tree_info.preql does not read this city's parquet; "
+        f"run tools/sync_app_models.py"
     )
 
 

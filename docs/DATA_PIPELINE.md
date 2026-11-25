@@ -227,9 +227,10 @@ Every tree row carries `data_source`. The value list is `DATA_SOURCES` in
 `complete where` clauses in agreement.
 
 - The concept is a **per-city enum key** (`ussfo_source`, ...) declared in
-  each city model and aliased to the physical `data_source` column;
-  `tree_info.preql` merges the keys for the cross-city view. Never add that
-  merge to a city model.
+  each city model and aliased to the physical `data_source` column, so every
+  published parquet stores it as `data_source` and the app's model
+  (`tree_info.preql`) binds that column directly. Never merge a source key
+  into `data_source` in a city model.
 - Each raw source claims `complete where city = 'X' and {code}_source = 'Y'`.
   A source claiming the whole city alone leaves no room for the others and
   they emit zero rows with no error.
@@ -392,7 +393,7 @@ exactly one row per tree, and none for a tree reported gone.
   drops the later inventory's copy; `docs/BORDER_DEDUP.md` has both.
 - Needs pytrilogy 0.3.348 or later for the target-side `where`.
 - The cross-city rollup does not carry the dedup columns, and
-  `tree_info.preql` derives nothing.
+  `tree_info.preql` derives nothing: it reads published parquets.
 - A city that imports the file but skips the `where` gate still builds,
   with counts that are simply high; `test_every_city_prunes_absorbed_rows`
   catches it.

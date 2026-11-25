@@ -289,8 +289,9 @@ a rebuild good.
 
 ### 7-8. Cross-city registration and the OSM model
 
-`tree_info.preql` gets the import and `merge {code}_source into
-data_source;`. `full_tree_publish.preql` gets one line in its file list
+`tree_info.preql`, the app's tree model, is written from the city models by
+`tools/sync_app_models.py` (`new_city.py` runs it; rerun it after changing
+what a city publishes). `full_tree_publish.preql` gets one line in its file list
 (`test_rollup_reads_every_city`). `osm_staging/{code}_osm_staging.preql` is
 the thin per-city extract model over the shared `osm_rows.py`, selected by
 `where city = '{CODE}'`. Add the city to `OSM_DATA_SOURCES`, give it a
@@ -383,8 +384,8 @@ a lone partial source is never a union candidate. Start from
 ## Landmarks (mandatory)
 
 Every city needs `{slug}_landmarks.preql` even if it yields zero rows;
-`landmark_common.preql` gets the freshness property and `landmark_info.preql`
-the import. Schema: `landmark_id` (prefixed), `city`, `name`, `geometry_raw`
+`landmark_common.preql` gets the freshness property; `landmark_info.preql` reads
+the published union and names no city. Schema: `landmark_id` (prefixed), `city`, `name`, `geometry_raw`
 (WKT), `latitude`, `longitude`; city-specific extras are declared in
 `landmark_common.preql`. The raw datasource `extends landmark_partition` and
 the target `extends published_landmark_info` (both in `landmark_common.preql`,
@@ -396,8 +397,7 @@ time; a web directory geocoded with Nominatim into a committed CSV, published
 by an uncronned `landmarks-{code}` job (`landmark_staging/`). Prefer the last
 pattern for any curated CSV.
 
-**Build a new city's landmark parquet from its own preql**, never from
-`landmark_info.preql`, and check the row count against the script's output:
+**Build a new city's landmark parquet from its own preql** and check the row count against the script's output:
 
 ```bash
 cd data && trilogy refresh raw/{code}/{slug}_landmarks.preql -f {slug}_landmark_info

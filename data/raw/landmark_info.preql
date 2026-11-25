@@ -1,186 +1,35 @@
-# Every city's landmark model in one scope: the app's landmark model
-# (src/src/trilogyModels.ts), which queries across cities.
+# The app's landmark model: what the browser's chat resolves landmark
+# questions against, imported under an alias (`landmark`, MAP_CHAT_IMPORTS in
+# src/src/composables/chatModelImports.ts) so its `name`, `latitude` and
+# `longitude` never meet the trees' concepts of the same names.
 #
-# Not a refresh entrypoint. `trilogy refresh <file>` builds what the file
-# declares and this one declares nothing, so refreshing it probes every city
-# and builds none. Each city's parquet is built by its own
-# `refresh-landmarks-{code}` job from `raw/{code}/{slug}_landmarks.preql`; see
-# "Building" in docs/LANDMARKS.md.
+# It reads the published cross-city union (`full_landmark_publish.preql`, the
+# `publish-landmarks` job) and nothing else, so it is no job's entrypoint and
+# carries no `freshness by`. It used to import every city's landmark build
+# model, which put every city's portal script, partition and watermark into
+# each resolver request to read one table that already holds all of them.
+#
+# The vocabulary is declared here rather than imported from landmark_common,
+# for the reason full_landmark_publish.preql gives: there `latitude` and
+# `longitude` are derived from `geometry_raw`, a column the union does not
+# carry. The per-city registers' own attributes (SF's `year_built`, Paris's
+# `arrondissement`, ...) are in their city parquets, not the union, and are
+# not exposed here.
 
-import landmark_common;
-import ussfo.sf_landmarks;
-import usnyc.nyc_landmarks;
-import usbos.boston_landmarks;
-import frpar.paris_landmarks;
-import usbtv.burlington_landmarks;
-import cavan.vancouver_landmarks;
-import deber.berlin_landmarks;
-import nlams.amsterdam_landmarks;
-import gblon.london_landmarks;
-import aumel.melbourne_landmarks;
-import arbue.buenosaires_landmarks;
-import uslax.losangeles_landmarks;
-import uswas.washingtondc_landmarks;
-import ustem.tempe_landmarks;
-import grath.athens_landmarks;
-import grmlo.milos_landmarks;
-import grsan.santorini_landmarks;
-import usden.denver_landmarks;
-import cacal.calgary_landmarks;
-import caedm.edmonton_landmarks;
-import cawpg.winnipeg_landmarks;
-import cator.toronto_landmarks;
-import camtl.montreal_landmarks;
-import caque.quebec_landmarks;
-import calon.longueuil_landmarks;
-import cahfx.halifax_landmarks;
-import cakgn.kingston_landmarks;
-import calet.lethbridge_landmarks;
-import cavic.victoria_landmarks;
-import cakel.kelowna_landmarks;
-import canwe.new_westminster_landmarks;
-import camis.mississauga_landmarks;
-import caott.ottawa_landmarks;
-import cabur.burlington_on_landmarks;
-import caajx.ajax_landmarks;
-import camon.moncton_landmarks;
-import jptyo.tokyo_landmarks;
-import cobog.bogota_landmarks;
-import twtpe.taipei_landmarks;
-import dkcph.copenhagen_landmarks;
-import fihel.helsinki_landmarks;
-import ussto.stoughton_landmarks;
-import czprg.prague_landmarks;
-import usnva.nova_landmarks;
-import usaus.austin_landmarks;
-import ushou.houston_landmarks;
-import usdur.durham_landmarks;
-import usnol.new_orleans_landmarks;
-import usatl.atlanta_landmarks;
-import usnap.naples_landmarks;
-import usclt.charlotte_landmarks;
-import itmil.milan_landmarks;
-import usbou.boulder_landmarks;
-import usnpv.naperville_landmarks;
-import auadl.adelaide_landmarks;
-import auper.perth_landmarks;
-import aubal.ballarat_landmarks;
-import auwod.wodonga_landmarks;
-import uscol.columbus_landmarks;
-import atvie.vienna_landmarks;
-import useug.eugene_landmarks;
-import chzur.zurich_landmarks;
-import gbnot.nottingham_landmarks;
-import chbas.basel_landmarks;
-import ussea.seattle_landmarks;
-import uspor.portland_landmarks;
-import usphl.philadelphia_landmarks;
-import uspit.pittsburgh_landmarks;
-import ussjc.sanjose_landmarks;
-import ussac.sacramento_landmarks;
-import deham.hamburg_landmarks;
-import frlyo.lyon_landmarks;
-import esmad.madrid_landmarks;
-import usbal.baltimore_landmarks;
-import decgn.cologne_landmarks;
-import defra.frankfurt_landmarks;
-import nzchc.christchurch_landmarks;
-import iefin.fingal_landmarks;
-import aucbr.canberra_landmarks;
-import ptlis.lisbon_landmarks;
-import begnt.ghent_landmarks;
-import gbbrs.bristol_landmarks;
-import caham.hamilton_landmarks;
-import nlutc.utrecht_landmarks;
-import frtls.toulouse_landmarks;
-import chgva.geneva_landmarks;
-import delej.leipzig_landmarks;
-import nzwlg.wellington_landmarks;
-import frbod.bordeaux_landmarks;
-import frsxb.strasbourg_landmarks;
-import nlein.eindhoven_landmarks;
-import chbrn.bern_landmarks;
-import frrns.rennes_landmarks;
-import beanr.antwerp_landmarks;
-import ussan.sandiego_landmarks;
-import cakit.kitchener_landmarks;
-import uslou.louisville_landmarks;
-import frmpl.montpellier_landmarks;
-import frgnb.grenoble_landmarks;
-import ausyd.sydney_landmarks;
-import usmsn.madison_landmarks;
-import usric.richmond_landmarks;
-import usgeg.spokane_landmarks;
-import cawat.waterloo_landmarks;
-import frnte.nantes_landmarks;
-import ussmo.santa_monica_landmarks;
-import caoak.oakville_landmarks;
-import usroc.rochester_landmarks;
-import ussyr.syracuse_landmarks;
-import uslas.las_vegas_landmarks;
-import frbes.brest_landmarks;
-import nlgrq.groningen_landmarks;
-import usral.riverside_landmarks;
-import usoak.oakland_landmarks;
-import gbedi.edinburgh_landmarks;
-import gbbfs.belfast_landmarks;
-import caglp.guelph_landmarks;
-import uspvd.providence_landmarks;
-import auckb.cockburn_landmarks;
-import aubxg.bendigo_landmarks;
-import gbbsk.basingstoke_landmarks;
-import gbyrk.york_landmarks;
-import nzhas.hastings_landmarks;
-import cared.red_deer_landmarks;
-import gbfar.fareham_landmarks;
-import cafre.fredericton_landmarks;
-import camht.medicinehat_landmarks;
-import aulst.launceston_landmarks;
-import aumrs.macedon_landmarks;
-import ausht.shepparton_landmarks;
-import usfsd.siouxfalls_landmarks;
-import casry.surrey_landmarks;
-import aultv.latrobe_landmarks;
-import cabar.barrie_landmarks;
-import calng.langley_landmarks;
-import campr.mapleridge_landmarks;
-import caprg.princegeorge_landmarks;
-import capen.penticton_landmarks;
-import cafsj.fortstjohn_landmarks;
-import cawld.welland_landmarks;
-import aubsd.bassendean_landmarks;
-import aucol.colacotway_landmarks;
-import esbcn.barcelona_landmarks;
-import sgsin.singapore_landmarks;
-import usbtr.batonrouge_landmarks;
-import uslan.lansing_landmarks;
-import usmso.missoula_landmarks;
-import usbis.bismarck_landmarks;
-import usspf.springfield_landmarks;
-import usboi.boise_landmarks;
-import usgjt.grandjunction_landmarks;
-import uspsl.portstlucie_landmarks;
-import krsel.seoul_landmarks;
-import cayrk.yorkregion_landmarks;
-import cawhi.whitby_landmarks;
-import usslm.salem_landmarks;
-import usoxr.oxnard_landmarks;
-import usrdl.redlands_landmarks;
-import usdvn.davenport_landmarks;
-import uspln.plano_landmarks;
-import usbnd.bend_landmarks;
-import usopk.orlandpark_landmarks;
-import usevn.evanston_landmarks;
-import usmhd.moorhead_landmarks;
-import uscam.cambridge_landmarks;
-import usbkl.brookline_landmarks;
-import usbel.belmont_landmarks;
-import uswat.watertown_landmarks;
-import ussom.somerville_landmarks;
+import std.geography;
+import core;
 
-# The cross-city union is NOT declared here. It lives in
-# `full_landmark_publish.preql`, which reads the parquets these imports publish
-# and reaches no portal at all -- see that file's header for the outage this
-# separation fixes. Refreshing this entrypoint refreshes the forty-one city
-# parquets and nothing else, so one city's portal being unwell fails one asset
-# instead of the union.
+key landmark_id string; # city-prefixed unique identifier (sf-<objectid>, nyc-<lm_id>)
+property landmark_id.name string; # the landmark's name, as its register gives it
+property landmark_id.latitude float::latitude; # latitude of the landmark's centroid
+property landmark_id.longitude float::longitude; # longitude of the landmark's centroid
+
+root datasource full_landmark_info (
+    landmark_id: landmark_id,
+    city: city,
+    name: name,
+    latitude: ?latitude,
+    longitude: ?longitude,
+)
+grain (landmark_id)
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/full_landmark_info_v{data_version}.parquet`;

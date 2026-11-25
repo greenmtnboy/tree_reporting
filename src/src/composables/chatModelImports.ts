@@ -27,6 +27,10 @@
 export const MAP_CHAT_IMPORTS: Array<{ name: string; alias: string }> = [
   { name: 'tree_enrichment', alias: '' },
   { name: 'tree_info', alias: '' },
+  // The published landmark union, every city's. Under an alias because its
+  // `name`, `latitude` and `longitude` are a landmark's, not a tree's: the
+  // chat writes `landmark.name`, `landmark.city`, and so on.
+  { name: 'landmark_info', alias: 'landmark' },
 ]
 
 /**
