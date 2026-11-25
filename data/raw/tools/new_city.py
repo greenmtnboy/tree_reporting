@@ -674,32 +674,9 @@ def build(args) -> Edits:
     )
 
     # --- cross-city models ------------------------------------------------
-    e.sub_once(
-        RAW / "landmark_info.preql",
-        r"(\nimport \w+\.\w+_landmarks;\n)(?!import)",
-        rf"\1import {lc}.{slug}_landmarks;\n",
-        what="landmark_info import", marker=f"import {lc}.{slug}_landmarks;",
-    )
-    tree_info = RAW / "tree_info.preql"
-    e.sub_once(
-        tree_info,
-        r"(\nimport \w+\.\w+_tree_info;\n)(?!import)",
-        rf"\1import {lc}.{slug}_tree_info;\n",
-        what="tree_info import", marker=f"import {lc}.{slug}_tree_info;",
-    )
-    e.sub_once(
-        tree_info,
-        r"(\nmerge \w+_source into data_source;\n)(?!merge)",
-        rf"\1merge {lc}_source into data_source;\n",
-        what="data_source merge", marker=f"merge {lc}_source into data_source;",
-    )
-    e.sub_once(
-        tree_info,
-        r"(auto latest_update_through <- greatest\([^)]*)\)",
-        rf"\1,\n{lc}_published_data_updated_through)",
-        # Not `..._through)` -- see the note on latest_landmark_update_through.
-        what="latest_update_through", marker=f",\n{lc}_published_data_updated_through",
-    )
+    # The app's tree model (tree_info.preql) is written by
+    # tools/sync_app_models.py after the commit, from the city model this
+    # scaffolds; the app's landmark model reads the union and names no city.
     e.sub_once(
         RAW / "full_tree_publish.preql",
         r"(trees/\w+_tree_info_v\{data_version\}\.parquet`)(\n\];)",
@@ -918,6 +895,12 @@ def main() -> None:
     # city job the commit just added.
     subprocess.run(
         [sys.executable, str(Path(__file__).with_name("sync_city_derived.py"))],
+        check=True,
+    )
+    # The app's tree model: one datasource over each city's published parquet,
+    # this one's included (tools/sync_app_models.py).
+    subprocess.run(
+        [sys.executable, str(Path(__file__).with_name("sync_app_models.py"))],
         check=True,
     )
     print(f"""

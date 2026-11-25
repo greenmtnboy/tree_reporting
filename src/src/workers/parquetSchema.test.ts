@@ -6,7 +6,17 @@ import { blockAt, blockFile, blockKey, parseWorldManifest } from './worldBlocks'
 import { formatDataSource } from '../data/dataSources'
 import { CITY_CONFIG } from '../composables/useMapData'
 import { SPECIES_SENTINELS } from '../data/species'
-import { ALL_MODEL_SOURCES } from '../trilogyModels'
+import TREE_DEDUP_MODEL from '../../../data/raw/tree_dedup.preql?raw'
+
+// The city *build* models, for the not-yet-published carve-out below. They are
+// not in the resolver bundle (trilogyModels.ts), which carries only the
+// consumption models, so this reads them itself.
+const CITY_TREE_MODELS = Object.entries(
+  import.meta.glob('../../../data/raw/*/*_tree_info.preql', { eager: true, query: '?raw' }),
+).map(([path, mod]) => ({
+  code: path.split('/').slice(-2)[0],
+  contents: (mod as { default: string }).default,
+}))
 
 async function withDuckDB<T>(fn: (conn: Awaited<ReturnType<DuckDBInstance['connect']>>) => Promise<T>): Promise<T> {
   const instance = await DuckDBInstance.create(':memory:')
@@ -107,13 +117,10 @@ describe('parquet schema', () => {
       // with its own `where tree_id = cluster_id` line or by extending
       // `published_tree_info`, the template that carries that gate for every
       // city scaffolded since it was written.
-      const model = ALL_MODEL_SOURCES.find(
-        (m) => m.alias.startsWith(`${city.toLowerCase()}.`) && m.alias.endsWith('_tree_info'),
+      const model = CITY_TREE_MODELS.find((m) => m.code === city.toLowerCase())
+      const templatePrunes = TREE_DEDUP_MODEL.split(/\r?\n/).some((line) =>
+        line.startsWith('where tree_id = cluster_id'),
       )
-      const dedup = ALL_MODEL_SOURCES.find((m) => m.alias === 'tree_dedup')
-      const templatePrunes =
-        !!dedup &&
-        dedup.contents.split(/\r?\n/).some((line) => line.startsWith('where tree_id = cluster_id'))
       const prunes =
         !!model &&
         model.contents.includes('import ..tree_dedup;') &&

@@ -128,6 +128,12 @@ AVAILABLE CONCEPTS:
 SPECIES-LEVEL ENRICHMENT CONCEPTS:
 ${ENRICHMENT_CONCEPTS}
 
+LANDMARK CONCEPTS (every city's designated landmarks, for run_query; a query reads either trees or landmarks, not both):
+- landmark.landmark_id (string) — unique identifier
+- landmark.name (string) — the landmark's name
+- landmark.city (string) — city code; bound a landmark query with WHERE landmark.city = '${city}'
+- landmark.latitude / landmark.longitude (float) — the landmark's centre
+
 TRILOGY SYNTAX RULES:
 ${rulesInput}
 

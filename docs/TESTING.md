@@ -212,7 +212,7 @@ DASHBOARD_QUERY_CROSS_FILTERS=all|pairs pnpm test:queries    # every cross-filte
 
 | Screen | Call site | `imports` |
 |---|---|---|
-| Map | `compilePreQL` in `useChat.ts` | `MAP_CHAT_IMPORTS`: `tree_enrichment` + `tree_info` |
+| Map | `compilePreQL` in `useChat.ts` | `MAP_CHAT_IMPORTS`: `tree_enrichment` + `tree_info` + `landmark_info as landmark` |
 | Summary, species | `executeSummaryRunQuery` / `executeSpeciesRunQuery` | `SUMMARY_DASHBOARD_IMPORTS`: `tree_enrichment` + `dashboard_context` |
 
 `tree_enrichment` is the species dimension only, so enrichment alone reaches

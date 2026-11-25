@@ -294,8 +294,22 @@ a rebuild good.
 
 ### 7-8. Cross-city registration and the OSM model
 
-`tree_info.preql` gets the import and `merge {code}_source into
-data_source;`. `full_tree_publish.preql` gets one line in its file list
+`tree_info.preql`, the app's tree model, is generated; never edit it or
+import a city model into it. `tools/sync_app_models.py` writes one
+`root partial datasource` per city over that city's published parquet, read
+from the city's published target: the same `complete where`, the template's
+columns plus the city's extras (`borough`, `height_m`), and `?` wherever the
+target marks a column nullable. It has no merge, no watermark and no
+`freshness by`, because the resolver parses the whole bundle on every
+dashboard and chat request and the parquet already holds what the city
+model derives. `new_city.py` runs it; rerun
+`uv run tools/sync_app_models.py` after any change to what a city publishes
+(a new column, a nullability change), and `--check` is what
+`test_app_models.py` asserts. It stops if the target lacks a template column,
+so a new city's target must publish every column of
+`app_city_trees`. The frontend needs no edit: `ALL_MODEL_SOURCES` in
+`src/src/trilogyModels.ts` bundles `tree_info` and `landmark_info`, never a
+city file, and `test_browser_bundle.py` keeps it that way. `full_tree_publish.preql` gets one line in its file list
 (`test_rollup_reads_every_city`). `osm_staging/{code}_osm_staging.preql` is
 the thin per-city extract model over the shared `osm_rows.py`, selected by
 `where city = '{CODE}'`. Add the city to `OSM_DATA_SOURCES`, give it a
@@ -388,8 +402,10 @@ a lone partial source is never a union candidate. Start from
 ## Landmarks (mandatory)
 
 Every city needs `{slug}_landmarks.preql` even if it yields zero rows;
-`landmark_common.preql` gets the freshness property and `landmark_info.preql`
-the import. Schema: `landmark_id` (prefixed), `city`, `name`, `geometry_raw`
+`landmark_common.preql` gets the freshness property. `landmark_info.preql`,
+which the app and chat import as `landmark`, reads the published union
+(`full_landmark_info`) and names no city, so a new city needs no edit there:
+its landmarks reach the app once the weekly `publish-landmarks` job has run. Schema: `landmark_id` (prefixed), `city`, `name`, `geometry_raw`
 (WKT), `latitude`, `longitude`; city-specific extras are declared in
 `landmark_common.preql`. The raw datasource `extends landmark_partition` and
 the target `extends published_landmark_info` (both in `landmark_common.preql`,
@@ -409,8 +425,7 @@ its probe is `national_register_modified_at` (Belmont's pair is the model); a
 city with a register of its own adds `national_register(...)` beside it
 (Columbus).
 
-**Build a new city's landmark parquet from its own preql**, never from
-`landmark_info.preql`, and check the row count against the script's output:
+**Build a new city's landmark parquet from its own preql** and check the row count against the script's output:
 
 ```bash
 cd data && trilogy refresh raw/{code}/{slug}_landmarks.preql -f {slug}_landmark_info
@@ -498,6 +513,7 @@ Refresh before you deploy either way.
 
 ```bash
 cd data/raw && uv run --no-project --with pytest --with pyarrow --with "pytrilogy>=0.3.540" --with "duckdb<2" --with requests python -m pytest tests -q
+cd data/raw && uv run tools/sync_app_models.py --check                          # tree_info.preql reads the new city
 cd data && trilogy refresh --dry-run raw/{code}/{slug}_tree_info.preql        # one asset
 cd data && trilogy refresh --dry-run osm_staging/{code}_osm_staging.preql     # one asset
 cd data/raw && uv run tree_enrichment_probe.py                                # lists species needing enrichment

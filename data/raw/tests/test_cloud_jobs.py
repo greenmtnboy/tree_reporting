@@ -211,9 +211,10 @@ def test_city_refresh_entrypoints_are_the_city_models():
         assert entrypoint.endswith("_tree_info.preql")
         text = statements(DATA_DIR / entrypoint)
         assert "into data_source" not in text, (
-            f"{entrypoint} merges a source enum into data_source; that merge "
-            "belongs only in tree_info.preql, and in a city model it makes the "
-            "city's parquet plan from the wrong sources"
+            f"{entrypoint} merges a source enum into data_source; the city's "
+            "parquet stores its source enum *as* data_source, so no model needs "
+            "the merge, and in a city model it makes the city's parquet plan "
+            "from the wrong sources"
         )
         for other in CITY_CODES:
             if other == code:

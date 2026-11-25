@@ -17,8 +17,7 @@ context for the city.
 
 City-specific extras are declared in `landmark_common.preql` next to the
 existing per-city blocks. Each city also adds its freshness property to
-`landmark_common.preql` (and to the `greatest()` there) and its import to
-`landmark_info.preql`.
+`landmark_common.preql` (and to the `greatest()` there).
 
 ## Sources, in order of preference
 
@@ -53,11 +52,8 @@ constant in its probe; a row count is not a watermark.
 
 ## Building
 
-Build a new city's landmark parquet from its own model, never from
-`landmark_info.preql`: the shared entrypoint declares the published union as
-a datasource, which can satisfy the concepts and leave a city not yet in the
-union materialising zero rows with exit 0. Check the row count against the
-script's output.
+Build a new city's landmark parquet from its own model, and check the row
+count against the script's output.
 
 ```bash
 cd data && trilogy refresh raw/{code}/{slug}_landmarks.preql -f {slug}_landmark_info
@@ -70,6 +66,6 @@ unions the published parquets at 05:00. An outage fails one city's job, and a
 city whose source did not move exits "up to date" after its probe.
 `raw/tools/new_city.py` adds the job for a new city in the next free slot.
 
-`landmark_info.preql` is the app's cross-city landmark model and is never a
-refresh entrypoint: a file refresh builds only what the file declares, and it
-declares nothing.
+`landmark_info.preql` is the app's cross-city landmark model: one root
+datasource over the published union, which the map chat imports as
+`landmark`. It names no city and builds nothing.
