@@ -489,6 +489,25 @@ def neighbour_tile(cache_dir: Path, *, crs: str, west: float, north: float, pixe
     return image
 
 
+_READ_POOL = None
+
+
+def read_pool():
+    """One pool of imagery-read threads for the process, never shut down.
+
+    A pool per block, whose threads exit when it closes, deadlocked on
+    Windows once ONNX Runtime's DirectML provider was loaded (--device dml):
+    the second block's pool waited forever on a worker that had finished its
+    last read and never finished exiting.  Threads that never exit avoid it.
+    """
+    global _READ_POOL
+    if _READ_POOL is None:
+        from concurrent.futures import ThreadPoolExecutor
+
+        _READ_POOL = ThreadPoolExecutor(max_workers=8, thread_name_prefix="imagery-read")
+    return _READ_POOL
+
+
 def context_image(image, cache_dir: Path, *, crs: str, west: float, north: float, pixels: int,
                   resolution_m: float, bands: list[int], stac_url: str):
     """*image*, the grid tile at (west, north), with a quarter tile of each of its
@@ -498,7 +517,6 @@ def context_image(image, cache_dir: Path, *, crs: str, west: float, north: float
     edge) are read once and cached like any other tile.
     """
     import numpy as np
-    from concurrent.futures import ThreadPoolExecutor
 
     tile_m, margin = pixels * resolution_m, pixels // 4
     canvas = np.zeros((image.shape[0], 3 * pixels, 3 * pixels), dtype=image.dtype)
@@ -513,8 +531,7 @@ def context_image(image, cache_dir: Path, *, crs: str, west: float, north: float
 
     # Together: a read is a decode (or, past the plan's edge, a download), and
     # GDAL releases the interpreter for both.
-    with ThreadPoolExecutor(max_workers=len(around)) as pool:
-        tiles = dict(zip(around, pool.map(read, around)))
+    tiles = dict(zip(around, read_pool().map(read, around)))
     tiles[(0, 0)] = image
     for (dx, dy), tile in tiles.items():
         canvas[:, (dy + 1) * pixels:(dy + 2) * pixels, (dx + 1) * pixels:(dx + 2) * pixels] = tile
@@ -532,7 +549,6 @@ def block_image(images: dict[tuple[int, int], Any], cache_dir: Path, *, crs: str
     read from the cache (``neighbour_tile``).
     """
     import numpy as np
-    from concurrent.futures import ThreadPoolExecutor
 
     tile_m = pixels * resolution_m
     positions = [(c, r) for r in range(-1, tiles + 1) for c in range(-1, tiles + 1)]
@@ -545,8 +561,7 @@ def block_image(images: dict[tuple[int, int], Any], cache_dir: Path, *, crs: str
             pixels=pixels, resolution_m=resolution_m, bands=bands, stac_url=stac_url,
         )
 
-    with ThreadPoolExecutor(max_workers=8) as pool:
-        found = {**images, **dict(zip(missing, pool.map(read, missing)))}
+    found = {**images, **dict(zip(missing, read_pool().map(read, missing)))}
     first = next(iter(found.values()))
     canvas = np.zeros((first.shape[0], (tiles + 2) * pixels, (tiles + 2) * pixels), dtype=first.dtype)
     for (c, r), tile in found.items():
