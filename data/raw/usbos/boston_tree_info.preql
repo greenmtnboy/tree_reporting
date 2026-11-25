@@ -171,9 +171,11 @@ where city = 'USBOS';
 # another source has absorbs the prediction and takes none of its values, so
 # these rows only show where nothing else has a tree.  No `source_kept` guard:
 # a new run at a stricter threshold may rightly shed a quarter of them.
-# The run covers the metro; the rows inside Cambridge, Somerville, Brookline,
-# Belmont and Watertown are those towns' (PREDICTED_STAGED_WITH), and what is
-# left here is Boston and the ring of towns that are not yet cities.
+# The run covers the metro; this is the part inside Boston's own boundary.
+# The rows inside Cambridge, Somerville, Brookline, Belmont and Watertown are
+# those towns' (PREDICTED_STAGED_WITH), and a detection in a town that is not
+# yet a city here (Newton, Milton, Lynn...) stays in the staged file,
+# unpublished, until that town is added.
 root partial datasource usbos_predicted_tree_info extends tree_partition (
     data_source: usbos_source,
     species: ?raw_species,
@@ -194,12 +196,8 @@ root partial datasource usbos_osm_tree_info extends tree_partition (
 )
 complete where city = 'USBOS' and usbos_source = 'OSM_USBOS'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usbos_osm_staging.parquet`
-where (raw_latitude >= 42.15 and raw_latitude < 42.55 and raw_longitude >= -71.25 and raw_longitude < -70.85)
-    and not geo_contains(usbel_boundary, geo_point(raw_longitude, raw_latitude))
-    and not geo_contains(usbkl_boundary, geo_point(raw_longitude, raw_latitude))
-    and not geo_contains(uscam_boundary, geo_point(raw_longitude, raw_latitude))
-    and not geo_contains(ussom_boundary, geo_point(raw_longitude, raw_latitude))
-    and not geo_contains(uswat_boundary, geo_point(raw_longitude, raw_latitude));
+where (raw_latitude >= 42.2279 and raw_latitude < 42.4009 and raw_longitude >= -71.1913 and raw_longitude < -70.7488)
+    and geo_contains(usbos_boundary, geo_point(raw_longitude, raw_latitude));
 
 # --- Cross-source dedup and attribute merge --------------------------------
 #

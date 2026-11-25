@@ -3489,7 +3489,7 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
     "CACAL": (50.8, 51.25, -114.35, -113.83),
     "USSFO": (37.60, 37.90, -122.60, -122.345),
     "USNYC": (40.45, 40.95, -74.30, -73.65),
-    "USBOS": (42.15, 42.55, -71.25, -70.85),
+    "USBOS": (42.15, 42.55, -71.25, -70.74),
     "FRPAR": (48.70, 49.05, 2.10, 2.60),
     "USBTV": (44.35, 44.60, -73.35, -73.10),
     "CAVAN": (49.10, 49.40, -123.30, -122.95),
@@ -4304,9 +4304,11 @@ DEDUP_CELL_METRES: dict[str, int] = {
 # and is that polygon: its entry here is the polygon's envelope, kept so the
 # Overpass extract and every cheap pre-check still have a box, and membership
 # is the polygon inside it.  A polygon town is carved out of whichever
-# rectangle city its envelope sits in -- Boston's metro box is everything in
-# it that is not Cambridge, Somerville, Brookline, Belmont or Watertown --
-# with nothing to declare: the file is the registration (`carved_out_of`).
+# rectangle city its envelope sits in, with nothing to declare: the file is
+# the registration (`carved_out_of`).  Boston is a polygon itself, so it and
+# Cambridge, Somerville, Brookline, Belmont and Watertown simply meet; ground
+# in none of them (Newton, Milton, the North Shore) is no city's until that
+# town has a boundary file of its own.
 # A polygon is exact where a staircase is not, so a polygon town's own
 # inventory is clipped to it too (`validate_coordinates`), and so is the
 # inventory of the city it was carved from: a border tree two neighbours both
@@ -4929,7 +4931,9 @@ CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
     'CACAL': ((50.8, 51.25, -114.35, -113.83),),
     'USSFO': ((37.6, 37.9, -122.6, -122.345),),
     'USNYC': ((40.45, 40.95, -74.3, -73.65),),
-    'USBOS': ((42.15, 42.55, -71.25, -70.85),),
+    # Boston's own line (boundaries/usbos.json), not the metro box it had
+    # while its model published the towns around it.
+    'USBOS': ((42.2279, 42.4009, -71.1913, -70.7488),),
     'FRPAR': ((48.7, 49.05, 2.1, 2.6),),
     'USBTV': ((44.35, 44.6, -73.35, -73.1),),
     'CAVAN': ((49.1, 49.4, -123.3, -122.99),),
@@ -5003,7 +5007,11 @@ def carved_out_of(city_code: str) -> tuple[str, ...]:
 
 @lru_cache(maxsize=None)
 def territory_family(city_code: str) -> tuple[str, ...]:
-    """*city_code* and every city it shares a carved border with, sorted.
+    """*city_code* and every city it interlocks with, sorted.
+
+    Two cities interlock when one is a polygon town carved out of the other's
+    rectangles, or when both are polygons whose envelopes overlap (Boston and
+    Brookline); a family is everything reachable that way.
 
     A row that names one member may stand in another: Cambridge's approvals
     were recorded as Boston's while Boston's model published the metro, and a
@@ -5011,12 +5019,29 @@ def territory_family(city_code: str) -> tuple[str, ...]:
     shared ingests re-home such a row within its family (`territory_city`),
     and the per-city freshness probes move a family together.
     """
-    carved = carved_out_of(city_code)
-    parents = [code for code in CITY_TERRITORY if city_code in carved_out_of(code)]
-    family = {city_code, *carved, *parents}
-    for parent in parents:
-        family.update(carved_out_of(parent))
+    family = {city_code}
+    frontier = [city_code]
+    while frontier:
+        code = frontier.pop()
+        for other in _interlocked_with(code):
+            if other not in family:
+                family.add(other)
+                frontier.append(other)
     return tuple(sorted(family))
+
+
+def _interlocked_with(city_code: str) -> set[str]:
+    neighbours = set(carved_out_of(city_code))
+    neighbours.update(code for code in CITY_TERRITORY if city_code in carved_out_of(code))
+    boundary = city_boundary(city_code)
+    if boundary is not None:
+        neighbours.update(
+            other
+            for other in boundary_codes()
+            if other != city_code and other in CITY_TERRITORY
+            and boxes_intersect(boundary.box, city_boundary(other).box)
+        )
+    return neighbours
 
 
 def _in_own_ground(city_code: str, latitude: float, longitude: float) -> bool:

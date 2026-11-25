@@ -294,9 +294,12 @@ neighbour has to carve both. Municipal ingests keep using the box.
 A town that interlocks with its neighbours is a polygon instead: its real
 boundary is `boundaries/{code}.json`, its `CITY_TERRITORY` entry is that
 polygon's envelope, and membership is the polygon (`shared/boundary.py`).
-It is carved out of whichever rectangle city its envelope sits in, so
-Boston's territory is its metro box less Cambridge, Somerville, Brookline,
-Belmont and Watertown. Three things follow where a polygon draws the line,
+It is carved out of whichever rectangle city its envelope sits in. Boston
+is a polygon too, so it and Cambridge, Somerville, Brookline, Belmont and
+Watertown meet edge to edge, and ground in none of them (Newton, Milton, the
+North Shore) belongs to no city: the metro's predictions there stay staged,
+unpublished, until the town gets a boundary file and becomes a city.
+Three things follow where a polygon draws the line,
 and only there:
 
 - **Inventories are clipped to it** (`clip_to_polygon_territory`): a town's

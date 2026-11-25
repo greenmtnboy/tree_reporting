@@ -118,14 +118,18 @@ def test_a_point_in_a_carved_family_belongs_to_exactly_one_member():
     of gives up exactly their ground."""
     for code in POLYGON_TOWNS:
         family = territory_family(code)
-        assert len(family) > 1, f"{code} has a boundary but is carved out of nothing"
+        assert len(family) > 1, f"{code} has a boundary but interlocks with nothing"
         for lat, lon in _grid(city_territory(code)[0]):
             owners = [member for member in family if in_city_territory(member, lat, lon)]
-            assert len(owners) == 1, (code, lat, lon, owners)
+            # Ground no member's polygon holds (Newton, the harbour) is no
+            # one's; ground inside this town's polygon is this town's alone.
+            assert len(owners) <= 1, (code, lat, lon, owners)
+            assert (owners == [code]) == city_boundary(code).contains(lat, lon), (code, lat, lon, owners)
 
 
-def test_boston_is_its_box_less_the_towns_carved_out_of_it():
-    assert carved_out_of("USBOS") == ("USBEL", "USBKL", "USCAM", "USSOM", "USWAT")
+def test_boston_is_its_own_boundary_among_its_neighbours():
+    # A polygon carves nothing: Boston and the towns are one tessellation.
+    assert city_boundary("USBOS") is not None and carved_out_of("USBOS") == ()
     assert territory_family("USSOM") == ("USBEL", "USBKL", "USBOS", "USCAM", "USSOM", "USWAT")
     assert carved_out_of("USCAM") == () and territory_family("USSFO") == ("USSFO",)
     places = {
@@ -135,7 +139,9 @@ def test_boston_is_its_box_less_the_towns_carved_out_of_it():
         (42.3959, -71.1787): "USBEL",  # Belmont Center
         (42.3655, -71.1855): "USWAT",  # Watertown Square
         (42.3550, -71.0656): "USBOS",  # Boston Common
-        (42.3370, -71.2090): "USBOS",  # Newton: in the metro box, not yet a city
+        (42.3370, -71.2090): None,  # Newton: a town of its own, not yet a city here
+        (42.3088, -71.1200): "USBOS",  # the Arnold Arboretum, Jamaica Plain
+        (42.3620, -71.0200): "USBOS",  # Logan Airport, East Boston
         (42.3601, -71.0942): "USCAM",  # MIT, on the Cambridge bank of the Charles
         (42.3467, -71.0972): "USBOS",  # Fenway Park
     }
