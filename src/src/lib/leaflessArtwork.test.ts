@@ -26,18 +26,25 @@ describe('leafless artwork', () => {
   it('draws sparse distinct branching inside the measured crown disc', () => {
     const areas: number[] = []
     for (const form of CROWN_FORMS) {
+      // 40k samples per form: the bad points are collected and asserted once,
+      // because an `expect` per sample cost ~20x the sampling itself and ran
+      // this test into vitest's 5 s timeout on slower CI runners.
       let occupied = 0, outer = 0
+      const nonFinite: [number, number][] = []
+      const outsideDisc: [number, number][] = []
       for (let j = -100; j <= 100; j++) for (let i = -100; i <= 100; i++) {
         const x = i / 100, y = j / 100
         const shape = crownShape(form, x, y, 'leafless')
-        expect(Number.isFinite(shape.edge), form).toBe(true)
+        if (!Number.isFinite(shape.edge)) nonFinite.push([x, y])
         if (shape.edge < 0) {
           const radius = Math.hypot(x, y)
-          expect(radius, form).toBeLessThanOrEqual(1)
+          if (radius > 1) outsideDisc.push([x, y])
           outer = Math.max(outer, radius)
           occupied++
         }
       }
+      expect(nonFinite, form).toEqual([])
+      expect(outsideDisc, form).toEqual([])
       expect(crownShape(form, 0, 0, 'leafless').edge, form).toBeLessThan(0)
       expect(outer, form).toBeGreaterThan(.96)
       expect(occupied, form).toBeGreaterThan(100)
