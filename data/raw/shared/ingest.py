@@ -2355,7 +2355,7 @@ MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
     "USWAT": ("WATERTOWN",),
     "USBEL": ("BELMONT",),
     "USBKL": ("BROOKLINE",),
-    "USCAM": ("CAMBRIDGE",),
+    "USCAM": ("CAMBRIDGE", "MIT"),
     "USMHD": ("MOORHEAD_OPENDATA",),
     "USEVN": ("EVANSTON_OPENDATA",),
     "USOPK": ("ORLAND_PARK_OPENDATA",),

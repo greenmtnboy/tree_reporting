@@ -9,10 +9,13 @@ import ..tree_height;
 # its territory drawn by the town's real boundary (boundaries/uscam.json).
 # Its `data_source` label, its tree ids and its ingest are what they were.
 
+property <*>.cambridge_city_data_updated_through datetime; # when the City of Cambridge's tree feed is through
+property <*>.mit_data_updated_through datetime; # when MIT's campus tree layer is through
 property <*>.uscam_canopy_data_updated_through datetime; # GCS publication time of the staged LIDAR canopy-height lookup
 auto uscam_published_data_updated_through <- greatest(uscam_data_updated_through, uscam_community_data_updated_through, uscam_osm_data_updated_through, uscam_satellite_data_updated_through, uscam_predicted_data_updated_through, uscam_canopy_data_updated_through);
+auto uscam_data_updated_through <- greatest(cambridge_city_data_updated_through, mit_data_updated_through);
 
-key uscam_source enum<string>['CAMBRIDGE', 'COMMUNITY_USCAM', 'OSM_USCAM', 'SATELLITE_USCAM', 'PREDICTED_USCAM']; # originating dataset for the row
+key uscam_source enum<string>['CAMBRIDGE', 'MIT', 'COMMUNITY_USCAM', 'OSM_USCAM', 'SATELLITE_USCAM', 'PREDICTED_USCAM']; # originating dataset for the row
 
 # Feed the shared cross-source merge (../tree_dedup.preql): it classifies rows
 # by the label's prefix and records provenance from it.
@@ -20,9 +23,14 @@ auto uscam_source_label <- concat(uscam_source, '');
 merge uscam_source_label into source_label;
 
 root datasource cambridge_update_time (
-    data_updated_through: uscam_data_updated_through
+    data_updated_through: cambridge_city_data_updated_through
 )
 file `./cambridge_update_time.py`;
+
+root datasource mit_update_time (
+    data_updated_through: mit_data_updated_through
+)
+file `./mit_update_time.py`;
 
 # Only this city's column, so an approval elsewhere does not mark USCAM's
 # Parquet stale. Trilogy probes this as MAX over the one column.
@@ -87,6 +95,16 @@ root partial datasource cambridge_raw_tree_info extends tree_partition (
 )
 complete where city = 'USCAM' and uscam_source = 'CAMBRIDGE'
 file `./cambridge_tree_info.py`;
+
+# MIT's campus inventory, from MIT's own layer (the 2024 Bartlett resurvey,
+# kept current by the grounds team).  The city's feed carries an older copy of
+# it, which ./cambridge_tree_info.py drops; see ./mit_tree_info.py.
+root partial datasource mit_raw_tree_info extends tree_partition (
+    data_source: uscam_source,
+    species: ?raw_species,
+)
+complete where city = 'USCAM' and uscam_source = 'MIT'
+file `./mit_tree_info.py`;
 
 
 # Approved community submissions for this city. The shared ingest script emits
@@ -161,19 +179,88 @@ merge merged_latitude into latitude;
 merge merged_longitude into longitude;
 
 
+# --- Street trees both the city and MIT inventory ---------------------------
+#
+# The shared merge makes every municipal row its own cluster, so a tree the
+# city and MIT both record would publish twice.  They meet along the campus
+# edge (Massachusetts Avenue, Vassar Street, Ames Street, Memorial Drive):
+# measured 2026-11-25, MIT's nearest city tree is under 1 m for 83 of its
+# trees, 1-2 m for 145, 2-3 m for 25 and 3-4 m for 28, the genus agreeing 83%,
+# 77%, 72% and 61% of the time, and 30% at 4-5 m.  The same block as
+# Melbourne's councils (aumel/melbourne_tree_info.preql, docs/BORDER_DEDUP.md)
+# with its 3 m cell: a guaranteed match within 1.5 m, a possible one to the
+# 4.2 m diagonal.  MIT's own tenth-percentile spacing is 2.9 m, which costs
+# nothing: one inventory never marks its own rows.
+#
+# A row is a border duplicate when a row of an EARLIER-wired inventory (the
+# enum's order: the city first, so the ids people have linked to stay) names
+# the same genus and shares a cell with it in any of four half-cell-staggered
+# grids.
+auto uscam_border_rank <- case
+    when uscam_source = 'CAMBRIDGE' then 1
+    when uscam_source = 'MIT' then 2
+    else null
+end;
+auto uscam_raw_genus <- case
+    when strpos(raw_species, ' ') > 0 then substring(raw_species, 1, strpos(raw_species, ' ') - 1)
+    else raw_species
+end;
+
+# 3 m at 42.37N: 3 / 111320 degrees of latitude, and that over cos(42.37) for
+# longitude.  The indices stay under 3e6 in magnitude, inside the 1e7
+# multiplier.  The genus is part of the cell key (a per-genus cross product
+# between the four aggregates otherwise); a row with no genus keys on its own
+# tree_id and never matches.
+def uscam_border_cell(dx, dy) -> concat(
+    cast(
+        cast(floor(raw_longitude / 0.00003646 + dx) as bigint) * 10000000
+        + cast(floor(raw_latitude / 0.00002695 + dy) as bigint)
+    as string),
+    '|',
+    coalesce(uscam_raw_genus, concat('#', tree_id))
+);
+def uscam_first_rank(cell) -> min(uscam_border_rank) by cell;
+
+auto uscam_border_cell_a <- @uscam_border_cell(0, 0);
+auto uscam_border_cell_b <- @uscam_border_cell(0.5, 0);
+auto uscam_border_cell_c <- @uscam_border_cell(0, 0.5);
+auto uscam_border_cell_d <- @uscam_border_cell(0.5, 0.5);
+
+# The row's own rank as a self-aggregate on `row_key`: comparing a cell
+# aggregate with a row-level case directly is the keyless-join planner bug.
+auto uscam_own_border_rank <- min(uscam_border_rank) by row_key;
+# least() skips nulls: a row with no partner in a grid compares against the
+# others.
+auto uscam_border_duplicate <- coalesce(
+    uscam_own_border_rank > least(
+        @uscam_first_rank(uscam_border_cell_a),
+        @uscam_first_rank(uscam_border_cell_b),
+        @uscam_first_rank(uscam_border_cell_c),
+        @uscam_first_rank(uscam_border_cell_d)
+    ),
+    false
+);
+
+
 # The published target extends ../tree_dedup.preql's `published_tree_info`:
 # the canonical columns, the prune, and the guard that refuses a build which
-# lost a quarter of the city.  The two `@source_kept` lines are the same guard
-# per bulk source (`test_every_city_refuses_a_collapsed_build`).
+# lost a quarter of the city.  The `@source_kept` lines are the same guard
+# per bulk source (`test_every_city_refuses_a_collapsed_build`).  The `where`
+# drops the border duplicates above; `uscam_border_duplicate` is stored
+# (always false) because a datasource's `where` may only read the
+# datasource's own columns.
 partial datasource cambridge_tree_info extends published_tree_info (
     data_source: uscam_source,
     ?species,
     ?height_m,
     ?height_crown_radius_m,
+    uscam_border_duplicate,
     uscam_published_data_updated_through,
 )
 complete where city = 'USCAM'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uscam_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/uscam_tree_info_v{data_version}.parquet`
+where uscam_border_duplicate = false
 freshness by uscam_published_data_updated_through
 assert @source_kept(tree_id, uscam_source, 'CAMBRIDGE', 0.75)
+assert @source_kept(tree_id, uscam_source, 'MIT', 0.75)
 assert @source_kept(tree_id, uscam_source, 'OSM_USCAM', 0.75);
