@@ -195,6 +195,17 @@ property <*>.usarl_community_data_updated_through datetime; # when approved comm
 property <*>.usmbh_community_data_updated_through datetime; # when approved community submissions for USMBH are through
 property <*>.usrev_community_data_updated_through datetime; # when approved community submissions for USREV are through
 property <*>.usmld_community_data_updated_through datetime; # when approved community submissions for USMLD are through
+property <*>.useve_community_data_updated_through datetime; # when approved community submissions for USEVE are through
+property <*>.usche_community_data_updated_through datetime; # when approved community submissions for USCHE are through
+property <*>.uswnt_community_data_updated_through datetime; # when approved community submissions for USWNT are through
+property <*>.usbev_community_data_updated_through datetime; # when approved community submissions for USBEV are through
+property <*>.uslyf_community_data_updated_through datetime; # when approved community submissions for USLYF are through
+property <*>.usmrs_community_data_updated_through datetime; # when approved community submissions for USMRS are through
+property <*>.uswel_community_data_updated_through datetime; # when approved community submissions for USWEL are through
+property <*>.usnah_community_data_updated_through datetime; # when approved community submissions for USNAH are through
+property <*>.usdan_community_data_updated_through datetime; # when approved community submissions for USDAN are through
+property <*>.uswnc_community_data_updated_through datetime; # when approved community submissions for USWNC are through
+property <*>.uscan_community_data_updated_through datetime; # when approved community submissions for USCAN are through
 
 # The community *rows* are declared per city too, in each city's own tree model,
 # as a `complete where city = 'X' and {code}_source = 'COMMUNITY_X'` partition.

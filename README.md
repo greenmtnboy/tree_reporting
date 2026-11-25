@@ -414,7 +414,7 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 | Athens | City of Athens Open Data - Trees of the National Garden | https://opendata.cityofathens.gr/dataset/gis-athens-8303d4c8-371b-11ec-b388-0242ac120009 |
 | Milos | Community submissions (no municipal inventory published) | (contributed via the app) |
 | Santorini | Community submissions (no municipal inventory published) | (contributed via the app) |
-| Newton, Milton, Peabody, Lynn, Medford, Quincy, Saugus, Needham, Swampscott, Waltham, Marblehead, Revere, Malden (MA) | Community submissions, OpenStreetMap and the Boston metro's aerial-imagery predictions (no municipal inventory published) | (contributed via the app) |
+| Newton, Milton, Peabody, Lynn, Medford, Quincy, Saugus, Needham, Swampscott, Waltham, Marblehead, Revere, Malden, Everett, Chelsea, Winthrop, Beverly, Lynnfield, Melrose, Wellesley, Nahant, Danvers, Winchester, Canton (MA) | Community submissions, OpenStreetMap and the Boston metro's aerial-imagery predictions (no municipal inventory published) | (contributed via the app) |
 | All cities (supplemental) | © OpenStreetMap contributors (ODbL) | https://www.openstreetmap.org/copyright |
 | All cities | Community submissions, reviewed and approved before publication | (contributed via the app) |
 

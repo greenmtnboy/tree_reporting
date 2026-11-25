@@ -84,6 +84,11 @@ OSM_UNMAPPED_CITIES: frozenset[str] = frozenset(
         # 2026-11-25: 0 nodes in the territory; Lynn's box next door 7,009
         # (one request, the maps.mail.ru mirror).
         "USSWA",
+        # 2026-11-25: 0 nodes inside the polygon; the same answers held 37
+        # (Winthrop: East Boston and Logan) and 91 (Lynnfield: its neighbours)
+        # in the envelope around it.
+        "USWNT",
+        "USLYF",
     }
 )
 
@@ -102,6 +107,17 @@ _CIRCUMFERENCE_RE = re.compile(r"^\s*(\d+(?:[.,]\d+)?)\s*(cm|m)?\s*$", re.I)
 # that type", which is a long way from "you forgot a column".  London is the
 # only instance today.
 OSM_CITY_NAMES: dict[str, str] = {
+    "USCAN": "Canton",
+    "USWNC": "Winchester",
+    "USDAN": "Danvers",
+    "USNAH": "Nahant",
+    "USWEL": "Wellesley",
+    "USMRS": "Melrose",
+    "USLYF": "Lynnfield",
+    "USBEV": "Beverly",
+    "USWNT": "Winthrop",
+    "USCHE": "Chelsea",
+    "USEVE": "Everett",
     "USMLD": "Malden",
     "USREV": "Revere",
     "USMBH": "Marblehead",

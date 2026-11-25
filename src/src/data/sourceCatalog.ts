@@ -216,6 +216,17 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
   { city: 'Marblehead', label: 'Community submissions, OpenStreetMap and the Boston metro aerial-imagery run (no municipal inventory)' },
   { city: 'Revere', label: 'Community submissions, OpenStreetMap and the Boston metro aerial-imagery run (no municipal inventory)' },
   { city: 'Malden', label: 'Community submissions, OpenStreetMap and the Boston metro aerial-imagery run (no municipal inventory)' },
+  { city: 'Everett', label: 'Community submissions, OpenStreetMap and the Boston metro aerial-imagery run (no municipal inventory)' },
+  { city: 'Chelsea', label: 'Community submissions, OpenStreetMap and the Boston metro aerial-imagery run (no municipal inventory)' },
+  { city: 'Winthrop', label: 'Community submissions, OpenStreetMap and the Boston metro aerial-imagery run (no municipal inventory)' },
+  { city: 'Beverly', label: 'Community submissions, OpenStreetMap and the Boston metro aerial-imagery run (no municipal inventory)' },
+  { city: 'Lynnfield', label: 'Community submissions, OpenStreetMap and the Boston metro aerial-imagery run (no municipal inventory)' },
+  { city: 'Melrose', label: 'Community submissions, OpenStreetMap and the Boston metro aerial-imagery run (no municipal inventory)' },
+  { city: 'Wellesley', label: 'Community submissions, OpenStreetMap and the Boston metro aerial-imagery run (no municipal inventory)' },
+  { city: 'Nahant', label: 'Community submissions, OpenStreetMap and the Boston metro aerial-imagery run (no municipal inventory)' },
+  { city: 'Danvers', label: 'Community submissions, OpenStreetMap and the Boston metro aerial-imagery run (no municipal inventory)' },
+  { city: 'Winchester', label: 'Community submissions, OpenStreetMap and the Boston metro aerial-imagery run (no municipal inventory)' },
+  { city: 'Canton', label: 'Community submissions, OpenStreetMap and the Boston metro aerial-imagery run (no municipal inventory)' },
   // Community submissions are reviewed and approved before they reach the map;
   // each published tree carries a COMMUNITY_<CITY> value in its data_source column.
   { city: 'All cities', label: 'Community submissions, reviewed before publication' },
@@ -234,6 +245,17 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
+  { city: 'Canton', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
+  { city: 'Winchester', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
+  { city: 'Danvers', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
+  { city: 'Nahant', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
+  { city: 'Wellesley', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
+  { city: 'Melrose', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
+  { city: 'Lynnfield', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
+  { city: 'Beverly', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
+  { city: 'Winthrop', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
+  { city: 'Chelsea', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
+  { city: 'Everett', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
   { city: 'Malden', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
   { city: 'Revere', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
   { city: 'Marblehead', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },

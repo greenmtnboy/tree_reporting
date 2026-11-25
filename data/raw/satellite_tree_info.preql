@@ -35,3 +35,14 @@ property <*>.usarl_satellite_data_updated_through datetime; # when published sat
 property <*>.usmbh_satellite_data_updated_through datetime; # when published satellite trees for USMBH are through
 property <*>.usrev_satellite_data_updated_through datetime; # when published satellite trees for USREV are through
 property <*>.usmld_satellite_data_updated_through datetime; # when published satellite trees for USMLD are through
+property <*>.useve_satellite_data_updated_through datetime; # when published satellite trees for USEVE are through
+property <*>.usche_satellite_data_updated_through datetime; # when published satellite trees for USCHE are through
+property <*>.uswnt_satellite_data_updated_through datetime; # when published satellite trees for USWNT are through
+property <*>.usbev_satellite_data_updated_through datetime; # when published satellite trees for USBEV are through
+property <*>.uslyf_satellite_data_updated_through datetime; # when published satellite trees for USLYF are through
+property <*>.usmrs_satellite_data_updated_through datetime; # when published satellite trees for USMRS are through
+property <*>.uswel_satellite_data_updated_through datetime; # when published satellite trees for USWEL are through
+property <*>.usnah_satellite_data_updated_through datetime; # when published satellite trees for USNAH are through
+property <*>.usdan_satellite_data_updated_through datetime; # when published satellite trees for USDAN are through
+property <*>.uswnc_satellite_data_updated_through datetime; # when published satellite trees for USWNC are through
+property <*>.uscan_satellite_data_updated_through datetime; # when published satellite trees for USCAN are through

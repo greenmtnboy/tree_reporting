@@ -121,7 +121,7 @@ def test_a_point_in_a_carved_family_belongs_to_exactly_one_member():
         assert len(family) > 1, f"{code} has a boundary but interlocks with nothing"
         for lat, lon in _grid(city_territory(code)[0]):
             owners = [member for member in family if in_city_territory(member, lat, lon)]
-            # Ground no member's polygon holds (Everett, the harbour) is no
+            # Ground no member's polygon holds (Lexington, the harbour) is no
             # one's; ground inside this town's polygon is this town's alone.
             assert len(owners) <= 1, (code, lat, lon, owners)
             assert (owners == [code]) == city_boundary(code).contains(lat, lon), (code, lat, lon, owners)
@@ -141,7 +141,8 @@ def test_boston_is_its_own_boundary_among_its_neighbours():
         (42.3550, -71.0656): "USBOS",  # Boston Common
         (42.3370, -71.2090): "USNWT",  # Newton City Hall
         (42.4645, -71.0107): "USSAU",  # Saugus
-        (42.4084, -71.0537): None,  # Everett: a town of its own, not yet a city here
+        (42.4084, -71.0537): "USEVE",  # Everett
+        (42.4473, -71.2245): None,  # Lexington: a town of its own, not a city here
         (42.3088, -71.1200): "USBOS",  # the Arnold Arboretum, Jamaica Plain
         (42.3620, -71.0200): "USBOS",  # Logan Airport, East Boston
         (42.3601, -71.0942): "USCAM",  # MIT, on the Cambridge bank of the Charles
