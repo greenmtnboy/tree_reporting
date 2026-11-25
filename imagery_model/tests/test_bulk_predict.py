@@ -639,3 +639,69 @@ def test_a_plan_records_its_margin_and_refuses_one_that_tiles_nothing_small(tmp_
 
     with pytest.raises(SystemExit):
         bulk_predict.main([*base, "--out", str(tmp_path / "c"), "--margin", "100"])
+
+
+def test_a_city_stages_the_towns_carved_out_of_it(tmp_path):
+    from urban_tree_ml.point_predict import staged_family
+
+    ingest = tmp_path / "ingest.py"
+    ingest.write_text('PREDICTED_STAGED_WITH: dict[str, str] = {"USNWT": "USBOS", "USCAN": "USBOS"}\n')
+    assert staged_family("usbos", ingest) == {"USBOS", "USNWT", "USCAN"}
+    assert staged_family("USSFO", ingest) == {"USSFO"}
+    # The real registry: Boston's run covers its towns.
+    assert {"USBOS", "USNWT", "USCAN"} <= staged_family("USBOS")
+
+
+def test_assemble_keeps_the_rows_of_towns_staged_with_the_city(tmp_path):
+    """Newton and Canton are cities of their own, staged in Boston's file:
+    their detections stay (each town's ingest keeps its own)."""
+    tiles = tmp_path / "tiles"
+    tiles.mkdir()
+    (tiles / "a.json").write_text(json.dumps(bundle(predictions=[
+        prediction("boston", 42.33, -71.08, 0.5),
+        prediction("newton", 42.337, -71.209, 0.5),
+        prediction("canton", 42.158, -71.145, 0.5),
+        prediction("nyc", 40.7, -73.9, 0.9),
+    ])))
+    out = tmp_path / "out"
+    assert bulk_predict.main(["assemble", "--out", str(out), "--threshold", "0.35", "--from-bundles", str(tiles)]) == 0
+    rows = pq.read_table(out / "usbos_predicted_staging.parquet").to_pylist()
+    assert len(rows) == 3 and {row["city"] for row in rows} == {"USBOS"}
+
+
+def _plan_run(tmp_path, monkeypatch):
+    run = tmp_path / "runs" / "run"
+    run.mkdir(parents=True)
+    (run / "config-usbos.json").write_text(json.dumps({
+        "imagery": {"chip_pixels": 512, "resolution_m": 0.3}, "evaluation": {"confidence_threshold": 0.35},
+    }))
+    monkeypatch.setattr(bulk_predict, "published_points", lambda city: [(42.35, -71.06)])
+    # All of the box is the town's, none of it Boston's.
+    monkeypatch.setattr(bulk_predict, "city_boxes", lambda: ({"USNWT": (42.30, 42.32, -71.22, -71.19)}, {}))
+    monkeypatch.setattr(bulk_predict, "staged_family", lambda city: frozenset({"USBOS", "USNWT"}))
+    boundary = tmp_path / "town.geojson"
+    boundary.write_text(json.dumps({"type": "Polygon", "coordinates": [[
+        [-71.215, 42.302], [-71.195, 42.302], [-71.195, 42.318], [-71.215, 42.318], [-71.215, 42.302],
+    ]]}))
+    return ["--artifacts", str(tmp_path), "plan", "--city", "USBOS", "--run", "run",
+            "--fill", "--boundary", str(boundary)]
+
+
+def test_a_fill_plan_covers_town_ground_and_skips_tiles_already_planned(tmp_path, monkeypatch):
+    base = _plan_run(tmp_path, monkeypatch)
+
+    assert bulk_predict.main([*base, "--out", str(tmp_path / "all")]) == 0
+    everything = json.loads((tmp_path / "all" / "plan.json").read_text())
+    assert len(everything["tiles"]) > 10  # the town's ground, though Boston owns none of it
+
+    earlier = dict(everything, tiles=everything["tiles"][::2])
+    (tmp_path / "earlier.json").write_text(json.dumps(earlier))
+    assert bulk_predict.main([*base, "--out", str(tmp_path / "gap"), "--skip-plan", str(tmp_path / "earlier.json")]) == 0
+    gap = json.loads((tmp_path / "gap" / "plan.json").read_text())
+    key = lambda t: (t["i"], t["j"])  # noqa: E731
+    assert {key(t) for t in gap["tiles"]} == {key(t) for t in everything["tiles"][1::2]}
+    assert gap["skipPlans"] == [str(tmp_path / "earlier.json")]
+
+    (tmp_path / "other-grid.json").write_text(json.dumps(dict(earlier, tileM=76.8)))
+    with pytest.raises(SystemExit):
+        bulk_predict.main([*base, "--out", str(tmp_path / "bad"), "--skip-plan", str(tmp_path / "other-grid.json")])

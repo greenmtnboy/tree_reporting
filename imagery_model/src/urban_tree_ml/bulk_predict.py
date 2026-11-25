@@ -14,7 +14,12 @@ dies loses at most the tile it was on:
     its polygons, and with ``--fill`` every tile inside is planned, published
     trees or not -- for suburbs with no inventory, whose few OSM points miss
     most streets (``bulk_areas/usbos-metro-circle.geojson``).  The plan keeps
-    the polygon, and the reviewer map draws it.  The grid is full-tile steps on point_predict's half-tile lattice in
+    the polygon, and the reviewer map draws it.  A tile belongs to the city
+    when its centre is the city's or a town's staged with it
+    (``PREDICTED_STAGED_WITH``: Boston's file holds the towns carved out of
+    its metro, each of which reads its own rows).  ``--skip-plan PLAN``
+    (repeatable) leaves out an earlier plan's tiles, so a fill plan over new
+    ground predicts only the gaps and is patched in with ``--patch-onto``.  The grid is full-tile steps on point_predict's half-tile lattice in
     the imagery's UTM zone, so each planned tile is exactly the tile
     ``point_predict`` (and the reviewer's "Predict at") would cut there.
 
@@ -37,6 +42,10 @@ dies loses at most the tile it was on:
     Only the cells a window keeps go through the model's full-resolution
     layers (``model.forward_region``; the values are those of a whole pass).
     ``--shard K/N`` splits the plan into N disjoint sets, one process each.
+    ``--device dml`` runs the network on an AMD or Intel GPU on Windows
+    through ONNX Runtime's DirectML provider (``uv sync --group directml``;
+    ``point_predict.OnnxNetwork``): the same values as the CPU to 1e-5, ~50x
+    faster on an RX 6800 XT, so imagery reads become the bottleneck.
     NAIP windows are cached under
     ``artifacts/point-tiles/coverage-v2`` and a cached tile is found from the plan's UTM
     zone, so predicting again with a later run neither reads imagery nor
@@ -153,6 +162,7 @@ from urban_tree_ml.point_predict import (
     block_tiles,
     city_boxes,
     owning_city,
+    staged_family,
 )
 
 ID_PREFIX = "pred-"
@@ -539,6 +549,20 @@ def published_points(city: str) -> list[tuple[float, float]]:
     ).fetchall()
 
 
+def skip_tiles(plans: Iterable[str | Path], epsg: int, tile_m: float) -> set[tuple[int, int]]:
+    """The tiles of earlier plans, on this grid: what a fill plan leaves out
+    because another run already predicted it.  A plan on another grid would
+    not line up tile for tile, so it is refused rather than approximated."""
+    tiles: set[tuple[int, int]] = set()
+    for path in plans:
+        other = json.loads(Path(path).read_text(encoding="utf-8"))
+        if int(other["epsg"]) != epsg or float(other["tileM"]) != tile_m:
+            raise SystemExit(f"{path} is on EPSG:{other['epsg']} {other['tileM']} m tiles, "
+                             f"not this plan's EPSG:{epsg} {tile_m} m; cannot skip its tiles")
+        tiles.update((int(t["i"]), int(t["j"])) for t in other["tiles"])
+    return tiles
+
+
 def plan(args: argparse.Namespace) -> int:
     from pyproj import Transformer
 
@@ -572,11 +596,13 @@ def plan(args: argparse.Namespace) -> int:
         candidates = {(i, j) for i in range(i0, i1 + 1) for j in range(j0, j1 + 1)}
     else:
         candidates = dilate(marked, args.rings)
+    family = staged_family(city)
+    skipped = skip_tiles(args.skip_plan or [], epsg, tile_m)
     tiles = []
-    for index in sorted(candidates):
+    for index in sorted(candidates - skipped):
         cx, cy = tile_centre(index, tile_m)
         lon, lat = back.transform(cx, cy)
-        if owning_city(lat, lon, envelopes, territory) == city and (
+        if owning_city(lat, lon, envelopes, territory) in family and (
             polygons is None or in_boundary(lat, lon, polygons)
         ):
             tiles.append({"i": index[0], "j": index[1], "lat": lat, "lon": lon})
@@ -586,7 +612,8 @@ def plan(args: argparse.Namespace) -> int:
         "city": city, "run": args.run, "epsg": epsg, "tileM": tile_m, "rings": args.rings,
         "runThreshold": run_threshold, "publishedTrees": len(points),
         "markedTiles": len(marked), "fill": bool(args.fill), "boundary": boundary,
-        "contextMarginPx": args.margin, "blockTiles": block, "tiles": tiles,
+        "contextMarginPx": args.margin, "blockTiles": block,
+        "skipPlans": [str(path) for path in args.skip_plan or []], "tiles": tiles,
     }
     (out / "plan.json").write_text(json.dumps(manifest, indent=1) + "\n", encoding="utf-8")
     area_km2 = len(tiles) * tile_m * tile_m / 1e6
@@ -860,7 +887,10 @@ def assemble(args: argparse.Namespace) -> int:
         r for b in bundles if str(b["city"]).upper() == city for r in rows_from_bundle(b)
         if r["score"] >= args.threshold
     ]
-    rows = [r for r in rows if owning_city(r["latitude"], r["longitude"], envelopes, territory) == city]
+    # The towns staged with this city (PREDICTED_STAGED_WITH) keep their rows
+    # here too; each town's ingest takes the ones inside its own boundary.
+    family = staged_family(city)
+    rows = [r for r in rows if owning_city(r["latitude"], r["longitude"], envelopes, territory) in family]
     kept = drop_seam_duplicates(rows, args.seam_radius_m)
     if args.habits != "none" and any(row["_candidates"] for row in kept):
         species_habits, genus_habits = load_habits(args.habits)
@@ -1099,6 +1129,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--rings", type=int, default=1, help="tiles of margin around the published trees (default 1)")
     p.add_argument("--boundary", default=None, help="GeoJSON polygon(s); keep only tiles centred inside")
     p.add_argument("--fill", action="store_true", help="plan every tile inside --boundary, not only those near published trees")
+    p.add_argument("--skip-plan", action="append", default=None, metavar="PLAN",
+                   help="leave out the tiles of this earlier plan.json (repeatable): fill only the gaps")
     p.add_argument("--out", required=True)
     p.add_argument("--margin", type=int, default=DEFAULT_MARGIN_PX, metavar="PX",
                    help=f"pixels each context window discards at its edges (default {DEFAULT_MARGIN_PX}: "
@@ -1113,7 +1145,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--remote", default=DEFAULT_REMOTE)
     p.add_argument("--min-score", type=float, default=0.1, help="keep candidates scoring at least this (default 0.1)")
     p.add_argument("--year", type=int, default=None)
-    p.add_argument("--device", default="auto")
+    p.add_argument("--device", default="auto",
+                   help="auto (CUDA, else CPU), a torch device, or dml / dml:N for an AMD or Intel GPU on Windows")
     p.add_argument("--retry-errors", action="store_true")
     p.add_argument("--refresh-imagery", action="store_true",
                    help="also rerun legacy records against coverage-v2 imagery; resumable, no publication")

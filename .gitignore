@@ -4,6 +4,7 @@
 .secrets/
 __pycache__/
 .venv
+.venv-*/
 .tmp
 .claude
 node_modules/
