@@ -32,7 +32,7 @@ import requests
 sys.path.insert(0, str(Path(__file__).parent))
 from shared.ingest import (
     CITY_TERRITORY,
-    in_city_territory,
+    territory_city,
     COMMUNITY_DATA_SOURCES,
     emit,
     enforce_tree_schema,
@@ -71,7 +71,7 @@ def records_to_table(records: Iterable[Mapping[str, Any]]) -> pa.Table:
     rows: list[dict[str, Any]] = []
     for record in records:
         tree_id = str(record.get("treeId") or "").strip()
-        city = str(record.get("city") or "").upper().strip()
+        named = str(record.get("city") or "").upper().strip()
         # The submission form allows an unidentified tree.  No sentinel here:
         # enforce_tree_schema applies the shared UNKNOWN_SPECIES one for every
         # source at once, so this stays a plain normalisation.
@@ -86,19 +86,21 @@ def records_to_table(records: Iterable[Mapping[str, Any]]) -> pa.Table:
             )
             continue
 
-        bounds = CITY_TERRITORY.get(city)
-        data_source = COMMUNITY_DATA_SOURCES.get(city)
-        if not tree_id or bounds is None or data_source is None:
+        if not tree_id or named not in CITY_TERRITORY or named not in COMMUNITY_DATA_SOURCES:
             print(
-                f"Community ingest: skipping {tree_id or '<unknown>'}; unsupported city {city!r}",
+                f"Community ingest: skipping {tree_id or '<unknown>'}; unsupported city {named!r}",
                 file=sys.stderr,
             )
             continue
         # The territory, not the sanity box: a submission names a city the
         # way the submitter chose, and neighbouring cities' boxes overlap.
-        if not in_city_territory(city, latitude, longitude):
+        # Where towns are carved out of one another the name is only a hint:
+        # the row goes to the member of that family it stands in.
+        city = territory_city(named, latitude, longitude)
+        data_source = COMMUNITY_DATA_SOURCES.get(city or "")
+        if city is None or data_source is None:
             print(
-                f"Community ingest: skipping {tree_id}; coordinates outside {city}",
+                f"Community ingest: skipping {tree_id}; coordinates outside {named}",
                 file=sys.stderr,
             )
             continue

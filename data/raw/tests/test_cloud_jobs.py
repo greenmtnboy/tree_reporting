@@ -693,3 +693,19 @@ def test_workspace_bundle_fits_the_api_with_headroom():
         f"Add workstation-only files to [cloud] exclude, or raise the platform's limit. "
         f"Largest: {biggest}"
     )
+
+
+def test_every_boundary_file_ships_in_the_bundle():
+    """An ingest reads its town's boundary at run time (shared/boundary.py),
+    and a file the sync does not ship is a town with no polygon: its inventory
+    is not clipped and its metro is not carved.  The bundle takes .json, not
+    .geojson, which is why the files are named that way."""
+    from shared.boundary import boundary_codes, boundary_path
+
+    shipped = {rel for rel, _ in bundle_files()}
+    missing = [
+        code for code in boundary_codes()
+        if boundary_path(code).relative_to(DATA_DIR).as_posix() not in shipped
+    ]
+    assert boundary_codes(), "no boundary files found"
+    assert not missing, f"boundary files the cloud sync would not ship: {missing}"

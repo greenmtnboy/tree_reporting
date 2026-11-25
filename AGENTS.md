@@ -43,7 +43,7 @@ pnpm bench:nearby    # a phone's wait from the Near Me tap to trees on a shaped 
 pnpm bench:dashboard # the summary dashboard's first open on a phone: bytes per file, renderer memory, time until its queries stop
 
 # data, from data/raw
-uv run --no-project --with pytest --with pyarrow --with "pytrilogy>=0.3.511" --with "duckdb<2" --with requests python -m pytest tests -q      # offline, seconds; run after touching models or the job table
+uv run --no-project --with pytest --with pyarrow --with "pytrilogy>=0.3.540" --with "duckdb<2" --with requests python -m pytest tests -q      # offline once DuckDB's spatial extension is cached; run after touching models or the job table
 cd data && trilogy refresh --dry-run raw/{code}/{slug}_tree_info.preql   # must report exactly one asset
 ```
 
@@ -55,6 +55,7 @@ The reference for each is `docs/DATA_PIPELINE.md`.
 - **A missing job is silent**: nothing errors when a city has no schedule. `data/raw/tests/test_cloud_jobs.py` is what catches it.
 - **The frontend's model bundle and the enrichment job's file set are different on purpose.** Putting a second tree source in the browser's scope changes join types and chart answers.
 - **Every tree row's `species` is a scientific name**, normalised centrally by `enforce_tree_schema`; common names come only from the enrichment table. Sentinels (`Unknown`, `Palm`, ...) are hardcoded, never enriched.
+- **One municipality is one city, and a town among neighbours is a polygon.** A city model unions the sources inside one municipality (Boston: the city, the Arboretum, Northeastern), never a metro's towns. A town that interlocks with its neighbours has its real boundary in `data/raw/boundaries/{code}.json`: that file makes its territory the polygon, carves it out of the rectangle city around it, clips both inventories to the line, and is written into the models as `geo_contains` by `tools/sync_osm_territory.py`. A row with no municipal attribution (community, satellite, predicted) belongs to the town it stands in, whatever city it names. Splitting a metro is in `EXTENDING.md`.
 - **Do not hand-write a city addition.** `data/raw/tools/new_city.py` writes the registry edits and `test_city_wiring.py` names what is still missing; the judgement steps (field mapping, freshness probe, landmarks, dedup cell size) are in `EXTENDING.md`.
 - **Do not work around a planner bug in a query.** File a repro under `upstream_repro/` (gitignored) and let the test stay red; see `docs/TESTING.md`.
 - **The map draws the world, and a city is a bookmark.** The worker never loads a city: it reads the manifest of geo blocks `publish-world-blocks` writes (one parquet per Web Mercator z12 tile, every inventory's trees in it) and holds the blocks near the camera, so a pan or a flight into another city's trees needs no switch and the bookmark (URL, selector, landmarks, chat scope) follows the camera. Blocks and the vocabulary are content-addressed and the manifest is the commit point; a read on the hot path names the cells it is about, never the `trees_fast` view over every cell held. See `docs/SEAMLESS_WORLD.md`.

@@ -24,4 +24,4 @@ def fetch_modified_at() -> datetime:
 
 
 if __name__ == "__main__":
-    emit_freshness("USBOS", fetch_modified_at)
+    emit_freshness("USBKL", fetch_modified_at)

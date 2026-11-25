@@ -20,7 +20,7 @@ def _load(name: str, relative: str):
     return module
 
 
-watertown = _load("watertown_tree_info", "usbos/watertown_tree_info.py")
+watertown = _load("watertown_tree_info", "uswat/watertown_tree_info.py")
 
 
 # --- a hand-built tile -------------------------------------------------------

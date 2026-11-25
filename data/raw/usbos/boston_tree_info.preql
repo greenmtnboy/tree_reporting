@@ -3,17 +3,15 @@ import ..community_tree_info;
 import ..satellite_tree_info;
 import ..tree_dedup;
 import ..tree_height;
+import ..boundaries;
 
 property <*>.arboretum_data_updated_through datetime; # when Arnold Arboretum data is through
 property <*>.boston_city_data_updated_through datetime; # when Boston city open-data is through
-property <*>.cambridge_data_updated_through datetime; # when Cambridge open-data is through
-property <*>.brookline_data_updated_through datetime; # when Brookline open-data is through
-property <*>.somerville_data_updated_through datetime; # when Somerville's TreeKeeper inventory is through
 property <*>.northeastern_data_updated_through datetime; # when Northeastern University's campus Arboretum layer is through
 property <*>.usbos_canopy_data_updated_through datetime; # GCS publication time of the staged LIDAR canopy-height lookup
 auto usbos_published_data_updated_through <- greatest(usbos_data_updated_through, usbos_community_data_updated_through, usbos_osm_data_updated_through, usbos_satellite_data_updated_through, usbos_predicted_data_updated_through, usbos_canopy_data_updated_through);
-auto usbos_data_updated_through <- greatest(boston_city_data_updated_through, arboretum_data_updated_through, cambridge_data_updated_through, brookline_data_updated_through, somerville_data_updated_through, northeastern_data_updated_through);
-key usbos_source enum<string>['CITY_OF_BOSTON', 'ARNOLD_ARBORETUM', 'CAMBRIDGE', 'BROOKLINE', 'SOMERVILLE', 'BELMONT', 'WATERTOWN', 'NORTHEASTERN', 'NOTABLE_USBOS', 'COMMUNITY_USBOS', 'OSM_USBOS', 'SATELLITE_USBOS', 'PREDICTED_USBOS']; # originating dataset within the Boston metro; materialized as the uniform `data_source` column
+auto usbos_data_updated_through <- greatest(boston_city_data_updated_through, arboretum_data_updated_through, northeastern_data_updated_through);
+key usbos_source enum<string>['CITY_OF_BOSTON', 'ARNOLD_ARBORETUM', 'NORTHEASTERN', 'NOTABLE_USBOS', 'COMMUNITY_USBOS', 'OSM_USBOS', 'SATELLITE_USBOS', 'PREDICTED_USBOS']; # originating dataset within Boston; materialized as the uniform `data_source` column
 
 # Feed the shared cross-source merge (../tree_dedup.preql): it classifies rows
 # by the label's prefix and records provenance from it.
@@ -56,21 +54,6 @@ root datasource arboretum_update_time (
 )
 file `./arboretum_update_time.py`;
 
-root datasource cambridge_update_time (
-    data_updated_through: cambridge_data_updated_through
-)
-file `./cambridge_update_time.py`;
-
-root datasource brookline_update_time (
-    data_updated_through: brookline_data_updated_through
-)
-file `./brookline_update_time.py`;
-
-root datasource somerville_update_time (
-    data_updated_through: somerville_data_updated_through
-)
-file `./somerville_update_time.py`;
-
 root datasource northeastern_update_time (
     data_updated_through: northeastern_data_updated_through
 )
@@ -99,8 +82,8 @@ file `./boston_canopy_probe.py`;
 # the position grid by shared/canopy.py: one row per cell under a crown.
 # ../tree_height.preql keys every raw row into the grid and carries the
 # crown's height through the cluster merge; the partitions need no column.
-# The surveys stop at their city limits, so Brookline, Somerville, Belmont,
-# Watertown and the predicted ring outside them publish no height.
+# The surveys stop at their city limits, so the predicted ring outside
+# Boston publishes no height.  Cambridge's model reads this same table.
 root datasource usbos_canopy_height (
     canopy_cell: canopy_cell,
     canopy_crown_id: canopy_crown_id,
@@ -130,45 +113,6 @@ root partial datasource arboretum_raw_tree_info extends tree_partition (
 complete where city = 'USBOS' and usbos_source = 'ARNOLD_ARBORETUM'
 file `./arboretum_tree_info.py`;
 
-root partial datasource cambridge_raw_tree_info extends tree_partition (
-    data_source: usbos_source,
-    species: ?raw_species,
-)
-complete where city = 'USBOS' and usbos_source = 'CAMBRIDGE'
-file `./cambridge_tree_info.py`;
-
-root partial datasource brookline_raw_tree_info extends tree_partition (
-    data_source: usbos_source,
-    species: ?raw_species,
-)
-complete where city = 'USBOS' and usbos_source = 'BROOKLINE'
-file `./brookline_tree_info.py`;
-
-root partial datasource somerville_raw_tree_info extends tree_partition (
-    data_source: usbos_source,
-    species: ?raw_species,
-)
-complete where city = 'USBOS' and usbos_source = 'SOMERVILLE'
-file `./somerville_tree_info.py`;
-
-# No freshness probe of its own: Belmont's TreeKeeper grid exposes no date
-# column, so its edits publish with the next change to any other source here.
-root partial datasource belmont_raw_tree_info extends tree_partition (
-    data_source: usbos_source,
-    species: ?raw_species,
-)
-complete where city = 'USBOS' and usbos_source = 'BELMONT'
-file `./belmont_tree_info.py`;
-
-# No freshness probe either: Watertown's inventory is a 2022 snapshot on
-# MapGeo, every site added and last modified that year.
-root partial datasource watertown_raw_tree_info extends tree_partition (
-    data_source: usbos_source,
-    species: ?raw_species,
-)
-complete where city = 'USBOS' and usbos_source = 'WATERTOWN'
-file `./watertown_tree_info.py`;
-
 # Northeastern University's Fenway campus Arboretum: species and position only
 # (no diameter, date or condition on any row), inside Boston's own limits.
 root partial datasource northeastern_raw_tree_info extends tree_partition (
@@ -196,7 +140,7 @@ file `./treeboston_big_old_trees.py`;
 
 # Approved community submissions for this city. The shared ingest script emits
 # every city's rows; the `complete where` clause narrows it to USBOS and makes
-# it a disjoint partition alongside the eight municipal sources. `diameter_at_breast_height`
+# it a disjoint partition alongside the three municipal sources. `diameter_at_breast_height`
 # maps to `raw_dbh` (not the canonical concept) so community rows go through the
 # same species-average imputation. Mapping it directly would leave
 # `diameter_at_breast_height` resolvable only from partial sources and make the
@@ -227,6 +171,9 @@ where city = 'USBOS';
 # another source has absorbs the prediction and takes none of its values, so
 # these rows only show where nothing else has a tree.  No `source_kept` guard:
 # a new run at a stricter threshold may rightly shed a quarter of them.
+# The run covers the metro; the rows inside Cambridge, Somerville, Brookline,
+# Belmont and Watertown are those towns' (PREDICTED_STAGED_WITH), and what is
+# left here is Boston and the ring of towns that are not yet cities.
 root partial datasource usbos_predicted_tree_info extends tree_partition (
     data_source: usbos_source,
     species: ?raw_species,
@@ -247,7 +194,12 @@ root partial datasource usbos_osm_tree_info extends tree_partition (
 )
 complete where city = 'USBOS' and usbos_source = 'OSM_USBOS'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usbos_osm_staging.parquet`
-where (raw_latitude >= 42.15 and raw_latitude < 42.55 and raw_longitude >= -71.25 and raw_longitude < -70.85);
+where (raw_latitude >= 42.15 and raw_latitude < 42.55 and raw_longitude >= -71.25 and raw_longitude < -70.85)
+    and not geo_contains(usbel_boundary, geo_point(raw_longitude, raw_latitude))
+    and not geo_contains(usbkl_boundary, geo_point(raw_longitude, raw_latitude))
+    and not geo_contains(uscam_boundary, geo_point(raw_longitude, raw_latitude))
+    and not geo_contains(ussom_boundary, geo_point(raw_longitude, raw_latitude))
+    and not geo_contains(uswat_boundary, geo_point(raw_longitude, raw_latitude));
 
 # --- Cross-source dedup and attribute merge --------------------------------
 #
@@ -272,110 +224,26 @@ merge merged_latitude into latitude;
 merge merged_longitude into longitude;
 
 
-# --- Border trees between the metro's inventories ---------------------------
-#
-# The shared merge makes every municipal row its own cluster, so a tree that
-# two neighbouring cities both inventory would publish twice.  This metro is
-# the one model where that happens: Somerville meets Cambridge along most of
-# its southern edge, Belmont meets it on its eastern one, Watertown meets
-# Cambridge, Belmont and Brighton, and Brookline meets Boston (Northeastern's
-# campus sits inside Boston, its street trees along the edges).  Measured against the
-# published rows, pairs under 1m agree on the genus ~90% of the time and
-# pairs at 1-2m ~85%; at 2-3m agreement is 0%, the next tree along the kerb.
-#
-# So a municipal row is a border duplicate when a row of an EARLIER-wired
-# inventory names the same genus and shares a 2m cell with it in any of four
-# half-cell-staggered grids (the shared merge's construction: a guaranteed
-# match within 1m, a possible one out to the 2.8m cell diagonal).  Earlier
-# wins because its ids were published first and links to them must survive.
-# Two rows of ONE inventory never mark each other: the comparison is on rank.
-#
-# Only this model pays for it: four aggregates over the metro's rows.  It
-# would be a few lines in ../tree_dedup.preql given a radius join and a
-# per-city cluster override; see docs/BORDER_DEDUP.md.
-auto usbos_border_rank <- case
-    when usbos_source = 'CITY_OF_BOSTON' then 1
-    when usbos_source = 'ARNOLD_ARBORETUM' then 2
-    when usbos_source = 'CAMBRIDGE' then 3
-    when usbos_source = 'BROOKLINE' then 4
-    when usbos_source = 'SOMERVILLE' then 5
-    when usbos_source = 'BELMONT' then 6
-    when usbos_source = 'WATERTOWN' then 7
-    when usbos_source = 'NORTHEASTERN' then 8
-    else null
-end;
-auto usbos_raw_genus <- case
-    when strpos(raw_species, ' ') > 0 then substring(raw_species, 1, strpos(raw_species, ' ') - 1)
-    else raw_species
-end;
-
-# 2m at 42.36N: 2 / 111320 degrees of latitude, and that over cos(42.36)
-# for longitude.  The indices stay under 3e6, inside the 1e7 multiplier.
-#
-# The genus is part of the cell key, not a second grouping column: four
-# aggregates each joined back on (cell, genus) let DuckDB infer their genus
-# columns equal and join them to each other on genus alone -- a per-genus
-# cross product that spilled the cloud build's whole disk.  A row with no
-# genus keys on its own tree_id, so it never matches another row.
-def usbos_border_cell(dx, dy) -> concat(
-    cast(
-        cast(floor(raw_longitude / 0.00002431 + dx) as bigint) * 10000000
-        + cast(floor(raw_latitude / 0.00001797 + dy) as bigint)
-    as string),
-    '|',
-    coalesce(usbos_raw_genus, concat('#', tree_id))
-);
-def usbos_first_rank(cell) -> min(usbos_border_rank) by cell;
-
-auto usbos_border_cell_a <- @usbos_border_cell(0, 0);
-auto usbos_border_cell_b <- @usbos_border_cell(0.5, 0);
-auto usbos_border_cell_c <- @usbos_border_cell(0, 0.5);
-auto usbos_border_cell_d <- @usbos_border_cell(0.5, 0.5);
-
-# The row's own rank as a self-aggregate on `row_key`, the shape the shared
-# merge uses: comparing a cell aggregate with a row-level case directly is the
-# keyless-join planner bug (upstream_repro/keyless_join_cell_aggregate).
-auto usbos_own_border_rank <- min(usbos_border_rank) by row_key;
-# DuckDB's least() skips nulls, which is what this wants: a row with no
-# partner in a grid compares against the others.
-auto usbos_border_duplicate <- coalesce(
-    usbos_own_border_rank > least(
-        @usbos_first_rank(usbos_border_cell_a),
-        @usbos_first_rank(usbos_border_cell_b),
-        @usbos_first_rank(usbos_border_cell_c),
-        @usbos_first_rank(usbos_border_cell_d)
-    ),
-    false
-);
-
-
 # --- Merged materialized parquet (all Boston sources) ---
 
-# The `where` below is the prune: this target publishes only the row that owns
-# its cluster, so the parquet holds exactly one tree per row, and drops the
-# border duplicates above.  The prune alone needs pytrilogy 0.3.348+ and fails
-# quietly on older planners (see "The prune" in ../tree_dedup.preql); the
-# border gate needs 0.3.378+.  `usbos_border_duplicate` is stored (always false)
-# because a datasource's `where` may only read the datasource's own columns.
+# The towns Boston's model once unioned -- Cambridge, Somerville, Brookline,
+# Belmont, Watertown -- are cities of their own (../uscam/ and its siblings).
+# A tree two of them recorded on a shared street was dropped here by a
+# rank-and-genus block; it is now kept only by the town it stands in, because
+# every inventory is clipped to its territory's polygon on the way in
+# (`clip_to_polygon_territory`, docs/BORDER_DEDUP.md).
 partial datasource boston_tree_info extends published_tree_info (
     data_source: usbos_source,
     ?species,
-    usbos_border_duplicate,
     ?height_m,
     ?height_crown_radius_m,
     usbos_published_data_updated_through
 )
 complete where city = 'USBOS'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usbos_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usbos_tree_info_v{data_version}.parquet`
-where usbos_border_duplicate = false
 freshness by usbos_published_data_updated_through
 assert @source_kept(tree_id, usbos_source, 'CITY_OF_BOSTON', 0.75)
 assert @source_kept(tree_id, usbos_source, 'ARNOLD_ARBORETUM', 0.75)
-assert @source_kept(tree_id, usbos_source, 'CAMBRIDGE', 0.75)
-assert @source_kept(tree_id, usbos_source, 'BROOKLINE', 0.75)
-assert @source_kept(tree_id, usbos_source, 'SOMERVILLE', 0.75)
-assert @source_kept(tree_id, usbos_source, 'BELMONT', 0.75)
-assert @source_kept(tree_id, usbos_source, 'WATERTOWN', 0.75)
 assert @source_kept(tree_id, usbos_source, 'NORTHEASTERN', 0.75)
 assert @source_kept(tree_id, usbos_source, 'OSM_USBOS', 0.75);
 

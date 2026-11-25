@@ -187,6 +187,11 @@ select * from (values
     ('USBND', 354),
     ('USOPK', 387),
     ('USEVN', 387),
-    ('USMHD', 397)
+    ('USMHD', 397),
+    ('USCAM', 339),
+    ('USBKL', 339),
+    ('USBEL', 339),
+    ('USWAT', 339),
+    ('USSOM', 339)
 ) as t(city, ecoregion_id)
 ''';

@@ -30,7 +30,7 @@ import pyarrow as pa
 import requests
 
 sys.path.insert(0, str(Path(__file__).parent))
-from shared.ingest import SATELLITE_DATA_SOURCES  # noqa: E402
+from shared.ingest import SATELLITE_DATA_SOURCES, territory_family  # noqa: E402
 from satellite_tree_info import PUBLISHED_BUCKET  # noqa: E402
 
 EMPTY_DATASET_TIMESTAMP = datetime(1970, 1, 1, tzinfo=timezone.utc)
@@ -69,7 +69,19 @@ def fetch_published_at_by_city() -> dict[str, datetime]:
         by_city[code] = datetime.fromisoformat(
             str(value).replace("Z", "+00:00")
         ).astimezone(timezone.utc)
-    return by_city
+    return with_family(by_city)
+
+def with_family(by_city: dict[str, datetime]) -> dict[str, datetime]:
+    """Each city's timestamp, raised to the newest in its territory family.
+
+    The manifest is keyed by the city a row names, and within a carved family
+    that is not always the city that publishes it (`territory_city`): an
+    approval recorded as Boston's may be Cambridge's tree.
+    """
+    return {
+        code: max(by_city[member] for member in territory_family(code) if member in by_city)
+        for code in by_city
+    }
 
 
 def emit_timestamps(by_city: dict[str, datetime]) -> None:

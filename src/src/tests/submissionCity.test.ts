@@ -18,7 +18,14 @@ const MILOS: [number, number] = [36.76573485105567, 24.522211532312724]
 describe('cityAt', () => {
   it('returns the city a point is actually in', () => {
     expect(cityAt(...MILOS)).toBe('GRMLO')
-    expect(cityAt(42.3088, -71.11)).toBe('USBOS')
+    expect(cityAt(42.355, -71.0656)).toBe('USBOS')
+  })
+
+  it('answers by nearest centre, which among interlocked towns is only a hint', () => {
+    // The Arnold Arboretum is in Boston, but Brookline's centre is nearer.
+    // The ingest decides by the towns' real boundaries and re-homes the row
+    // (territory_city in data/raw/shared/ingest.py), so this is not corrected here.
+    expect(cityAt(42.3088, -71.11)).toBe('USBKL')
   })
 
   it('returns null rather than a city on the far side of a continent', () => {

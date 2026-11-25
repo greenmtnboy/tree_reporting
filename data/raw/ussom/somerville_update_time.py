@@ -8,8 +8,7 @@
 TreeKeeper publishes no modified-at stamp, so the watermark is the newest
 `Inventory Date` on any site: staff stamp it when they add or re-inspect a
 tree.  A removal does not move it, so a deletion alone waits for the next
-edit (or for another Boston source to change, which rebuilds the whole metro
-parquet).
+edit, or for the city's weekly OSM extract, which rebuilds the parquet.
 """
 
 import sys
@@ -30,4 +29,4 @@ def fetch_modified_at() -> datetime:
 
 
 if __name__ == "__main__":
-    emit_freshness("USBOS", fetch_modified_at)
+    emit_freshness("USSOM", fetch_modified_at)

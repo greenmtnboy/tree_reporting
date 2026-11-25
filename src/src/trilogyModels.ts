@@ -13,6 +13,10 @@ import LANDMARK_INFO_MODEL from '../../data/raw/landmark_info.preql?raw'
 // is not a per-city file the glob below would pick up.
 import COMMUNITY_TREE_INFO_MODEL from '../../data/raw/community_tree_info.preql?raw'
 import TREE_DEDUP_MODEL from '../../data/raw/tree_dedup.preql?raw'
+// The polygon towns' boundaries as geography constants, imported by the
+// city models whose territory a polygon draws (Boston and the towns carved
+// out of it); see data/raw/boundaries.preql.
+import BOUNDARIES_MODEL from '../../data/raw/boundaries.preql?raw'
 import SATELLITE_TREE_INFO_MODEL from '../../data/raw/satellite_tree_info.preql?raw'
 // The Overture position correction, imported by the cities that opt in
 // (Burlington first); see data/raw/tree_position.preql.
@@ -59,6 +63,7 @@ export const ALL_MODEL_SOURCES = [
   { alias: 'landmark_info', contents: LANDMARK_INFO_MODEL },
   { alias: 'community_tree_info', contents: COMMUNITY_TREE_INFO_MODEL },
   { alias: 'tree_dedup', contents: TREE_DEDUP_MODEL },
+  { alias: 'boundaries', contents: BOUNDARIES_MODEL },
   // Reviewed aerial-imagery detections: the freshness columns the wired
   // city models (SF, Boston, NYC) import; see data/raw/satellite_tree_info.preql.
   { alias: 'satellite_tree_info', contents: SATELLITE_TREE_INFO_MODEL },

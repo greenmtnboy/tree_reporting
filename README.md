@@ -228,11 +228,11 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 | San Francisco | SF Open Data Portal - San Francisco Street Tree Inventory | https://data.sf.gov/City-Infrastructure/San-Francisco-Street-Tree-Inventory/tkzw-k3nq |
 | New York City | NYC Open Data - Street Tree Census | https://data.cityofnewyork.us/Environment/2015-Street-Tree-Census-Tree-Data/uvpi-gqnh |
 | Boston | Analyze Boston - Trees | https://data.boston.gov/dataset/bprd-trees |
-| Boston (Cambridge) | Cambridge Open Data - Trees | https://data.cambridgema.gov/ |
-| Boston (Brookline) | Brookline GIS - Tree Viewer | ArcGIS FeatureServer |
-| Boston (Somerville) | City of Somerville - TreeKeeper public tree inventory | https://somervillema.treekeepersoftware.com/ |
-| Boston (Belmont) | Town of Belmont - TreeKeeper public tree inventory | https://belmontma.treekeepersoftware.com/ |
-| Boston (Watertown) | City of Watertown - 2022 Tree Inventory (MapGeo) | https://watertownma.mapgeo.io/ |
+| Cambridge, MA | Cambridge Open Data - Trees | https://data.cambridgema.gov/ |
+| Brookline, MA | Brookline GIS - Tree Viewer | ArcGIS FeatureServer |
+| Somerville, MA | City of Somerville - TreeKeeper public tree inventory | https://somervillema.treekeepersoftware.com/ |
+| Belmont, MA | Town of Belmont - TreeKeeper public tree inventory | https://belmontma.treekeepersoftware.com/ |
+| Watertown, MA | City of Watertown - 2022 Tree Inventory (MapGeo) | https://watertownma.mapgeo.io/ |
 | Boston (Arboretum) | Arnold Arboretum / Harvard GIS | https://gis.arboretum.harvard.edu/ |
 | Boston (Northeastern) | Northeastern University Arboretum Viewer (ArcGIS Online) | https://experience.arcgis.com/experience/81872a0c5c044ba5a70613cc1086bff3 |
 | Boston (notable trees) | Tree Boston - Big Old Trees of Boston (volunteer registry) | https://treeboston.org/bot/ |

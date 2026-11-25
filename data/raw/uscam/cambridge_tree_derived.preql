@@ -1,0 +1,29 @@
+# USCAM's predictions and browser projection, from its own published parquet.
+# Written by tools/sync_city_derived.py: edit that, not this. city_derived.preql
+# says what each part is.
+
+import ..city_derived;
+
+root datasource cambridge_tree_info extends published_city_trees (
+    height_m: ?height_m,
+    height_crown_radius_m: ?height_crown_radius_m,
+)
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uscam_tree_info_v{data_version}.parquet`;
+
+root datasource uscam_derived_inputs extends city_derived_inputs ()
+file `./cambridge_derived_probe.py`;
+
+datasource uscam_tree_predictions extends city_tree_predictions ()
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uscam_tree_predictions_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/uscam_tree_predictions_v{data_version}.parquet`;
+
+root datasource uscam_published_predictions extends published_city_predictions ()
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uscam_tree_predictions_v{data_version}.parquet`;
+
+datasource uscam_tree_browser extends city_tree_browser ()
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uscam_tree_browser_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/uscam_tree_browser_v{data_version}.parquet`;
+
+datasource uscam_tree_vocab extends city_tree_vocab ()
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uscam_tree_vocab_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/uscam_tree_vocab_v{data_version}.parquet`;
+
+datasource uscam_tree_review extends city_tree_review ()
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uscam_tree_review_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/uscam_tree_review_v{data_version}.parquet`;

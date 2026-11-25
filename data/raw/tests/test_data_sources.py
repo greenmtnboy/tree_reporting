@@ -286,7 +286,7 @@ def test_every_city_prunes_absorbed_rows(code: str):
 
 # Cities whose model unions neighbouring inventories that record the same
 # street trees (docs/BORDER_DEDUP.md).
-BORDER_DEDUP_CITIES = ("AUMEL", "USBOS")
+BORDER_DEDUP_CITIES = ("AUMEL",)
 
 
 @pytest.mark.parametrize("code", BORDER_DEDUP_CITIES)
@@ -443,7 +443,9 @@ def test_city_feeds_the_shared_cluster_merge(code: str):
         assert any(raw in stored(p) for p in partitions), (
             f"{code} never maps {raw}, so the merge has nothing to pick from"
         )
-    dbh_merge = "processed_dbh" if code == "USBOS" else "merged_dbh"
+    # Boston imputes a missing dbh, and so do the towns that were its partitions.
+    imputing = ("USBOS", "USBEL", "USBKL", "USCAM", "USSOM", "USWAT")
+    dbh_merge = "processed_dbh" if code in imputing else "merged_dbh"
     assert f"merge {dbh_merge} into diameter_at_breast_height;" in text, (
         f"{code} does not merge {dbh_merge} into diameter_at_breast_height"
     )

@@ -146,9 +146,19 @@ HEIGHT_COLUMNS: dict[str, pa.DataType] = {
 HEIGHT_SCHEMA = pa.schema(HEIGHT_COLUMNS)
 
 
+# A survey table covers the ground its surveys do, not a city: Boston's holds
+# Cambridge's 2024 crowns beside Boston's, because a crown on the line shades
+# trees on both sides.  A city listed here reads the table of the city it
+# names, and has no staging model or job of its own.
+CANOPY_STAGED_WITH: dict[str, str] = {
+    "USCAM": "USBOS",
+}
+
+
 def height_staging_name(city_code: str) -> str:
-    """The staged object's name, `{code}_canopy_height.parquet`."""
-    return f"{city_code.lower()}_canopy_height.parquet"
+    """The staged object's name, `{code}_canopy_height.parquet`, for the city
+    whose table holds *city_code*'s crowns."""
+    return f"{CANOPY_STAGED_WITH.get(city_code, city_code).lower()}_canopy_height.parquet"
 
 
 # ---------------------------------------------------------------------------

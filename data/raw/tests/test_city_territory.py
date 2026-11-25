@@ -22,12 +22,17 @@ RAW_DIR = Path(__file__).resolve().parents[1]
 SRC_DIR = RAW_DIR.parent.parent / "src" / "src"
 sys.path.insert(0, str(RAW_DIR))
 
+from shared.boundary import Boundary, boundary_codes, city_boundary  # noqa: E402
 from shared.ingest import (  # noqa: E402
     CITY_BOUNDS,
     CITY_TERRITORY,
     boxes_intersect,
+    carved_out_of,
     city_territory,
+    city_territory_where,
     in_city_territory,
+    territory_city,
+    territory_family,
 )
 
 
@@ -56,14 +61,116 @@ def test_territory_rectangles_are_well_formed_and_inside_the_envelope(code: str)
 
 
 def test_no_two_cities_share_ground():
-    """The whole point.  A pair here is a tree the rollup publishes twice."""
+    """The whole point.  A pair here is a tree the rollup publishes twice.
+
+    Two rectangle cities may not overlap at all.  A polygon town's rectangle
+    is only its envelope: it may reach into the city it is carved out of and
+    into a neighbouring polygon's envelope, and the test below checks the
+    ground itself.
+    """
     clashes = []
     for a, b in combinations(sorted(CITY_TERRITORY), 2):
+        if city_boundary(a) is not None and (city_boundary(b) is not None or a in carved_out_of(b)):
+            continue
+        if city_boundary(b) is not None and b in carved_out_of(a):
+            continue
         for x in CITY_TERRITORY[a]:
             for y in CITY_TERRITORY[b]:
                 if boxes_intersect(x, y):
                     clashes.append((a, x, b, y))
     assert not clashes, f"territories intersect: {clashes}"
+
+
+# ---------------------------------------------------------------------------
+# Polygon towns (shared/boundary.py)
+# ---------------------------------------------------------------------------
+
+POLYGON_TOWNS = boundary_codes()
+
+
+def _grid(box, steps: int = 120):
+    lat_min, lat_max, lon_min, lon_max = box
+    for i in range(steps):
+        for j in range(steps):
+            yield (lat_min + (i + 0.5) * (lat_max - lat_min) / steps,
+                   lon_min + (j + 0.5) * (lon_max - lon_min) / steps)
+
+
+def test_the_split_towns_have_boundaries():
+    assert {"USBEL", "USBKL", "USCAM", "USSOM", "USWAT"} <= set(POLYGON_TOWNS)
+    assert set(POLYGON_TOWNS) <= set(CITY_TERRITORY), "a boundary file for a city that is not wired"
+
+
+@pytest.mark.parametrize("code", POLYGON_TOWNS)
+def test_a_polygon_towns_rectangle_is_its_boundarys_envelope(code: str):
+    """`tools/fetch_boundary.py` prints it: the box rounded outward to 4 dp, so
+    the Overpass extract and every cheap pre-check cover the whole polygon and
+    little else."""
+    (box,) = city_territory(code)
+    lat_min, lat_max, lon_min, lon_max = city_boundary(code).box
+    assert box[0] <= lat_min < box[0] + 1e-4 and box[1] - 1e-4 < lat_max <= box[1], (code, box)
+    assert box[2] <= lon_min < box[2] + 1e-4 and box[3] - 1e-4 < lon_max <= box[3], (code, box)
+
+
+def test_a_point_in_a_carved_family_belongs_to_exactly_one_member():
+    """Sampled over every polygon town's envelope: the polygons of one
+    tessellation meet without overlapping, and the city they are carved out
+    of gives up exactly their ground."""
+    for code in POLYGON_TOWNS:
+        family = territory_family(code)
+        assert len(family) > 1, f"{code} has a boundary but is carved out of nothing"
+        for lat, lon in _grid(city_territory(code)[0]):
+            owners = [member for member in family if in_city_territory(member, lat, lon)]
+            assert len(owners) == 1, (code, lat, lon, owners)
+
+
+def test_boston_is_its_box_less_the_towns_carved_out_of_it():
+    assert carved_out_of("USBOS") == ("USBEL", "USBKL", "USCAM", "USSOM", "USWAT")
+    assert territory_family("USSOM") == ("USBEL", "USBKL", "USBOS", "USCAM", "USSOM", "USWAT")
+    assert carved_out_of("USCAM") == () and territory_family("USSFO") == ("USSFO",)
+    places = {
+        (42.3736, -71.1190): "USCAM",  # Harvard Square
+        (42.3967, -71.1223): "USSOM",  # Davis Square
+        (42.3420, -71.1212): "USBKL",  # Coolidge Corner
+        (42.3959, -71.1787): "USBEL",  # Belmont Center
+        (42.3655, -71.1855): "USWAT",  # Watertown Square
+        (42.3550, -71.0656): "USBOS",  # Boston Common
+        (42.3370, -71.2090): "USBOS",  # Newton: in the metro box, not yet a city
+        (42.3601, -71.0942): "USCAM",  # MIT, on the Cambridge bank of the Charles
+        (42.3467, -71.0972): "USBOS",  # Fenway Park
+    }
+    for (lat, lon), owner in places.items():
+        for member in territory_family("USBOS"):
+            assert in_city_territory(member, lat, lon) == (member == owner), (lat, lon, member)
+
+
+def test_a_row_is_rehomed_within_its_family_and_nowhere_else():
+    """The city a row names is a hint only among towns carved from each other."""
+    assert territory_city("USBOS", 42.3736, -71.1190) == "USCAM"  # recorded as Boston, stands in Cambridge
+    assert territory_city("USCAM", 42.3550, -71.0656) == "USBOS"  # nearest centre was Cambridge's
+    assert territory_city("USCAM", 42.3967, -71.1223) == "USSOM"
+    assert territory_city("USBOS", 42.3550, -71.0656) == "USBOS"
+    assert territory_city("USBOS", 40.7128, -74.0060) is None  # New York names no member of Boston's family
+    assert territory_city("USNYC", 42.3736, -71.1190) is None  # nor does a New York row move to Cambridge
+    assert territory_city("USBOS", None, -71.1) is None
+    assert territory_city("XXXXX", 42.36, -71.06) is None
+
+
+def test_a_boundary_is_even_odd_and_reads_only_its_band():
+    """A square with a square hole, and a second square beside it."""
+    outer = [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0), (0.0, 0.0)]
+    hole = [(1.0, 1.0), (1.0, 3.0), (3.0, 3.0), (3.0, 1.0), (1.0, 1.0)]
+    island = [(6.0, 0.0), (7.0, 0.0), (7.0, 1.0), (6.0, 1.0), (6.0, 0.0)]
+    shape = Boundary([outer, hole, island])
+    assert shape.contains(0.5, 0.5) and shape.contains(3.5, 2.0) and shape.contains(0.5, 6.5)
+    assert not shape.contains(2.0, 2.0), "the hole is outside"
+    assert not shape.contains(2.0, 5.0) and not shape.contains(9.0, 9.0)
+    assert shape.box == (0.0, 4.0, 0.0, 7.0)
+    assert shape.wkt().startswith("MULTIPOLYGON(((0.000000 0.000000,") and shape.wkt().count("((") == 2
+    # Two squares that share the edge x = 4: a point on it is in exactly one.
+    east = Boundary([[(4.0, 0.0), (8.0, 0.0), (8.0, 4.0), (4.0, 4.0), (4.0, 0.0)]])
+    west = Boundary([outer])
+    assert west.contains(2.0, 4.0) != east.contains(2.0, 4.0)
 
 
 @pytest.mark.parametrize("code", sorted(CITY_TERRITORY))
@@ -163,6 +270,19 @@ def test_the_territory_reaches_the_composed_osm_partition(code):
         assert (f"ref:local.raw_latitude >= {lat_min} and ref:local.raw_latitude < {lat_max} and "
                 f"ref:local.raw_longitude >= {lon_min} and ref:local.raw_longitude < {lon_max}") in rendered
     assert rendered.count(" or ") == len(city_territory(code)) - 1
+    # A polygon draws the rest: the town's own boundary, or the towns carved
+    # out of this city, each one `geo_contains` on the boundary constant.
+    polygons = len(carved_out_of(code)) + (city_boundary(code) is not None)
+    assert city_territory_where(code).count("geo_contains(") == polygons
+    assert rendered.lower().count("geo_contains") == polygons, rendered
+
+
+def test_the_boundaries_model_is_written_from_the_files():
+    from tools.sync_osm_territory import BOUNDARIES_MODEL, boundaries_model
+
+    assert BOUNDARIES_MODEL.read_text(encoding="utf-8") == boundaries_model(), (
+        "boundaries.preql is not boundaries/*.json; run `python tools/sync_osm_territory.py` from data/raw"
+    )
 
 
 def test_osm_cities_are_every_city_with_a_staged_extract():

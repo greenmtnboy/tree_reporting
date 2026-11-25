@@ -11,6 +11,11 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
+  { city: 'Somerville', label: 'City of Somerville - TreeKeeper public tree inventory', url: 'https://somervillema.treekeepersoftware.com/' },
+  { city: 'Watertown', label: 'City of Watertown - 2022 Tree Inventory (MapGeo)', url: 'https://watertownma.mapgeo.io/' },
+  { city: 'Belmont', label: 'Town of Belmont - TreeKeeper public tree inventory', url: 'https://belmontma.treekeepersoftware.com/' },
+  { city: 'Brookline', label: 'Town of Brookline GIS - Tree Viewer', url: 'https://services1.arcgis.com/Oknk0tvfHOElpgGU/arcgis/rest/services/Brookline_Tree_Viewer_Web_WFL1/FeatureServer/0' },
+  { city: 'Cambridge', label: 'Cambridge Open Data - Street Trees', url: 'https://data.cambridgema.gov/' },
   { city: 'Moorhead', label: 'City of Moorhead GIS - TreePlotter inventory (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://www.arcgis.com/home/item.html?id=efd9f39819d54020b610ef0f5f0c0c04' },
   { city: 'Evanston', label: 'City of Evanston Open Data - Trees (CC BY 4.0)', url: 'https://www.arcgis.com/home/item.html?id=845a3acb3dc0442a80b219691889f992' },
   { city: 'Orland Park', label: 'Village of Orland Park - Public Trees (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://www.arcgis.com/home/item.html?id=780d9c0a3883498b82e046ef231144c9' },
@@ -212,6 +217,11 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
+  { city: 'Somerville', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
+  { city: 'Watertown', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
+  { city: 'Belmont', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
+  { city: 'Brookline', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
+  { city: 'Cambridge', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
   { city: 'Moorhead', label: 'National Park Service - National Register of Historic Places', url: 'https://www.nps.gov/subjects/nationalregister/data-downloads.htm' },
   { city: 'Evanston', label: 'National Park Service - National Register of Historic Places', url: 'https://www.nps.gov/subjects/nationalregister/data-downloads.htm' },
   { city: 'Orland Park', label: 'Village of Orland Park - Old Orland Historic District contributing structures (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://www.arcgis.com/home/item.html?id=99feff2aaed940efab4e39b8898e128a' },

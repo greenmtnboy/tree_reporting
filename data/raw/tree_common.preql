@@ -51,6 +51,16 @@ property <*>.usden_data_updated_through datetime; # when Denver data is through
 # community column with the staged OSM one and nothing else.
 property <*>.ustem_osm_data_updated_through datetime; # mtime of Tempe's committed OSM staging parquet
 property <*>.usbos_osm_data_updated_through datetime;
+property <*>.ussom_data_updated_through datetime; # when Somerville data is through
+property <*>.ussom_osm_data_updated_through datetime; # GCS publication time of Somerville's staged OSM parquet
+property <*>.uswat_data_updated_through datetime; # when Watertown data is through
+property <*>.uswat_osm_data_updated_through datetime; # GCS publication time of Watertown's staged OSM parquet
+property <*>.usbel_data_updated_through datetime; # when Belmont data is through
+property <*>.usbel_osm_data_updated_through datetime; # GCS publication time of Belmont's staged OSM parquet
+property <*>.usbkl_data_updated_through datetime; # when Brookline data is through
+property <*>.usbkl_osm_data_updated_through datetime; # GCS publication time of Brookline's staged OSM parquet
+property <*>.uscam_data_updated_through datetime; # when Cambridge data is through
+property <*>.uscam_osm_data_updated_through datetime; # GCS publication time of Cambridge's staged OSM parquet
 property <*>.usmhd_data_updated_through datetime; # when Moorhead data is through
 property <*>.usmhd_osm_data_updated_through datetime; # GCS publication time of Moorhead's staged OSM parquet
 property <*>.usevn_data_updated_through datetime; # when Evanston data is through
@@ -298,6 +308,11 @@ property <*>.czprg_osm_data_updated_through datetime; # GCS publication time of 
 property <*>.ussto_data_updated_through datetime; # when Stoughton, WI data is through
 property <*>.ussto_osm_data_updated_through datetime; # GCS publication time of Stoughton, WI's staged OSM parquet
 property <*>.usbos_predicted_data_updated_through datetime; # GCS publication time of Boston's staged bulk imagery predictions (predicted_update_time.py)
+property <*>.usbel_predicted_data_updated_through datetime; # GCS publication time of the Boston metro run Belmont reads its predictions from (PREDICTED_STAGED_WITH)
+property <*>.usbkl_predicted_data_updated_through datetime; # GCS publication time of the Boston metro run Brookline reads its predictions from (PREDICTED_STAGED_WITH)
+property <*>.uscam_predicted_data_updated_through datetime; # GCS publication time of the Boston metro run Cambridge reads its predictions from (PREDICTED_STAGED_WITH)
+property <*>.ussom_predicted_data_updated_through datetime; # GCS publication time of the Boston metro run Somerville reads its predictions from (PREDICTED_STAGED_WITH)
+property <*>.uswat_predicted_data_updated_through datetime; # GCS publication time of the Boston metro run Watertown reads its predictions from (PREDICTED_STAGED_WITH)
 property <*>.ussfo_predicted_data_updated_through datetime; # GCS publication time of San Francisco's staged bulk imagery predictions (predicted_update_time.py)
 property <*>.uswas_osm_data_updated_through datetime; # GCS publication time of Washington DC's staged OSM parquet
 property <*>.uslax_osm_data_updated_through datetime; # GCS publication time of Los Angeles's staged OSM parquet

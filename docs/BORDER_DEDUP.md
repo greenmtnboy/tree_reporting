@@ -1,5 +1,23 @@
 # Border dedup between neighbouring inventories
 
+**Status (2026-11-24).** Boston's metro model is split: Cambridge,
+Somerville, Brookline, Belmont and Watertown are cities of their own, each
+with its territory drawn by the town's real boundary, and the block described
+below is gone from `usbos/boston_tree_info.preql`. Border trees are now
+resolved by position, not by matching: every inventory is clipped to its own
+polygon on the way in (`clip_to_polygon_territory` in `shared/ingest.py`), so
+a tree two towns record publishes once, from the town it stands in. Measured
+against the published metro parquet and the Census boundaries, 25 to 95 rows
+of each inventory stood outside their own town (61 of Cambridge's in
+Somerville, 74 of Boston's in Brookline, 57 of Belmont's in Cambridge), 368
+in all, after the block had already dropped about 110. So the clip gives up a
+few hundred trees one town maintains just past its line and the neighbour
+does not record; that is the price of not needing one model to see two
+towns. Two copies of one tree on opposite sides of the line (each town
+placing it on its own kerb) still publish twice; nothing has measured how
+many. The block below still runs for Melbourne, whose councils share a model.
+What follows is the history and the language asks, which stand.
+
 Boston's metro model unions five municipal inventories. Where two cities meet
 at a street, both inventory the trees on it, and the shared merge
 (`data/raw/tree_dedup.preql`) never merges two municipal rows: each is its own

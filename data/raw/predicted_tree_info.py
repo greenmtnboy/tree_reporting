@@ -67,13 +67,16 @@ from pathlib import Path
 from typing import Any, Iterator, Mapping
 
 import pyarrow as pa
+import pyarrow.compute as pc
 import pyarrow.parquet as pq
 import requests
 
 sys.path.insert(0, str(Path(__file__).parent))
 from shared.ingest import (  # noqa: E402
     LEAF_HABIT_SENTINELS,
+    CITY_TERRITORY,
     PREDICTED_DATA_SOURCES,
+    PREDICTED_STAGED_WITH,
     emit,
     enforce_tree_schema,
     in_city_territory,
@@ -92,14 +95,20 @@ NAME_CONFIDENCE = 0.8
 BATCH_ROWS = 100_000
 
 
+def staged_city(city_code: str) -> str:
+    """The city whose staged file holds *city_code*'s predictions: itself,
+    unless its ground was predicted as part of a larger run."""
+    return PREDICTED_STAGED_WITH.get(city_code, city_code)
+
+
 def staging_name(city_code: str) -> str:
-    return f"{city_code.lower()}_predicted_staging.parquet"
+    return f"{staged_city(city_code).lower()}_predicted_staging.parquet"
 
 
 def staged_location(city_code: str) -> str:
     template = os.environ.get("PREDICTED_STAGING_URL")
     if template:
-        return template.replace("{code}", city_code.lower())
+        return template.replace("{code}", staged_city(city_code).lower())
     return staging_url(staging_name(city_code))
 
 
@@ -203,7 +212,7 @@ def records_to_table(
         if not tree_id.startswith(ID_PREFIX):
             skip(f"id without the {ID_PREFIX!r} prefix")
             continue
-        if str(record.get("city") or "").upper().strip() != city_code:
+        if str(record.get("city") or "").upper().strip() != staged_city(city_code):
             skip("another city's row")
             continue
         try:
@@ -241,6 +250,25 @@ def report_skipped(skipped: Mapping[str, int], city_code: str) -> None:
         print(f"Predicted ingest: skipped {count} {city_code} rows: {reason}", file=sys.stderr)
 
 
+def near_territory(table: pa.Table, city_code: str) -> tuple[pa.Table, int]:
+    """The rows inside the envelope of the city's rectangles, and how many
+    were outside it.  A town reading a metro's staged file keeps a few rows in
+    a hundred; dropping the rest as Arrow, before they become Python records,
+    is what keeps that read to seconds.  `records_to_table` still decides
+    membership row by row."""
+    if "latitude" not in table.column_names or "longitude" not in table.column_names:
+        return table, 0
+    boxes = CITY_TERRITORY[city_code]
+    lat, lon = table["latitude"], table["longitude"]
+    mask = pc.and_(
+        pc.and_(pc.greater_equal(lat, min(b[0] for b in boxes)), pc.less(lat, max(b[1] for b in boxes))),
+        pc.and_(pc.greater_equal(lon, min(b[2] for b in boxes)), pc.less(lon, max(b[3] for b in boxes))),
+    )
+    # A null or unparsable coordinate is kept for the row loop to report.
+    near = table.filter(pc.fill_null(mask, True))
+    return near, table.num_rows - near.num_rows
+
+
 def city_tables(city_code: str) -> Iterator[pa.Table]:
     """One city's canonical rows, a batch of the staged file at a time."""
     staged = staged_file(city_code)
@@ -250,8 +278,11 @@ def city_tables(city_code: str) -> Iterator[pa.Table]:
     summary: dict[str, int] = {}
     skipped: dict[str, int] = {}
     for batch in staged.iter_batches(batch_size=BATCH_ROWS):
+        near, far = near_territory(pa.Table.from_batches([batch]), city_code)
+        if far:
+            skipped[f"outside {city_code}"] = skipped.get(f"outside {city_code}", 0) + far
         yield records_to_table(
-            batch.to_pylist(), city_code, seen_ids=seen, summary=summary, skipped=skipped
+            near.to_pylist(), city_code, seen_ids=seen, summary=summary, skipped=skipped
         )
     report_skipped(skipped, city_code)
     report_species_cleanup(summary, city="Predicted")
