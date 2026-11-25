@@ -10,6 +10,7 @@
  * gets round to naming it here.
  */
 export const DATA_SOURCE_LABELS: Record<string, string> = {
+  ARLINGTON_MA: 'Town of Arlington, MA',
   DEDHAM: 'Town of Dedham',
   SALEM_MA: 'City of Salem, MA',
   MOORHEAD_OPENDATA: 'Moorhead Open Data',

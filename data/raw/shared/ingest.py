@@ -2335,6 +2335,14 @@ def _sanitize_taxon(value: str | None) -> str | None:
 # Keyed by city code so `community_source_for` can derive the community label
 # and so tests can assert the two lists agree.
 MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
+    "USMLD": (),
+    "USREV": (),
+    "USMBH": (),
+    "USARL": ("ARLINGTON_MA",),
+    "USWLT": (),
+    "USSWA": (),
+    "USNEE": (),
+    "USSAU": (),
     "USQCY": (),
     "USDED": ("DEDHAM",),
     "USMED": (),
@@ -2544,6 +2552,14 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # overlapping rows under one cluster id and publishes only the survivor — see
 # tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
+    "USMLD": "OSM_USMLD",
+    "USREV": "OSM_USREV",
+    "USMBH": "OSM_USMBH",
+    "USARL": "OSM_USARL",
+    "USWLT": "OSM_USWLT",
+    "USSWA": "OSM_USSWA",
+    "USNEE": "OSM_USNEE",
+    "USSAU": "OSM_USSAU",
     "USQCY": "OSM_USQCY",
     "USDED": "OSM_USDED",
     "USMED": "OSM_USMED",
@@ -2760,6 +2776,14 @@ SATELLITE_DATA_SOURCES: dict[str, str] = {
     "USMED": satellite_source_for("USMED"),
     "USDED": satellite_source_for("USDED"),
     "USQCY": satellite_source_for("USQCY"),
+    "USSAU": satellite_source_for("USSAU"),
+    "USNEE": satellite_source_for("USNEE"),
+    "USSWA": satellite_source_for("USSWA"),
+    "USWLT": satellite_source_for("USWLT"),
+    "USARL": satellite_source_for("USARL"),
+    "USMBH": satellite_source_for("USMBH"),
+    "USREV": satellite_source_for("USREV"),
+    "USMLD": satellite_source_for("USMLD"),
 }
 
 def predicted_source_for(city_code: str) -> str:
@@ -2791,6 +2815,14 @@ PREDICTED_DATA_SOURCES: dict[str, str] = {
     "USMED": predicted_source_for("USMED"),
     "USDED": predicted_source_for("USDED"),
     "USQCY": predicted_source_for("USQCY"),
+    "USSAU": predicted_source_for("USSAU"),
+    "USNEE": predicted_source_for("USNEE"),
+    "USSWA": predicted_source_for("USSWA"),
+    "USWLT": predicted_source_for("USWLT"),
+    "USARL": predicted_source_for("USARL"),
+    "USMBH": predicted_source_for("USMBH"),
+    "USREV": predicted_source_for("USREV"),
+    "USMLD": predicted_source_for("USMLD"),
 }
 
 # A prediction run covers the ground it was pointed at, not a city: Boston's
@@ -2812,6 +2844,14 @@ PREDICTED_STAGED_WITH: dict[str, str] = {
     "USMED": "USBOS",
     "USDED": "USBOS",
     "USQCY": "USBOS",
+    "USSAU": "USBOS",
+    "USNEE": "USBOS",
+    "USSWA": "USBOS",
+    "USWLT": "USBOS",
+    "USARL": "USBOS",
+    "USMBH": "USBOS",
+    "USREV": "USBOS",
+    "USMLD": "USBOS",
 }
 
 
@@ -3379,6 +3419,14 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
+    "USMLD": (42.4125, 42.4448, -71.0895, -71.0203),
+    "USREV": (42.3881, 42.4502, -71.0332, -70.9507),
+    "USMBH": (42.4554, 42.5288, -70.8991, -70.7675),
+    "USARL": (42.3974, 42.4363, -71.2027, -71.1322),
+    "USWLT": (42.3536, 42.4245, -71.2861, -71.1941),
+    "USSWA": (42.4495, 42.4909, -70.9342, -70.8386),
+    "USNEE": (42.2548, 42.3166, -71.3013, -71.1882),
+    "USSAU": (42.4308, 42.5052, -71.0543, -70.9685),
     "USQCY": (42.2041, 42.3136, -71.0932, -70.9376),
     "USDED": (42.2092, 42.2805, -71.2318, -71.1307),
     "USMED": (42.3962, 42.4535, -71.1499, -71.0712),
@@ -3613,6 +3661,22 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "USMLD": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "USREV": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "USMBH": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "USARL": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "USWLT": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "USSWA": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "USNEE": 10,
+    # NOT YET CALIBRATED: default; measure after the first build.
+    "USSAU": 10,
     # Boston-metro towns added after Boston was clipped to its own line.
     # Salem and Dedham measured 2026-11-24 against their staged extracts
     # (osm_dedup_validation.py with the ingest's local parquet): mutual-NN
@@ -4385,6 +4449,14 @@ DEDUP_CELL_METRES: dict[str, int] = {
 Box = tuple[float, float, float, float]
 
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
+    'USMLD': ((42.4125, 42.4448, -71.0895, -71.0203),),
+    'USREV': ((42.3881, 42.4502, -71.0332, -70.9507),),
+    'USMBH': ((42.4554, 42.5288, -70.8991, -70.7675),),
+    'USARL': ((42.3974, 42.4363, -71.2027, -71.1322),),
+    'USWLT': ((42.3536, 42.4245, -71.2861, -71.1941),),
+    'USSWA': ((42.4495, 42.4909, -70.9342, -70.8386),),
+    'USNEE': ((42.2548, 42.3166, -71.3013, -71.1882),),
+    'USSAU': ((42.4308, 42.5052, -71.0543, -70.9685),),
     'USQCY': ((42.2041, 42.3136, -71.0932, -70.9376),),
     'USDED': ((42.2092, 42.2805, -71.2318, -71.1307),),
     'USMED': ((42.3962, 42.4535, -71.1499, -71.0712),),

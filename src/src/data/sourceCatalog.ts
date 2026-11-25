@@ -11,6 +11,7 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
+  { city: 'Arlington, MA', label: 'Town of Arlington GIS - Public Shade Trees (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://www.arcgis.com/home/item.html?id=dc385c1084d1432ebc792ffcb20bcfa4' },
   { city: 'Dedham', label: 'Town of Dedham GIS - Tree Inventory (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://www.arcgis.com/home/item.html?id=9d23e28c88984fa0903da95792883d4a' },
   { city: 'Salem, MA', label: 'City of Salem, MA (SalemGIS, Salem DPW) - Salem Street Trees (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://www.arcgis.com/home/item.html?id=df1d66111f2d481db82564d5b820dee0' },
   { city: 'Somerville', label: 'City of Somerville - TreeKeeper public tree inventory', url: 'https://somervillema.treekeepersoftware.com/' },
@@ -207,6 +208,13 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
   { city: 'Lynn', label: 'Community submissions, OpenStreetMap and the Boston metro aerial-imagery run (no municipal inventory)' },
   { city: 'Medford', label: 'Community submissions, OpenStreetMap and the Boston metro aerial-imagery run (no municipal inventory)' },
   { city: 'Quincy', label: 'Community submissions, OpenStreetMap and the Boston metro aerial-imagery run (no municipal inventory)' },
+  { city: 'Saugus', label: 'Community submissions, OpenStreetMap and the Boston metro aerial-imagery run (no municipal inventory)' },
+  { city: 'Needham', label: 'Community submissions, OpenStreetMap and the Boston metro aerial-imagery run (no municipal inventory)' },
+  { city: 'Swampscott', label: 'Community submissions, OpenStreetMap and the Boston metro aerial-imagery run (no municipal inventory)' },
+  { city: 'Waltham', label: 'Community submissions, OpenStreetMap and the Boston metro aerial-imagery run (no municipal inventory)' },
+  { city: 'Marblehead', label: 'Community submissions, OpenStreetMap and the Boston metro aerial-imagery run (no municipal inventory)' },
+  { city: 'Revere', label: 'Community submissions, OpenStreetMap and the Boston metro aerial-imagery run (no municipal inventory)' },
+  { city: 'Malden', label: 'Community submissions, OpenStreetMap and the Boston metro aerial-imagery run (no municipal inventory)' },
   // Community submissions are reviewed and approved before they reach the map;
   // each published tree carries a COMMUNITY_<CITY> value in its data_source column.
   { city: 'All cities', label: 'Community submissions, reviewed before publication' },
@@ -225,6 +233,14 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
+  { city: 'Malden', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
+  { city: 'Revere', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
+  { city: 'Marblehead', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
+  { city: 'Arlington, MA', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
+  { city: 'Waltham', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
+  { city: 'Swampscott', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
+  { city: 'Needham', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
+  { city: 'Saugus', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
   { city: 'Quincy', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
   { city: 'Dedham', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
   { city: 'Medford', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },

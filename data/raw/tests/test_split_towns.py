@@ -39,13 +39,16 @@ from shared.ingest import (  # noqa: E402
 TOWNS = ("USBEL", "USBKL", "USCAM", "USSOM", "USWAT")
 # Towns added after Boston was clipped to its own line: no partition of
 # Boston's ever, but ground its metro run and reviews covered.
-METRO_TOWNS = ("USDED", "USLYN", "USMED", "USMIL", "USNWT", "USPEA", "USQCY", "USSAL")
+METRO_TOWNS = (
+    "USARL", "USDED", "USLYN", "USMBH", "USMED", "USMIL", "USMLD", "USNEE",
+    "USNWT", "USPEA", "USQCY", "USREV", "USSAL", "USSAU", "USSWA", "USWLT",
+)
 
 HARVARD_SQUARE = (42.3736, -71.1190)  # Cambridge
 DAVIS_SQUARE = (42.3967, -71.1223)  # Somerville
 COOLIDGE_CORNER = (42.3420, -71.1212)  # Brookline
 BOSTON_COMMON = (42.3550, -71.0656)  # Boston
-SAUGUS = (42.4645, -71.0107)  # inside the metro run, no city of its own yet
+EVERETT = (42.4084, -71.0537)  # inside the metro run, no city of its own yet
 
 
 def load(name: str):
@@ -116,7 +119,7 @@ def test_an_inventory_row_in_the_next_town_is_dropped(capsys):
 
 
 def test_boston_keeps_only_the_rows_inside_its_own_line():
-    kept = clip_to_polygon_territory(points(BOSTON_COMMON, COOLIDGE_CORNER, SAUGUS), city_code="USBOS")
+    kept = clip_to_polygon_territory(points(BOSTON_COMMON, COOLIDGE_CORNER, EVERETT), city_code="USBOS")
     assert kept["tree_id"].to_pylist() == ["t0"]
 
 
@@ -182,7 +185,7 @@ METRO_RUN = [
     prediction("pred-cam", HARVARD_SQUARE),
     prediction("pred-som", DAVIS_SQUARE),
     prediction("pred-bos", BOSTON_COMMON),
-    prediction("pred-ring", SAUGUS),
+    prediction("pred-ring", EVERETT),
 ]
 
 
@@ -204,7 +207,7 @@ def test_each_prediction_of_the_metro_run_publishes_in_exactly_one_city(tmp_path
                 assert row["data_source"] == f"PREDICTED_{code}" and row["city"] == code
                 published[row["tree_id"]] = code
     assert published == {"pred-cam": "USCAM", "pred-som": "USSOM", "pred-bos": "USBOS"}, (
-        "a prediction in a town that is not yet a city (Saugus) publishes nowhere"
+        "a prediction in a town that is not yet a city (Everett) publishes nowhere"
     )
 
 

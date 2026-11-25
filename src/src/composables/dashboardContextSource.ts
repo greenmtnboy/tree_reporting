@@ -1082,6 +1082,54 @@ const CITY_DASHBOARD_CONTEXT: Record<
     biome: 'Temperate Broadleaf & Mixed Forests',
     realm: 'nearctic',
   },
+  USSAU: {
+    ecoregionId: 339, // Northeast US Coastal forests
+    usdaZone: 7,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'nearctic',
+  },
+  USNEE: {
+    ecoregionId: 339, // Northeast US Coastal forests
+    usdaZone: 7,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'nearctic',
+  },
+  USSWA: {
+    ecoregionId: 339, // Northeast US Coastal forests
+    usdaZone: 7,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'nearctic',
+  },
+  USWLT: {
+    ecoregionId: 339, // Northeast US Coastal forests
+    usdaZone: 7,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'nearctic',
+  },
+  USARL: {
+    ecoregionId: 339, // Northeast US Coastal forests
+    usdaZone: 7,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'nearctic',
+  },
+  USMBH: {
+    ecoregionId: 339, // Northeast US Coastal forests
+    usdaZone: 7,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'nearctic',
+  },
+  USREV: {
+    ecoregionId: 339, // Northeast US Coastal forests
+    usdaZone: 7,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'nearctic',
+  },
+  USMLD: {
+    ecoregionId: 339, // Northeast US Coastal forests
+    usdaZone: 7,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'nearctic',
+  },
 }
 
 function escapeStringLiteral(value: string) {

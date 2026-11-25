@@ -57,6 +57,15 @@ property <*>.uspea_osm_data_updated_through datetime; # GCS publication time of 
 property <*>.uslyn_osm_data_updated_through datetime; # GCS publication time of Lynn's staged OSM parquet
 property <*>.usmed_osm_data_updated_through datetime; # GCS publication time of Medford's staged OSM parquet
 property <*>.usqcy_osm_data_updated_through datetime; # GCS publication time of Quincy's staged OSM parquet
+property <*>.ussau_osm_data_updated_through datetime; # GCS publication time of Saugus's staged OSM parquet
+property <*>.usnee_osm_data_updated_through datetime; # GCS publication time of Needham's staged OSM parquet
+property <*>.usswa_osm_data_updated_through datetime; # GCS publication time of Swampscott's staged OSM parquet
+property <*>.uswlt_osm_data_updated_through datetime; # GCS publication time of Waltham's staged OSM parquet
+property <*>.usmbh_osm_data_updated_through datetime; # GCS publication time of Marblehead's staged OSM parquet
+property <*>.usrev_osm_data_updated_through datetime; # GCS publication time of Revere's staged OSM parquet
+property <*>.usmld_osm_data_updated_through datetime; # GCS publication time of Malden's staged OSM parquet
+property <*>.usarl_data_updated_through datetime; # when Arlington, MA data is through
+property <*>.usarl_osm_data_updated_through datetime; # GCS publication time of Arlington, MA's staged OSM parquet
 property <*>.usded_data_updated_through datetime; # when Dedham data is through
 property <*>.usded_osm_data_updated_through datetime; # GCS publication time of Dedham's staged OSM parquet
 property <*>.ussal_data_updated_through datetime; # when Salem data is through
@@ -332,6 +341,14 @@ property <*>.ussal_predicted_data_updated_through datetime; # GCS publication ti
 property <*>.usmed_predicted_data_updated_through datetime; # GCS publication time of the Boston metro run Medford reads its predictions from (PREDICTED_STAGED_WITH)
 property <*>.usded_predicted_data_updated_through datetime; # GCS publication time of the Boston metro run Dedham reads its predictions from (PREDICTED_STAGED_WITH)
 property <*>.usqcy_predicted_data_updated_through datetime; # GCS publication time of the Boston metro run Quincy reads its predictions from (PREDICTED_STAGED_WITH)
+property <*>.ussau_predicted_data_updated_through datetime; # GCS publication time of the Boston metro run Saugus reads its predictions from (PREDICTED_STAGED_WITH)
+property <*>.usnee_predicted_data_updated_through datetime; # GCS publication time of the Boston metro run Needham reads its predictions from (PREDICTED_STAGED_WITH)
+property <*>.usswa_predicted_data_updated_through datetime; # GCS publication time of the Boston metro run Swampscott reads its predictions from (PREDICTED_STAGED_WITH)
+property <*>.uswlt_predicted_data_updated_through datetime; # GCS publication time of the Boston metro run Waltham reads its predictions from (PREDICTED_STAGED_WITH)
+property <*>.usarl_predicted_data_updated_through datetime; # GCS publication time of the Boston metro run Arlington, MA reads its predictions from (PREDICTED_STAGED_WITH)
+property <*>.usmbh_predicted_data_updated_through datetime; # GCS publication time of the Boston metro run Marblehead reads its predictions from (PREDICTED_STAGED_WITH)
+property <*>.usrev_predicted_data_updated_through datetime; # GCS publication time of the Boston metro run Revere reads its predictions from (PREDICTED_STAGED_WITH)
+property <*>.usmld_predicted_data_updated_through datetime; # GCS publication time of the Boston metro run Malden reads its predictions from (PREDICTED_STAGED_WITH)
 property <*>.uswas_osm_data_updated_through datetime; # GCS publication time of Washington DC's staged OSM parquet
 property <*>.uslax_osm_data_updated_through datetime; # GCS publication time of Los Angeles's staged OSM parquet
 property <*>.arbue_osm_data_updated_through datetime; # GCS publication time of Buenos Aires's staged OSM parquet
