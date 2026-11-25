@@ -118,7 +118,8 @@ def test_a_point_in_a_carved_family_belongs_to_exactly_one_member():
     of gives up exactly their ground."""
     for code in POLYGON_TOWNS:
         family = territory_family(code)
-        assert len(family) > 1, f"{code} has a boundary but interlocks with nothing"
+        if family == (code,):
+            continue  # a city alone on the map: its territory is its polygon by definition
         for lat, lon in _grid(city_territory(code)[0]):
             owners = [member for member in family if in_city_territory(member, lat, lon)]
             # Ground no member's polygon holds (Lexington, the harbour) is no
@@ -131,7 +132,8 @@ def test_boston_is_its_own_boundary_among_its_neighbours():
     # A polygon carves nothing: Boston and the towns are one tessellation.
     assert city_boundary("USBOS") is not None and carved_out_of("USBOS") == ()
     assert {"USBEL", "USBKL", "USBOS", "USCAM", "USSOM", "USWAT"} <= set(territory_family("USSOM"))
-    assert carved_out_of("USCAM") == () and territory_family("USSFO") == ("USSFO",)
+    assert carved_out_of("USCAM") == () and territory_family("USSEA") == ("USSEA",)
+    assert "USBOS" not in territory_family("USSFO")
     places = {
         (42.3736, -71.1190): "USCAM",  # Harvard Square
         (42.3967, -71.1223): "USSOM",  # Davis Square
@@ -151,6 +153,28 @@ def test_boston_is_its_own_boundary_among_its_neighbours():
     for (lat, lon), owner in places.items():
         for member in territory_family("USBOS"):
             assert in_city_territory(member, lat, lon) == (member == owner), (lat, lon, member)
+
+
+def test_a_city_alone_on_the_map_is_its_own_line():
+    """A polygon needs no neighbour: a rectangle drawn around a city takes in
+    its suburbs, and every OSM node and submission there was published as the
+    city's (Portland's box held 15,034 OSM trees outside the city limits)."""
+    assert territory_family("USPOR") == ("USPOR",) and carved_out_of("USPOR") == ()
+    assert in_city_territory("USPOR", 45.5152, -122.6784)  # Pioneer Courthouse Square
+    assert not in_city_territory("USPOR", 45.4871, -122.8037)  # Beaverton
+    assert in_city_territory("USNYC", 40.7580, -73.9855)  # Times Square
+    assert not in_city_territory("USNYC", 40.7178, -74.0431)  # Jersey City, across the Hudson
+    assert not in_city_territory("USDUR", 35.9132, -79.0558)  # Chapel Hill
+
+
+def test_a_polygon_inside_a_rectangle_city_is_carved_out_of_it():
+    """Santa Monica in Los Angeles' box, the District against Northern
+    Virginia's staircase, Oakland's bay line against San Francisco's box."""
+    assert carved_out_of("USLAX") == ("USSMO",)
+    assert in_city_territory("USSMO", 34.0100, -118.4960)  # the pier
+    assert not in_city_territory("USLAX", 34.0100, -118.4960)
+    assert in_city_territory("USLAX", 34.0522, -118.2437)  # downtown Los Angeles
+    assert "USWAS" in carved_out_of("USNVA") and "USOAK" in carved_out_of("USSFO")
 
 
 def test_a_row_is_rehomed_within_its_family_and_nowhere_else():

@@ -63,7 +63,7 @@ root partial datasource usrdl_osm_tree_info extends tree_partition (
 )
 complete where city = 'USRDL' and usrdl_source = 'OSM_USRDL'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usrdl_osm_staging.parquet`
-where (raw_latitude >= 34.0 and raw_latitude < 34.1 and raw_longitude >= -117.26 and raw_longitude < -117.09);
+where (raw_latitude >= 34.0034 and raw_latitude < 34.1027 and raw_longitude >= -117.2491 and raw_longitude < -117.0524);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

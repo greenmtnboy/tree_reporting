@@ -63,7 +63,7 @@ root partial datasource usgjt_osm_tree_info extends tree_partition (
 )
 complete where city = 'USGJT' and usgjt_source = 'OSM_USGJT'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usgjt_osm_staging.parquet`
-where (raw_latitude >= 39.01 and raw_latitude < 39.16 and raw_longitude >= -108.7 and raw_longitude < -108.45);
+where (raw_latitude >= 39.0194 and raw_latitude < 39.1534 and raw_longitude >= -108.6759 and raw_longitude < -108.4595);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

@@ -3,16 +3,25 @@
 # requires-python = ">=3.13"
 # dependencies = ["requests"]
 # ///
-"""Download a US town's boundary into data/raw/boundaries/{code}.json.
+"""Download a US city's boundary into data/raw/boundaries/{code}.json.
 
     cd data/raw && uv run tools/fetch_boundary.py --code USCAM --state 25 --name Cambridge
+    cd data/raw && uv run tools/fetch_boundary.py --code USSEA --at -122.3321,47.6062
 
-The source is the Census Bureau's TIGERweb county-subdivision layer: public
-domain, one tessellation for the whole country (so two neighbours' polygons
-share their edge exactly), and in New England the subdivision *is* the town.
-`--state` is the two-digit state FIPS code and `--name` the town's BASENAME
-there.  A city outside the US needs its own source; write the same one-feature
-file by hand and record where it came from in the properties.
+The source is the Census Bureau's TIGERweb: public domain, and each layer is
+one tessellation for the whole country (so two neighbours' polygons share
+their edge exactly).
+
+- `--state`/`--name` read the county-subdivision layer: in New England the
+  subdivision *is* the town.  `--state` is the two-digit state FIPS code and
+  `--name` the town's BASENAME there.
+- `--at LON,LAT` (the city's `cityConfig.json` centre) is everywhere else:
+  the consolidated city, else the incorporated place, that contains the
+  point.  Places never overlap one another, but a place and a county
+  subdivision can: neighbours must come from the same layer.
+
+A city outside the US needs its own source; write the same one-feature file
+by hand and record where it came from in the properties.
 
 Workstation only: the file is committed, and nothing fetches it at build time.
 After adding one, write the polygon city's CITY_TERRITORY box from the line
@@ -35,10 +44,11 @@ sys.path.insert(0, str(RAW))
 
 from shared.boundary import Boundary, boundary_path, rings_of  # noqa: E402
 
-LAYER_URL = (
-    "https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/"
-    "Places_CouSub_ConCity_SubMCD/MapServer/1/query"
-)
+SERVICE_URL = "https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/Places_CouSub_ConCity_SubMCD/MapServer"
+LAYER_URL = f"{SERVICE_URL}/1/query"
+# The current vintage's layers that hold a city, tried in this order by --at.
+PLACE_LAYERS = {3: "Consolidated Cities", 4: "Incorporated Places"}
+HEADERS = {"User-Agent": "urban-tree-reporting boundary fetch"}
 
 
 def fetch(state: str, name: str) -> dict:
@@ -53,7 +63,7 @@ def fetch(state: str, name: str) -> dict:
             "geometryPrecision": 6,
             "f": "geojson",
         },
-        headers={"User-Agent": "urban-tree-reporting boundary fetch"},
+        headers=HEADERS,
         timeout=120,
     )
     response.raise_for_status()
@@ -61,7 +71,35 @@ def fetch(state: str, name: str) -> dict:
     if len(features) != 1:
         found = [f["properties"].get("NAME") for f in features]
         raise SystemExit(f"expected one subdivision named {name!r} in state {state}, found {found}")
-    return features[0]
+    return features[0], "County Subdivisions", LAYER_URL
+
+
+def fetch_at(longitude: float, latitude: float) -> tuple[dict, str, str]:
+    """The consolidated city, else the incorporated place, containing the point."""
+    for layer, layer_name in PLACE_LAYERS.items():
+        url = f"{SERVICE_URL}/{layer}/query"
+        response = requests.get(
+            url,
+            params={
+                "geometry": f"{longitude},{latitude}",
+                "geometryType": "esriGeometryPoint",
+                "inSR": 4326,
+                "spatialRel": "esriSpatialRelIntersects",
+                "outFields": "GEOID,BASENAME,NAME",
+                "outSR": 4326,
+                "geometryPrecision": 6,
+                "f": "geojson",
+            },
+            headers=HEADERS,
+            timeout=120,
+        )
+        response.raise_for_status()
+        features = response.json().get("features") or []
+        if len(features) > 1:
+            raise SystemExit(f"{len(features)} {layer_name.lower()} contain {longitude},{latitude}")
+        if features:
+            return features[0], layer_name, url
+    raise SystemExit(f"no consolidated city or incorporated place contains {longitude},{latitude}")
 
 
 def envelope(boundary: Boundary, places: int = 4) -> tuple[float, float, float, float]:
@@ -79,11 +117,18 @@ def envelope(boundary: Boundary, places: int = 4) -> tuple[float, float, float, 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--code", required=True, help="Five-letter city code, e.g. USCAM")
-    ap.add_argument("--state", required=True, help="Two-digit state FIPS code, e.g. 25")
-    ap.add_argument("--name", required=True, help="The town's BASENAME in TIGER, e.g. Cambridge")
+    ap.add_argument("--state", help="Two-digit state FIPS code, e.g. 25 (with --name)")
+    ap.add_argument("--name", help="The town's county-subdivision BASENAME in TIGER, e.g. Cambridge")
+    ap.add_argument("--at", help="LON,LAT inside the city: its consolidated city or incorporated place")
     args = ap.parse_args()
 
-    feature = fetch(args.state, args.name)
+    if args.at:
+        longitude, latitude = (float(v) for v in args.at.split(","))
+        feature, layer_name, url = fetch_at(longitude, latitude)
+    elif args.state and args.name:
+        feature, layer_name, url = fetch(args.state, args.name)
+    else:
+        raise SystemExit("pass --at LON,LAT, or --state and --name")
     boundary = Boundary(rings_of(feature["geometry"]))
     document = {
         "type": "FeatureCollection",
@@ -94,8 +139,8 @@ def main() -> None:
                     "city": args.code.upper(),
                     "name": feature["properties"]["NAME"],
                     "geoid": feature["properties"]["GEOID"],
-                    "source": "US Census Bureau TIGERweb, County Subdivisions (public domain)",
-                    "source_url": LAYER_URL,
+                    "source": f"US Census Bureau TIGERweb, {layer_name} (public domain)",
+                    "source_url": url,
                     "retrieved": date.today().isoformat(),
                 },
                 "geometry": feature["geometry"],

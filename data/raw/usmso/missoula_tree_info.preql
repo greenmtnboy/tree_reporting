@@ -63,7 +63,7 @@ root partial datasource usmso_osm_tree_info extends tree_partition (
 )
 complete where city = 'USMSO' and usmso_source = 'OSM_USMSO'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usmso_osm_staging.parquet`
-where (raw_latitude >= 46.78 and raw_latitude < 46.97 and raw_longitude >= -114.15 and raw_longitude < -113.89);
+where (raw_latitude >= 46.7915 and raw_latitude < 46.95 and raw_longitude >= -114.1273 and raw_longitude < -113.9104);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

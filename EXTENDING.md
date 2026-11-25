@@ -164,15 +164,32 @@ Where a river separates two cities a few rectangles follow it. Where towns
 meet street by street (Cambridge and Somerville, Brookline inside Boston) a
 staircase fine enough is hundreds of boxes, slower than the polygon and
 still metres wrong: on Boston's 2.98M published rows a bbox-prefiltered
-`ST_Contains` took 21-465 ms against 1.8-31 s for the staircase. So:
+`ST_Contains` took 21-465 ms against 1.8-31 s for the staircase.
+
+**A US city alone on the map is a polygon too.** Its envelope takes in the
+suburbs, and every OSM node and submission there was published as the
+city's (the audit that moved 49 US cities: Portland's box held 15,034 OSM
+trees outside the city limits, Denver's 155k). Skip a city whose own
+inventory reaches well past its line, because the clip below drops those
+rows: Denver (5.9k trees in its mountain parks, ~16 km out), a model that
+unions several inventories (Los Angeles with West Hollywood, Northern
+Virginia, Atlanta's metro-wide planting), and San Francisco, whose
+predictions cover Daly City. Measure first: the share of the published
+inventory outside the polygon, and how far outside. So:
 
 ```bash
 cd data/raw && uv run tools/fetch_boundary.py --code USCAM --state 25 --name Cambridge
+cd data/raw && uv run tools/fetch_boundary.py --code USSEA --at -122.3321,47.6062
 ```
 
-writes `boundaries/uscam.json` (US Census TIGER, public domain) and prints
-the `CITY_TERRITORY` line: the polygon's envelope, one rectangle. The file is
-the whole registration (`shared/boundary.py`):
+The first reads TIGER's county subdivisions, the New England town; the
+second the consolidated city or incorporated place containing the city's
+`cityConfig.json` centre, everywhere else. Neighbours must come from the
+same layer (a place and a county subdivision can overlap). Either writes
+`boundaries/{code}.json` (US Census TIGER, public domain) and prints the
+`CITY_TERRITORY` line: the polygon's envelope, one rectangle; widen
+`CITY_BOUNDS` if it does not hold it. The file is the whole registration
+(`shared/boundary.py`):
 
 - the town's territory is the polygon inside that envelope;
 - any rectangle city the envelope reaches into gives up that ground

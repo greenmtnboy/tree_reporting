@@ -63,7 +63,7 @@ root partial datasource ussea_osm_tree_info extends tree_partition (
 )
 complete where city = 'USSEA' and ussea_source = 'OSM_USSEA'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/ussea_osm_staging.parquet`
-where (raw_latitude >= 47.48 and raw_latitude < 47.74 and raw_longitude >= -122.46 and raw_longitude < -122.22);
+where (raw_latitude >= 47.4821 and raw_latitude < 47.7353 and raw_longitude >= -122.4598 and raw_longitude < -122.2198);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

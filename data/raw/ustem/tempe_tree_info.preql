@@ -60,7 +60,7 @@ root partial datasource ustem_osm_tree_info extends tree_partition (
 )
 complete where city = 'USTEM' and ustem_source = 'OSM_USTEM'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/ustem_osm_staging.parquet`
-where (raw_latitude >= 33.3 and raw_latitude < 33.48 and raw_longitude >= -112.05 and raw_longitude < -111.8);
+where (raw_latitude >= 33.32 and raw_latitude < 33.4647 and raw_longitude >= -111.9786 and raw_longitude < -111.8772);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

@@ -63,7 +63,7 @@ root partial datasource usbal_osm_tree_info extends tree_partition (
 )
 complete where city = 'USBAL' and usbal_source = 'OSM_USBAL'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usbal_osm_staging.parquet`
-where (raw_latitude >= 39.19 and raw_latitude < 39.38 and raw_longitude >= -76.72 and raw_longitude < -76.52);
+where (raw_latitude >= 39.1972 and raw_latitude < 39.3723 and raw_longitude >= -76.7116 and raw_longitude < -76.5294);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------
