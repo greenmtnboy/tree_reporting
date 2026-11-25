@@ -42,7 +42,8 @@ import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from shared.platforms.arcgis import FeatureLayer, esri_geometry_to_wkt, iter_features
-from shared.ingest import CITY_BOUNDS, emit
+from shared.ingest import emit
+from shared.nrhp import national_register as shared_national_register  # noqa: E402
 
 LANDMARKS = FeatureLayer(
     "https://maps.oxnard.org/arcgis/rest/services/HistoricData/MapServer/0"
@@ -56,10 +57,6 @@ DES_TYPES = {
 # Areas, not points: not published.
 AREA_NAMES = frozenset({"henry t. oxnard district"})
 
-NRHP = "https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer"
-NRHP_LAYERS = (FeatureLayer(f"{NRHP}/0"), FeatureLayer(f"{NRHP}/1"))  # points first
-NRHP_FIELDS = "OBJECTID,NRIS_Refnum,RESNAME,ResType,Address,City,CertDate,STATUS"
-NATIONAL_TYPE = "National Register of Historic Places"
 
 COLUMNS = (
     "landmark_id",
@@ -118,41 +115,7 @@ def designated_landmarks() -> dict[str, list]:
 
 
 def national_register() -> dict[str, list]:
-    lat_min, lat_max, lon_min, lon_max = CITY_BOUNDS["USOXR"]
-    box = {
-        "geometry": f"{lon_min},{lat_min},{lon_max},{lat_max}",
-        "geometryType": "esriGeometryEnvelope",
-        "inSR": "4326",
-        "spatialRel": "esriSpatialRelIntersects",
-    }
-    seen: set[str] = set()
-    rows: dict[str, list] = {k: [] for k in COLUMNS}
-    for layer in NRHP_LAYERS:
-        for feature in fetch_all(
-            layer, out_fields=NRHP_FIELDS, return_geometry=True, out_sr=4326, extra_params=box
-        ):
-            attrs = feature.get("attributes") or {}
-            ref = clean(attrs.get("NRIS_Refnum"))
-            name = clean(attrs.get("RESNAME"))
-            wkt = esri_geometry_to_wkt(feature.get("geometry"))
-            if not ref or not name or wkt is None or ref in seen:
-                continue
-            if (clean(attrs.get("City")) or "").lower() != "oxnard":
-                continue
-            if clean(attrs.get("STATUS")) != "Listed":
-                continue
-            if (clean(attrs.get("ResType")) or "").lower() == "district":
-                continue
-            seen.add(ref)
-            cert = clean(attrs.get("CertDate")) or ""
-            rows["landmark_id"].append(f"oxnard-nr-{ref}")
-            rows["name"].append(name)
-            rows["geometry_raw"].append(wkt)
-            rows["address"].append(clean(attrs.get("Address")))
-            rows["lm_type"].append(NATIONAL_TYPE)
-            rows["register_number"].append(ref)
-            rows["year_designated"].append(int(cert[:4]) if cert[:4].isdigit() else None)
-    return rows
+    return shared_national_register("USOXR", "Oxnard", "oxnard", COLUMNS, required=False)
 
 
 def build() -> pa.Table:

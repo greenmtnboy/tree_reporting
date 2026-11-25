@@ -1,0 +1,145 @@
+import ..tree_common;
+import ..community_tree_info;
+import ..satellite_tree_info;
+import ..tree_dedup;
+
+# Salem's trees were published by Boston's metro model, whose bulk imagery
+# run covers it, until Boston was clipped to its own line (#277).  It is its
+# own city now, its territory drawn by the town's real boundary
+# (boundaries/ussal.json), with the town's own inventory beside the community,
+# satellite, predicted and OSM rows the metro published there.
+
+auto ussal_published_data_updated_through <- greatest(ussal_data_updated_through, ussal_community_data_updated_through, ussal_osm_data_updated_through, ussal_satellite_data_updated_through, ussal_predicted_data_updated_through);
+
+key ussal_source enum<string>['SALEM_MA', 'COMMUNITY_USSAL', 'OSM_USSAL', 'SATELLITE_USSAL', 'PREDICTED_USSAL']; # originating dataset for the row
+
+# Feed the shared cross-source merge (../tree_dedup.preql): it classifies rows
+# by the label's prefix and records provenance from it.
+auto ussal_source_label <- concat(ussal_source, '');
+merge ussal_source_label into source_label;
+
+root datasource salem_ma_update_time (
+    data_updated_through: ussal_data_updated_through
+)
+file `./salem_ma_update_time.py`;
+
+# Only this city's column, so an approval elsewhere does not mark USSAL's
+# Parquet stale. Trilogy probes this as MAX over the one column.
+root datasource ussal_community_update_time (
+    ussal_community_data_updated_through: ussal_community_data_updated_through
+)
+file `../community_update_time.py`;
+
+# Likewise for reviewed aerial-imagery detections: one column, this city's.
+root datasource ussal_satellite_update_time (
+    ussal_satellite_data_updated_through: ussal_satellite_data_updated_through
+)
+file `../satellite_update_time.py`;
+
+# Bulk imagery predictions: the publication time of the staged file this town
+# reads, which is the Boston metro run's (PREDICTED_STAGED_WITH).
+root datasource ussal_predicted_update_time (
+    ussal_predicted_data_updated_through: ussal_predicted_data_updated_through
+)
+file `../predicted_update_time.py`;
+
+# GCS publication time of the staged OSM parquet; it only moves when an
+# extraction is re-run and uploaded. Not a local mtime -- git does not preserve
+# it, so a committed staging file makes every fresh clone look like new data.
+root datasource ussal_osm_update_time (
+    data_updated_through: ussal_osm_data_updated_through
+)
+file `./salem_ma_osm_probe.py`;
+
+# Every partition extends ../tree_dedup.preql's `tree_partition`, which maps
+# the shared raw_* columns; a source that names a column differently re-binds
+# it here (`dbh: ?raw_dbh`).
+root partial datasource salem_ma_raw_tree_info extends tree_partition (
+    data_source: ussal_source,
+    species: ?raw_species,
+)
+complete where city = 'USSAL' and ussal_source = 'SALEM_MA'
+file `./salem_ma_tree_info.py`;
+
+
+# Approved community submissions for this city. The shared ingest script emits
+# every city's rows; the `complete where` clause narrows it to USSAL and makes
+# it a disjoint partition, and the `where` clause is what actually filters --
+# `complete where` asserts, it does not promise a predicate.  A submission
+# recorded under Boston that stands in Salem arrives here as USSAL
+# (`territory_city` in shared/ingest.py).
+root partial datasource ussal_community_tree_info extends tree_partition (
+    data_source: ussal_source,
+    species: ?raw_species,
+)
+complete where city = 'USSAL' and ussal_source = 'COMMUNITY_USSAL'
+file `../community_tree_info.py`
+where city = 'USSAL';
+
+
+# Reviewed aerial-imagery detections (reviewer/satellite.ts), read from the
+# public export the reviewer publishes -- see ../satellite_tree_info.py.  The
+# tiles were reviewed as Boston's; a detection that stands in Salem is
+# re-homed the same way.
+root partial datasource ussal_satellite_tree_info extends tree_partition (
+    data_source: ussal_source,
+    species: ?raw_species,
+)
+complete where city = 'USSAL' and ussal_source = 'SATELLITE_USSAL'
+file `../satellite_tree_info.py`
+where city = 'USSAL';
+
+
+# Bulk aerial-imagery predictions, published without per-tree review (see
+# ../predicted_tree_info.py): the rows of the Boston metro run that fall
+# inside Salem.  The weakest class in the shared merge: any tree another
+# source has absorbs the prediction and takes none of its values.  No
+# `source_kept` guard: a new run at a stricter threshold may rightly shed a
+# quarter of them.
+root partial datasource ussal_predicted_tree_info extends tree_partition (
+    data_source: ussal_source,
+    species: ?raw_species,
+)
+complete where city = 'USSAL' and ussal_source = 'PREDICTED_USSAL'
+file `../predicted_tree_info.py`
+where city = 'USSAL';
+
+
+# OpenStreetMap trees, read from the staged parquet in GCS rather than Overpass
+# -- extraction is decoupled from refresh. OSM overlaps the municipal inventory
+# by construction; the overlap is resolved by ../tree_dedup.preql. The `where`
+# is the city's territory (tools/sync_osm_territory.py keeps it so): a
+# staged extract keeps the territory it was cut with until its next firing.
+root partial datasource ussal_osm_tree_info extends tree_partition (
+    data_source: ussal_source,
+    species: ?raw_species,
+)
+complete where city = 'USSAL' and ussal_source = 'OSM_USSAL'
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/ussal_osm_staging.parquet`
+where (raw_latitude >= 42.4818 and raw_latitude < 42.5521 and raw_longitude >= -70.95 and raw_longitude < -70.7435);
+
+
+# --- Cross-source dedup and attribute merge --------------------------------
+#
+# Shared: ../tree_dedup.preql groups the partitions into one cluster per
+# tree and picks each canonical attribute across the cluster; this city's grid
+# cell size and its calibration live in DEDUP_CELL_METRES in shared/ingest.py.
+merge merged_dbh into diameter_at_breast_height;
+merge merged_latitude into latitude;
+merge merged_longitude into longitude;
+
+
+# The published target extends ../tree_dedup.preql's `published_tree_info`:
+# the canonical columns, the prune, and the guard that refuses a build which
+# lost a quarter of the city.  The two `@source_kept` lines are the same guard
+# per bulk source (`test_every_city_refuses_a_collapsed_build`).
+partial datasource salem_ma_tree_info extends published_tree_info (
+    data_source: ussal_source,
+    ?species,
+    ussal_published_data_updated_through,
+)
+complete where city = 'USSAL'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/ussal_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/ussal_tree_info_v{data_version}.parquet`
+freshness by ussal_published_data_updated_through
+assert @source_kept(tree_id, ussal_source, 'SALEM_MA', 0.75)
+assert @source_kept(tree_id, ussal_source, 'OSM_USSAL', 0.75);

@@ -19,3 +19,11 @@ property <*>.uscam_satellite_data_updated_through datetime; # when published sat
 property <*>.ussom_satellite_data_updated_through datetime; # when published satellite trees for USSOM are through
 property <*>.uswat_satellite_data_updated_through datetime; # when published satellite trees for USWAT are through
 property <*>.usnyc_satellite_data_updated_through datetime; # when published satellite trees for USNYC are through
+property <*>.usnwt_satellite_data_updated_through datetime; # when published satellite trees for USNWT are through
+property <*>.usmil_satellite_data_updated_through datetime; # when published satellite trees for USMIL are through
+property <*>.uspea_satellite_data_updated_through datetime; # when published satellite trees for USPEA are through
+property <*>.uslyn_satellite_data_updated_through datetime; # when published satellite trees for USLYN are through
+property <*>.ussal_satellite_data_updated_through datetime; # when published satellite trees for USSAL are through
+property <*>.usmed_satellite_data_updated_through datetime; # when published satellite trees for USMED are through
+property <*>.usded_satellite_data_updated_through datetime; # when published satellite trees for USDED are through
+property <*>.usqcy_satellite_data_updated_through datetime; # when published satellite trees for USQCY are through

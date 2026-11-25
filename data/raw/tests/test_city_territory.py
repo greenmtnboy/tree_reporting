@@ -121,7 +121,7 @@ def test_a_point_in_a_carved_family_belongs_to_exactly_one_member():
         assert len(family) > 1, f"{code} has a boundary but interlocks with nothing"
         for lat, lon in _grid(city_territory(code)[0]):
             owners = [member for member in family if in_city_territory(member, lat, lon)]
-            # Ground no member's polygon holds (Newton, the harbour) is no
+            # Ground no member's polygon holds (Saugus, the harbour) is no
             # one's; ground inside this town's polygon is this town's alone.
             assert len(owners) <= 1, (code, lat, lon, owners)
             assert (owners == [code]) == city_boundary(code).contains(lat, lon), (code, lat, lon, owners)
@@ -130,7 +130,7 @@ def test_a_point_in_a_carved_family_belongs_to_exactly_one_member():
 def test_boston_is_its_own_boundary_among_its_neighbours():
     # A polygon carves nothing: Boston and the towns are one tessellation.
     assert city_boundary("USBOS") is not None and carved_out_of("USBOS") == ()
-    assert territory_family("USSOM") == ("USBEL", "USBKL", "USBOS", "USCAM", "USSOM", "USWAT")
+    assert {"USBEL", "USBKL", "USBOS", "USCAM", "USSOM", "USWAT"} <= set(territory_family("USSOM"))
     assert carved_out_of("USCAM") == () and territory_family("USSFO") == ("USSFO",)
     places = {
         (42.3736, -71.1190): "USCAM",  # Harvard Square
@@ -139,7 +139,8 @@ def test_boston_is_its_own_boundary_among_its_neighbours():
         (42.3959, -71.1787): "USBEL",  # Belmont Center
         (42.3655, -71.1855): "USWAT",  # Watertown Square
         (42.3550, -71.0656): "USBOS",  # Boston Common
-        (42.3370, -71.2090): None,  # Newton: a town of its own, not yet a city here
+        (42.3370, -71.2090): "USNWT",  # Newton City Hall
+        (42.4645, -71.0107): None,  # Saugus: a town of its own, not yet a city here
         (42.3088, -71.1200): "USBOS",  # the Arnold Arboretum, Jamaica Plain
         (42.3620, -71.0200): "USBOS",  # Logan Airport, East Boston
         (42.3601, -71.0942): "USCAM",  # MIT, on the Cambridge bank of the Charles
@@ -276,18 +277,21 @@ def test_the_territory_reaches_the_composed_osm_partition(code):
         assert (f"ref:local.raw_latitude >= {lat_min} and ref:local.raw_latitude < {lat_max} and "
                 f"ref:local.raw_longitude >= {lon_min} and ref:local.raw_longitude < {lon_max}") in rendered
     assert rendered.count(" or ") == len(city_territory(code)) - 1
-    # A polygon draws the rest: the town's own boundary, or the towns carved
-    # out of this city, each one `geo_contains` on the boundary constant.
-    polygons = len(carved_out_of(code)) + (city_boundary(code) is not None)
-    assert city_territory_where(code).count("geo_contains(") == polygons
-    assert rendered.lower().count("geo_contains") == polygons, rendered
+    # A polygon is applied by the extract (shared/osm.py), never in a model:
+    # a model carrying one ships every town's corners in the cloud bundle.
+    assert "geo_contains" not in city_territory_where(code)
+    assert "geo_contains" not in rendered.lower(), rendered
 
 
-def test_the_boundaries_model_is_written_from_the_files():
-    from tools.sync_osm_territory import BOUNDARIES_MODEL, boundaries_model
+def test_the_published_boundaries_are_the_files():
+    """A worker reads the parquet BOUNDARY_PARQUET names, not the files (the
+    bundle excludes them); the name is the files' hash, so a boundary added
+    or edited without `tools/publish_boundaries.py --publish` fails here."""
+    from shared.boundary import BOUNDARY_PARQUET, published_boundary_name
 
-    assert BOUNDARIES_MODEL.read_text(encoding="utf-8") == boundaries_model(), (
-        "boundaries.preql is not boundaries/*.json; run `python tools/sync_osm_territory.py` from data/raw"
+    assert BOUNDARY_PARQUET == published_boundary_name(), (
+        "shared/boundary.py names a boundary parquet that is not boundaries/*.json; "
+        "run `uv run tools/publish_boundaries.py --publish` from data/raw"
     )
 
 

@@ -180,9 +180,14 @@ the whole registration (`shared/boundary.py`):
 - both inventories are clipped to the line on the way in
   (`clip_to_polygon_territory`, inside `validate_coordinates`), so a border
   tree two towns record publishes once, from the town it stands in;
-- `tools/sync_osm_territory.py` writes `boundaries.preql` (one geography
-  constant per town) and each affected model's OSM `where` as `geo_contains`
-  on it (pytrilogy 0.3.540+), adding `import ..boundaries;`.
+- the town's OSM extract keeps only the nodes inside the polygon, and
+  `tools/sync_osm_territory.py` writes the envelope into its model's OSM
+  `where` (no model carries a polygon);
+- **publish it**: `uv run tools/publish_boundaries.py --publish` uploads every
+  boundary file as one parquet named by their hash and writes that name into
+  `shared/boundary.py`. The files never reach a worker (the cloud bundle
+  excludes them), so an unpublished boundary is a town the cloud does not
+  know; `test_the_published_boundaries_are_the_files` catches it.
 
 A town outside the US needs its own boundary source; write the same
 one-feature file and say where it came from in its properties.
@@ -289,9 +294,22 @@ a rebuild good.
 
 ### 7-8. Cross-city registration and the OSM model
 
-`tree_info.preql`, the app's tree model, is written from the city models by
-`tools/sync_app_models.py` (`new_city.py` runs it; rerun it after changing
-what a city publishes). `full_tree_publish.preql` gets one line in its file list
+`tree_info.preql`, the app's tree model, is generated; never edit it or
+import a city model into it. `tools/sync_app_models.py` writes one
+`root partial datasource` per city over that city's published parquet, read
+from the city's published target: the same `complete where`, the template's
+columns plus the city's extras (`borough`, `height_m`), and `?` wherever the
+target marks a column nullable. It has no merge, no watermark and no
+`freshness by`, because the resolver parses the whole bundle on every
+dashboard and chat request and the parquet already holds what the city
+model derives. `new_city.py` runs it; rerun
+`uv run tools/sync_app_models.py` after any change to what a city publishes
+(a new column, a nullability change), and `--check` is what
+`test_app_models.py` asserts. It stops if the target lacks a template column,
+so a new city's target must publish every column of
+`app_city_trees`. The frontend needs no edit: `ALL_MODEL_SOURCES` in
+`src/src/trilogyModels.ts` bundles `tree_info` and `landmark_info`, never a
+city file, and `test_browser_bundle.py` keeps it that way. `full_tree_publish.preql` gets one line in its file list
 (`test_rollup_reads_every_city`). `osm_staging/{code}_osm_staging.preql` is
 the thin per-city extract model over the shared `osm_rows.py`, selected by
 `where city = '{CODE}'`. Add the city to `OSM_DATA_SOURCES`, give it a
@@ -384,8 +402,10 @@ a lone partial source is never a union candidate. Start from
 ## Landmarks (mandatory)
 
 Every city needs `{slug}_landmarks.preql` even if it yields zero rows;
-`landmark_common.preql` gets the freshness property; `landmark_info.preql` reads
-the published union and names no city. Schema: `landmark_id` (prefixed), `city`, `name`, `geometry_raw`
+`landmark_common.preql` gets the freshness property. `landmark_info.preql`,
+which the app and chat import as `landmark`, reads the published union
+(`full_landmark_info`) and names no city, so a new city needs no edit there:
+its landmarks reach the app once the weekly `publish-landmarks` job has run. Schema: `landmark_id` (prefixed), `city`, `name`, `geometry_raw`
 (WKT), `latitude`, `longitude`; city-specific extras are declared in
 `landmark_common.preql`. The raw datasource `extends landmark_partition` and
 the target `extends published_landmark_info` (both in `landmark_common.preql`,
@@ -396,6 +416,14 @@ the trees' own portal; Overpass, **staged** and never fetched at refresh
 time; a web directory geocoded with Nominatim into a committed CSV, published
 by an uncronned `landmarks-{code}` job (`landmark_staging/`). Prefer the last
 pattern for any curated CSV.
+
+A US city can always fall back to the National Register of Historic Places:
+`shared/nrhp.py` reads the NPS layers within `CITY_BOUNDS` and keeps the
+listings whose `City` is the city. A city with no register of its own is three
+lines, `emit(national_register_table("{CODE}", "{City}", "{prefix}"))`, and
+its probe is `national_register_modified_at` (Belmont's pair is the model); a
+city with a register of its own adds `national_register(...)` beside it
+(Columbus).
 
 **Build a new city's landmark parquet from its own preql** and check the row count against the script's output:
 
@@ -485,6 +513,7 @@ Refresh before you deploy either way.
 
 ```bash
 cd data/raw && uv run --no-project --with pytest --with pyarrow --with "pytrilogy>=0.3.540" --with "duckdb<2" --with requests python -m pytest tests -q
+cd data/raw && uv run tools/sync_app_models.py --check                          # tree_info.preql reads the new city
 cd data && trilogy refresh --dry-run raw/{code}/{slug}_tree_info.preql        # one asset
 cd data && trilogy refresh --dry-run osm_staging/{code}_osm_staging.preql     # one asset
 cd data/raw && uv run tree_enrichment_probe.py                                # lists species needing enrichment

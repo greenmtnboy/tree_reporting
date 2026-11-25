@@ -2,7 +2,6 @@ import ..tree_common;
 import ..community_tree_info;
 import ..satellite_tree_info;
 import ..tree_dedup;
-import ..boundaries;
 
 # Belmont was a partition of Boston's metro model until the map stopped needing
 # one parquet per metro (docs/SEAMLESS_WORLD.md); it is its own city now, with
@@ -116,8 +115,7 @@ root partial datasource usbel_osm_tree_info extends tree_partition (
 )
 complete where city = 'USBEL' and usbel_source = 'OSM_USBEL'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usbel_osm_staging.parquet`
-where (raw_latitude >= 42.375 and raw_latitude < 42.4154 and raw_longitude >= -71.2113 and raw_longitude < -71.1522)
-    and geo_contains(usbel_boundary, geo_point(raw_longitude, raw_latitude));
+where (raw_latitude >= 42.375 and raw_latitude < 42.4154 and raw_longitude >= -71.2113 and raw_longitude < -71.1522);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

@@ -167,5 +167,13 @@
   "USBKL": { "name": "Brookline", "center": [-71.1212, 42.3318] },
   "USBEL": { "name": "Belmont", "center": [-71.1787, 42.3959] },
   "USWAT": { "name": "Watertown", "center": [-71.1828, 42.3709] },
-  "USSOM": { "name": "Somerville", "center": [-71.0995, 42.3876] }
+  "USSOM": { "name": "Somerville", "center": [-71.0995, 42.3876] },
+  "USNWT": { "name": "Newton", "center": [-71.2092, 42.337] },
+  "USMIL": { "name": "Milton", "center": [-71.0662, 42.2495] },
+  "USPEA": { "name": "Peabody", "center": [-70.9287, 42.5279] },
+  "USLYN": { "name": "Lynn", "center": [-70.9495, 42.4668] },
+  "USSAL": { "name": "Salem, MA", "center": [-70.8967, 42.5195] },
+  "USMED": { "name": "Medford", "center": [-71.1062, 42.4184] },
+  "USDED": { "name": "Dedham", "center": [-71.1662, 42.2418] },
+  "USQCY": { "name": "Quincy", "center": [-71.0023, 42.2529] }
 }

@@ -29,7 +29,8 @@ from shared.platforms.arcgis import FeatureLayer, esri_ms_to_datetime, iter_feat
 from shared.ingest import CITY_BOUNDS, emit_freshness
 
 sys.path.insert(0, str(Path(__file__).parent))
-from santa_monica_landmarks import NRHP_LAYERS, REGISTER, clean  # noqa: E402
+from santa_monica_landmarks import REGISTER, clean  # noqa: E402
+from shared.nrhp import NRHP_LAYERS  # noqa: E402
 
 
 def designated_at(value) -> datetime | None:

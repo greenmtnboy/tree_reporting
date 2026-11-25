@@ -1,0 +1,133 @@
+import ..tree_common;
+import ..community_tree_info;
+import ..satellite_tree_info;
+import ..tree_dedup;
+
+# Peabody has no municipal tree inventory on an open portal.  Its trees were
+# published by Boston's metro model, whose bulk imagery run covers it, until
+# Boston was clipped to its own line (#277).  It is its own city now, its
+# territory drawn by the town's real boundary (boundaries/uspea.json): a
+# community-only city (EXTENDING.md) with the satellite, predicted and OSM
+# rows the metro published there, and no municipal term in its watermark.
+
+auto uspea_published_data_updated_through <- greatest(uspea_community_data_updated_through, uspea_osm_data_updated_through, uspea_satellite_data_updated_through, uspea_predicted_data_updated_through);
+
+key uspea_source enum<string>['COMMUNITY_USPEA', 'OSM_USPEA', 'SATELLITE_USPEA', 'PREDICTED_USPEA']; # originating dataset for the row
+
+# Feed the shared cross-source merge (../tree_dedup.preql): it classifies rows
+# by the label's prefix and records provenance from it.
+auto uspea_source_label <- concat(uspea_source, '');
+merge uspea_source_label into source_label;
+
+# Only this city's column, so an approval elsewhere does not mark USPEA's
+# Parquet stale. Trilogy probes this as MAX over the one column.
+root datasource uspea_community_update_time (
+    uspea_community_data_updated_through: uspea_community_data_updated_through
+)
+file `../community_update_time.py`;
+
+# Likewise for reviewed aerial-imagery detections: one column, this city's.
+root datasource uspea_satellite_update_time (
+    uspea_satellite_data_updated_through: uspea_satellite_data_updated_through
+)
+file `../satellite_update_time.py`;
+
+# Bulk imagery predictions: the publication time of the staged file this town
+# reads, which is the Boston metro run's (PREDICTED_STAGED_WITH).
+root datasource uspea_predicted_update_time (
+    uspea_predicted_data_updated_through: uspea_predicted_data_updated_through
+)
+file `../predicted_update_time.py`;
+
+# GCS publication time of the staged OSM parquet; it only moves when an
+# extraction is re-run and uploaded. Not a local mtime -- git does not preserve
+# it, so a committed staging file makes every fresh clone look like new data.
+root datasource uspea_osm_update_time (
+    data_updated_through: uspea_osm_data_updated_through
+)
+file `./peabody_osm_probe.py`;
+
+# Every partition extends ../tree_dedup.preql's `tree_partition`, which maps
+# the shared raw_* columns; a source that names a column differently re-binds
+# it here (`dbh: ?raw_dbh`).
+
+# Approved community submissions for this city. The shared ingest script emits
+# every city's rows; the `complete where` clause narrows it to USPEA and makes
+# it a disjoint partition, and the `where` clause is what actually filters --
+# `complete where` asserts, it does not promise a predicate.  A submission
+# recorded under Boston that stands in Peabody arrives here as USPEA
+# (`territory_city` in shared/ingest.py).
+root partial datasource uspea_community_tree_info extends tree_partition (
+    data_source: uspea_source,
+    species: ?raw_species,
+)
+complete where city = 'USPEA' and uspea_source = 'COMMUNITY_USPEA'
+file `../community_tree_info.py`
+where city = 'USPEA';
+
+
+# Reviewed aerial-imagery detections (reviewer/satellite.ts), read from the
+# public export the reviewer publishes -- see ../satellite_tree_info.py.  The
+# tiles were reviewed as Boston's; a detection that stands in Peabody is
+# re-homed the same way.
+root partial datasource uspea_satellite_tree_info extends tree_partition (
+    data_source: uspea_source,
+    species: ?raw_species,
+)
+complete where city = 'USPEA' and uspea_source = 'SATELLITE_USPEA'
+file `../satellite_tree_info.py`
+where city = 'USPEA';
+
+
+# Bulk aerial-imagery predictions, published without per-tree review (see
+# ../predicted_tree_info.py): the rows of the Boston metro run that fall
+# inside Peabody.  The weakest class in the shared merge: any tree another
+# source has absorbs the prediction and takes none of its values.  No
+# `source_kept` guard: a new run at a stricter threshold may rightly shed a
+# quarter of them.
+root partial datasource uspea_predicted_tree_info extends tree_partition (
+    data_source: uspea_source,
+    species: ?raw_species,
+)
+complete where city = 'USPEA' and uspea_source = 'PREDICTED_USPEA'
+file `../predicted_tree_info.py`
+where city = 'USPEA';
+
+
+# OpenStreetMap trees, read from the staged parquet in GCS rather than Overpass
+# -- extraction is decoupled from refresh. OSM overlaps the municipal inventory
+# by construction; the overlap is resolved by ../tree_dedup.preql. The `where`
+# is the city's territory (tools/sync_osm_territory.py keeps it so): a
+# staged extract keeps the territory it was cut with until its next firing.
+root partial datasource uspea_osm_tree_info extends tree_partition (
+    data_source: uspea_source,
+    species: ?raw_species,
+)
+complete where city = 'USPEA' and uspea_source = 'OSM_USPEA'
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/uspea_osm_staging.parquet`
+where (raw_latitude >= 42.4947 and raw_latitude < 42.5704 and raw_longitude >= -71.0349 and raw_longitude < -70.9127);
+
+
+# --- Cross-source dedup and attribute merge --------------------------------
+#
+# Shared: ../tree_dedup.preql groups the partitions into one cluster per
+# tree and picks each canonical attribute across the cluster; this city's grid
+# cell size and its calibration live in DEDUP_CELL_METRES in shared/ingest.py.
+merge merged_dbh into diameter_at_breast_height;
+merge merged_latitude into latitude;
+merge merged_longitude into longitude;
+
+
+# The published target extends ../tree_dedup.preql's `published_tree_info`:
+# the canonical columns, the prune, and the guard that refuses a build which
+# lost a quarter of the city.  The `@source_kept` line is the same guard for
+# OSM (`test_every_city_refuses_a_collapsed_build`); predicted rows carry none.
+partial datasource peabody_tree_info extends published_tree_info (
+    data_source: uspea_source,
+    ?species,
+    uspea_published_data_updated_through,
+)
+complete where city = 'USPEA'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uspea_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/uspea_tree_info_v{data_version}.parquet`
+freshness by uspea_published_data_updated_through
+assert @source_kept(tree_id, uspea_source, 'OSM_USPEA', 0.75);
