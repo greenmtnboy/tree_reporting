@@ -595,15 +595,23 @@ def test_the_landmark_union_is_published_after_its_inputs():
 
 BUNDLE_INCLUDE = ("*.preql", "*.py", "*.sql", "*.toml", "*.json", "*.csv")
 BUNDLE_DEFAULT_EXCLUDE = ("*/__pycache__/*", "*/.venv/*", "*/tests/*")
-# Mirrors the CLI's own refusal in trilogy/scripts/cloud.py::check_bundle_size,
-# which is `PUBSUB_MAX_BYTES * SAFETY_MARGIN` = 10 MiB * 0.80.  This was 2 MiB
-# and went stale when the platform raised the queued-job limit; at 41 cities the
-# bundle is ~1.9 MB, so the old constant was calling a 23%-full bundle full.
-# Note the CLI measures the *encoded JSON payload* and this sums raw file bytes,
-# so the real send is somewhat larger than what this counts -- escaping in JSON
-# string literals.  The 7% below absorbs that and then some.
+# Mirrors the CLI's own refusal in trilogy/scripts/cloud.py::check_bundle_size
+# (pytrilogy 0.3.541+, the floor .github/workflows/cloud-sync.yml installs):
+# the bundle is sent as JSON when that fits `PUBSUB_MAX_BYTES * SAFETY_MARGIN`
+# = 10 MiB * 0.80, and otherwise gzipped, when the *compressed* bytes must fit
+# that same budget and the JSON must stay under the platform's 24 MiB
+# decompressed ceiling.  The bundle compresses about 4.4x (2026-11-25: 7.97 MB
+# of JSON, 1.81 MB sent), so the decompressed ceiling is the one a growing
+# bundle meets first.  The JSON already exceeds the uncompressed budget, so
+# this needs the gzip-capable CLI.
+# `bundle_payload` builds the JSON the way the CLI does (one {name, content}
+# per file) but not the few hundred bytes of sync metadata around it; the 7%
+# below absorbs those and leaves warning before main's sync is refused.
 BUNDLE_LIMIT_BYTES = int(10 * 1024 * 1024 * 0.80)
-BUNDLE_BUDGET_BYTES = int(BUNDLE_LIMIT_BYTES * 0.93)  # ~590 KB, a dozen cities, of warning
+BUNDLE_DECOMPRESSED_LIMIT_BYTES = 24 * 1024 * 1024
+HEADROOM = 0.93
+BUNDLE_BUDGET_BYTES = int(BUNDLE_LIMIT_BYTES * HEADROOM)
+BUNDLE_DECOMPRESSED_BUDGET_BYTES = int(BUNDLE_DECOMPRESSED_LIMIT_BYTES * HEADROOM)
 
 
 def cloud_exclude() -> tuple[str, ...]:
@@ -683,16 +691,39 @@ def test_excluded_files_are_not_reachable():
     assert not offenders, "excluded from the workspace bundle but still reachable:\n  " + "\n  ".join(offenders)
 
 
+def bundle_payload() -> bytes:
+    """The sync body's JSON, as the CLI encodes it: one {name, content} per file."""
+    import json
+
+    files = [
+        {"name": rel, "content": (DATA_DIR / rel).read_text(encoding="utf-8")}
+        for rel, _ in sorted(bundle_files())
+    ]
+    return json.dumps({"files": files}).encode("utf-8")
+
+
 def test_workspace_bundle_fits_the_api_with_headroom():
+    import gzip
+
     files = bundle_files()
-    total = sum(size for _, size in files)
     biggest = sorted(files, key=lambda f: -f[1])[:5]
-    assert total <= BUNDLE_BUDGET_BYTES, (
-        f"the workspace bundle is {total:,} bytes over {len(files)} files; the API caps a "
-        f"sync body at {BUNDLE_LIMIT_BYTES:,} and this budget stops at "
-        f"{BUNDLE_BUDGET_BYTES:,} so the failure lands here and not on main's sync. "
-        f"Add workstation-only files to [cloud] exclude, or raise the platform's limit. "
-        f"Largest: {biggest}"
+    encoded = bundle_payload()
+    sent = encoded
+    if len(encoded) > BUNDLE_BUDGET_BYTES:
+        sent = gzip.compress(encoded, compresslevel=6, mtime=0)
+    advice = (
+        "so the failure lands here and not on main's sync. Add workstation-only "
+        f"files to [cloud] exclude, or raise the platform's limit. Largest: {biggest}"
+    )
+    assert len(encoded) <= BUNDLE_DECOMPRESSED_BUDGET_BYTES, (
+        f"the workspace bundle is {len(encoded):,} bytes of JSON over {len(files)} files; "
+        f"the platform refuses a body over {BUNDLE_DECOMPRESSED_LIMIT_BYTES:,} decompressed "
+        f"and this budget stops at {BUNDLE_DECOMPRESSED_BUDGET_BYTES:,} " + advice
+    )
+    assert len(sent) <= BUNDLE_BUDGET_BYTES, (
+        f"the workspace bundle sends {len(sent):,} bytes ({len(encoded):,} as JSON) over "
+        f"{len(files)} files; the API caps a sync body at {BUNDLE_LIMIT_BYTES:,} as sent "
+        f"and this budget stops at {BUNDLE_BUDGET_BYTES:,} " + advice
     )
 
 

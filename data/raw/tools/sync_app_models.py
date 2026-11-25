@@ -2,7 +2,7 @@
 
 Run after adding a city, or after changing what a city publishes (from data/raw):
 
-    uv run --no-project --with pyarrow --with "pytrilogy>=0.3.540" python tools/sync_app_models.py
+    uv run --no-project --with pyarrow --with "pytrilogy>=0.3.541" python tools/sync_app_models.py
 
 `tree_info.preql` is what the browser's dashboards and chat resolve their
 PreQL against, and it is no job's entrypoint. It used to import every city's
