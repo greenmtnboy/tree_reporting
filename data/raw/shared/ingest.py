@@ -3661,22 +3661,22 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "USMLD": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "USREV": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "USMBH": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
+    # Arlington, MA measured 2026-11-25 against its staged extract
+    # (osm_dedup_validation.py with the ingest's local parquet, 116 OSM
+    # trees): mutual-NN 100% under 5m, 67% in 5-10m, 43% in 10-20m.  The
+    # tool suggests a 20m cell, but past 14m each added false flag
+    # outweighs the true one (20m: +5 true/+7 false); 10m costs 5.9% false
+    # flags at 64.9% recall.  Default kept, as Salem's and Dedham's.
     "USARL": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "USWLT": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "USSWA": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
-    "USNEE": 10,
-    # NOT YET CALIBRATED: default; measure after the first build.
+    # Saugus, Needham, Swampscott, Waltham, Marblehead, Revere, Malden: no
+    # inventory, so nothing to calibrate against.  Default.
     "USSAU": 10,
+    "USNEE": 10,
+    "USSWA": 10,
+    "USWLT": 10,
+    "USMBH": 10,
+    "USREV": 10,
+    "USMLD": 10,
     # Boston-metro towns added after Boston was clipped to its own line.
     # Salem and Dedham measured 2026-11-24 against their staged extracts
     # (osm_dedup_validation.py with the ingest's local parquet): mutual-NN
