@@ -3,7 +3,6 @@ import ..community_tree_info;
 import ..satellite_tree_info;
 import ..tree_dedup;
 import ..tree_height;
-import ..boundaries;
 
 # Cambridge was a partition of Boston's metro model until the map stopped needing
 # one parquet per metro (docs/SEAMLESS_WORLD.md); it is its own city now, with
@@ -144,8 +143,7 @@ root partial datasource uscam_osm_tree_info extends tree_partition (
 )
 complete where city = 'USCAM' and uscam_source = 'OSM_USCAM'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/uscam_osm_staging.parquet`
-where (raw_latitude >= 42.3524 and raw_latitude < 42.4043 and raw_longitude >= -71.1604 and raw_longitude < -71.0639)
-    and geo_contains(uscam_boundary, geo_point(raw_longitude, raw_latitude));
+where (raw_latitude >= 42.3524 and raw_latitude < 42.4043 and raw_longitude >= -71.1604 and raw_longitude < -71.0639);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

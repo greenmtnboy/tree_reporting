@@ -11,24 +11,43 @@ a file in `data/raw/boundaries/` is its polygon instead:
                                 WGS84 (longitude, latitude), with where it
                                 came from in its properties
 
-Dropping a file there is the whole registration.  `shared.ingest` reads the
+Dropping a file there is the registration.  `shared.ingest` reads the
 polygon for `in_city_territory`, carves it out of any rectangle city whose
-box it sits in, and `tools/sync_osm_territory.py` writes it into the city
-models as `geo_contains` (`boundaries.preql`).  `tools/fetch_boundary.py`
-downloads one from the US Census.
+box it sits in, and the OSM extract keeps only the nodes inside it.
+`tools/fetch_boundary.py` downloads one from the US Census.
 
-No dependency beyond the standard library: this is imported by every ingest,
+**The files never reach a worker.**  Every polygon is a few tens of kilobytes
+and the cloud sync caps its body, so the directory is excluded from the
+bundle (`[cloud] exclude` in trilogy.toml).  `tools/publish_boundaries.py`
+uploads them as one parquet named by their content hash and writes that name
+into `BOUNDARY_PARQUET` below; a worker, which has no `boundaries/` directory,
+reads the parquet, and a checkout reads the files.  The hash keeps the two
+the same: `test_the_published_boundaries_are_the_files` fails until the files
+are republished.  The parquet also carries each polygon as WKT, for anything
+outside Python that wants the lines.
+
+No dependency beyond the standard library (pyarrow only on a worker, to read
+the parquet): this is imported by every ingest,
 and the predicted ingest asks it about millions of rows, so `contains` reads
 only the edges that cross the point's latitude band.
 """
 
 from __future__ import annotations
 
+import hashlib
+import io
 import json
+import os
+import time
+import urllib.request
 from functools import lru_cache
 from pathlib import Path
 
 BOUNDARY_DIR = Path(__file__).resolve().parents[1] / "boundaries"
+
+# Written by tools/publish_boundaries.py --publish; do not edit by hand.
+BOUNDARY_PARQUET = "boundaries_b06a25869ca1.parquet"
+BOUNDARY_PUBLIC_PREFIX = "https://storage.googleapis.com/trilogy_public_models/duckdb/trees/reference"
 
 Ring = list[tuple[float, float]]  # (longitude, latitude), closed
 Edge = tuple[float, float, float, float]  # lon0, lat0, lon1, lat1
@@ -134,19 +153,67 @@ def boundary_path(city_code: str) -> Path:
     return BOUNDARY_DIR / f"{city_code.lower()}.json"
 
 
+def boundary_files() -> list[Path]:
+    return sorted(BOUNDARY_DIR.glob("*.json"))
+
+
+def boundary_feature(path: Path) -> dict:
+    """The one Feature a boundary file holds."""
+    document = json.loads(path.read_text(encoding="utf-8"))
+    features = document["features"] if document.get("type") == "FeatureCollection" else [document]
+    if len(features) != 1:
+        raise ValueError(f"{path.name} must hold exactly one feature, found {len(features)}")
+    return features[0]
+
+
+def boundary_digest(files: list[Path] | None = None) -> str:
+    """The first 12 hex digits of a sha256 over every file's name and bytes,
+    line endings folded to LF so a Windows checkout and CI agree."""
+    digest = hashlib.sha256()
+    for path in files if files is not None else boundary_files():
+        digest.update(path.name.encode() + b"\0")
+        digest.update(path.read_bytes().replace(b"\r\n", b"\n") + b"\0")
+    return digest.hexdigest()[:12]
+
+
+def published_boundary_name(files: list[Path] | None = None) -> str:
+    return f"boundaries_{boundary_digest(files)}.parquet"
+
+
+def _published_geometries() -> dict[str, dict]:
+    """The published parquet's polygons, by city: what a worker reads."""
+    import pyarrow.parquet as pq
+
+    url = os.environ.get("BOUNDARY_PARQUET_URL") or f"{BOUNDARY_PUBLIC_PREFIX}/{BOUNDARY_PARQUET}"
+    request = urllib.request.Request(url, headers={"User-Agent": "urban-tree-reporting boundaries"})
+    for attempt in range(4):
+        try:
+            with urllib.request.urlopen(request, timeout=120) as response:
+                data = response.read()
+            break
+        except OSError:
+            if attempt == 3:
+                raise
+            time.sleep(5 * (attempt + 1))
+    table = pq.read_table(io.BytesIO(data), columns=["city", "geometry"])
+    return {city: json.loads(geometry) for city, geometry in zip(*(table[c].to_pylist() for c in ("city", "geometry")))}
+
+
+@lru_cache(maxsize=1)
+def _geometries() -> dict[str, dict]:
+    files = boundary_files()
+    if files:
+        return {path.stem.upper(): boundary_feature(path)["geometry"] for path in files}
+    return _published_geometries()
+
+
 def boundary_codes() -> tuple[str, ...]:
-    """Every city with a boundary file, sorted."""
-    return tuple(sorted(path.stem.upper() for path in BOUNDARY_DIR.glob("*.json")))
+    """Every city with a boundary, sorted."""
+    return tuple(sorted(_geometries()))
 
 
 @lru_cache(maxsize=None)
 def city_boundary(city_code: str) -> Boundary | None:
     """The city's polygon, or None for a city that is rectangles only."""
-    path = boundary_path(city_code)
-    if not path.exists():
-        return None
-    document = json.loads(path.read_text(encoding="utf-8"))
-    features = document["features"] if document.get("type") == "FeatureCollection" else [document]
-    if len(features) != 1:
-        raise ValueError(f"{path.name} must hold exactly one feature, found {len(features)}")
-    return Boundary(rings_of(features[0]["geometry"]))
+    geometry = _geometries().get(city_code.upper())
+    return None if geometry is None else Boundary(rings_of(geometry))

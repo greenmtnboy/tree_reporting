@@ -180,9 +180,14 @@ the whole registration (`shared/boundary.py`):
 - both inventories are clipped to the line on the way in
   (`clip_to_polygon_territory`, inside `validate_coordinates`), so a border
   tree two towns record publishes once, from the town it stands in;
-- `tools/sync_osm_territory.py` writes `boundaries.preql` (one geography
-  constant per town) and each affected model's OSM `where` as `geo_contains`
-  on it (pytrilogy 0.3.540+), adding `import ..boundaries;`.
+- the town's OSM extract keeps only the nodes inside the polygon, and
+  `tools/sync_osm_territory.py` writes the envelope into its model's OSM
+  `where` (no model carries a polygon);
+- **publish it**: `uv run tools/publish_boundaries.py --publish` uploads every
+  boundary file as one parquet named by their hash and writes that name into
+  `shared/boundary.py`. The files never reach a worker (the cloud bundle
+  excludes them), so an unpublished boundary is a town the cloud does not
+  know; `test_the_published_boundaries_are_the_files` catches it.
 
 A town outside the US needs its own boundary source; write the same
 one-feature file and say where it came from in its properties.
@@ -395,6 +400,14 @@ the trees' own portal; Overpass, **staged** and never fetched at refresh
 time; a web directory geocoded with Nominatim into a committed CSV, published
 by an uncronned `landmarks-{code}` job (`landmark_staging/`). Prefer the last
 pattern for any curated CSV.
+
+A US city can always fall back to the National Register of Historic Places:
+`shared/nrhp.py` reads the NPS layers within `CITY_BOUNDS` and keeps the
+listings whose `City` is the city. A city with no register of its own is three
+lines, `emit(national_register_table("{CODE}", "{City}", "{prefix}"))`, and
+its probe is `national_register_modified_at` (Belmont's pair is the model); a
+city with a register of its own adds `national_register(...)` beside it
+(Columbus).
 
 **Build a new city's landmark parquet from its own preql**, never from
 `landmark_info.preql`, and check the row count against the script's output:

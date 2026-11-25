@@ -695,17 +695,15 @@ def test_workspace_bundle_fits_the_api_with_headroom():
     )
 
 
-def test_every_boundary_file_ships_in_the_bundle():
-    """An ingest reads its town's boundary at run time (shared/boundary.py),
-    and a file the sync does not ship is a town with no polygon: its inventory
-    is not clipped and its metro is not carved.  The bundle takes .json, not
-    .geojson, which is why the files are named that way."""
-    from shared.boundary import boundary_codes, boundary_path
+def test_no_boundary_file_ships_in_the_bundle():
+    """Every town's polygon is tens of kilobytes and the sync caps its body,
+    so a worker reads the one published parquet instead (shared/boundary.py,
+    `test_the_published_boundaries_are_the_files`).  A file that shipped would
+    also be read in place of the parquet: a worker with some files and not
+    others would see only those towns."""
+    from shared.boundary import boundary_files
 
     shipped = {rel for rel, _ in bundle_files()}
-    missing = [
-        code for code in boundary_codes()
-        if boundary_path(code).relative_to(DATA_DIR).as_posix() not in shipped
-    ]
-    assert boundary_codes(), "no boundary files found"
-    assert not missing, f"boundary files the cloud sync would not ship: {missing}"
+    assert boundary_files(), "no boundary files found"
+    leaked = [p.name for p in boundary_files() if p.relative_to(DATA_DIR).as_posix() in shipped]
+    assert not leaked, f"boundary files the cloud sync would ship: {leaked}; exclude raw/boundaries/*"

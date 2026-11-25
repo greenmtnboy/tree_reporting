@@ -37,12 +37,15 @@ from shared.ingest import (  # noqa: E402
 )
 
 TOWNS = ("USBEL", "USBKL", "USCAM", "USSOM", "USWAT")
+# Towns added after Boston was clipped to its own line: no partition of
+# Boston's ever, but ground its metro run and reviews covered.
+METRO_TOWNS = ("USDED", "USLYN", "USMED", "USMIL", "USNWT", "USPEA", "USQCY", "USSAL")
 
 HARVARD_SQUARE = (42.3736, -71.1190)  # Cambridge
 DAVIS_SQUARE = (42.3967, -71.1223)  # Somerville
 COOLIDGE_CORNER = (42.3420, -71.1212)  # Brookline
 BOSTON_COMMON = (42.3550, -71.0656)  # Boston
-NEWTON = (42.3370, -71.2090)  # in Boston's metro box, no city of its own
+SAUGUS = (42.4645, -71.0107)  # inside the metro run, no city of its own yet
 
 
 def load(name: str):
@@ -93,7 +96,7 @@ def test_the_towns_are_cities_and_boston_no_longer_claims_them():
     }
 
 
-@pytest.mark.parametrize("code", TOWNS)
+@pytest.mark.parametrize("code", TOWNS + METRO_TOWNS)
 def test_a_town_takes_every_class_of_row_boston_published_there(code: str):
     """Boston publishes satellite and predicted rows; ground carved out of it
     must keep publishing them, or the split deletes trees from the map."""
@@ -113,7 +116,7 @@ def test_an_inventory_row_in_the_next_town_is_dropped(capsys):
 
 
 def test_boston_keeps_only_the_rows_inside_its_own_line():
-    kept = clip_to_polygon_territory(points(BOSTON_COMMON, COOLIDGE_CORNER, NEWTON), city_code="USBOS")
+    kept = clip_to_polygon_territory(points(BOSTON_COMMON, COOLIDGE_CORNER, SAUGUS), city_code="USBOS")
     assert kept["tree_id"].to_pylist() == ["t0"]
 
 
@@ -179,7 +182,7 @@ METRO_RUN = [
     prediction("pred-cam", HARVARD_SQUARE),
     prediction("pred-som", DAVIS_SQUARE),
     prediction("pred-bos", BOSTON_COMMON),
-    prediction("pred-ring", NEWTON),
+    prediction("pred-ring", SAUGUS),
 ]
 
 
@@ -194,14 +197,14 @@ def test_each_prediction_of_the_metro_run_publishes_in_exactly_one_city(tmp_path
     monkeypatch.setenv("PREDICTED_STAGING_URL", str(tmp_path / "{code}.parquet"))
 
     published: dict[str, str] = {}
-    for code in ("USBOS", *TOWNS):
+    for code in ("USBOS", *TOWNS, *METRO_TOWNS):
         for table in predicted.city_tables(code):
             for row in table.to_pylist():
                 assert row["tree_id"] not in published, f"{row['tree_id']} published by two cities"
                 assert row["data_source"] == f"PREDICTED_{code}" and row["city"] == code
                 published[row["tree_id"]] = code
     assert published == {"pred-cam": "USCAM", "pred-som": "USSOM", "pred-bos": "USBOS"}, (
-        "a prediction in a town that is not yet a city (Newton) publishes nowhere"
+        "a prediction in a town that is not yet a city (Saugus) publishes nowhere"
     )
 
 
@@ -234,8 +237,8 @@ def test_a_towns_predicted_watermark_is_the_metro_files(monkeypatch):
 
     monkeypatch.setattr(predicted_update_time, "staging_modified_at", modified_at)
     by_city = predicted_update_time.fetch_modified_by_city()
-    assert set(TOWNS) <= set(by_city)
-    assert asked.count("usbos_predicted_staging.parquet") == 1 + len(TOWNS)
+    assert set(TOWNS + METRO_TOWNS) <= set(by_city)
+    assert asked.count("usbos_predicted_staging.parquet") == 1 + len(TOWNS) + len(METRO_TOWNS)
 
 
 def test_cambridge_reads_the_metros_canopy_table():
