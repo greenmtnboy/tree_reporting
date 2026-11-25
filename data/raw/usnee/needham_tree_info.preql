@@ -1,0 +1,133 @@
+import ..tree_common;
+import ..community_tree_info;
+import ..satellite_tree_info;
+import ..tree_dedup;
+
+# Needham has no municipal tree inventory on an open portal.  Its trees were
+# published by Boston's metro model, whose bulk imagery run covers it, until
+# Boston was clipped to its own line (#277).  It is its own city now, its
+# territory drawn by the town's real boundary (boundaries/usnee.json): a
+# community-only city (EXTENDING.md) with the satellite, predicted and OSM
+# rows the metro published there, and no municipal term in its watermark.
+
+auto usnee_published_data_updated_through <- greatest(usnee_community_data_updated_through, usnee_osm_data_updated_through, usnee_satellite_data_updated_through, usnee_predicted_data_updated_through);
+
+key usnee_source enum<string>['COMMUNITY_USNEE', 'OSM_USNEE', 'SATELLITE_USNEE', 'PREDICTED_USNEE']; # originating dataset for the row
+
+# Feed the shared cross-source merge (../tree_dedup.preql): it classifies rows
+# by the label's prefix and records provenance from it.
+auto usnee_source_label <- concat(usnee_source, '');
+merge usnee_source_label into source_label;
+
+# Only this city's column, so an approval elsewhere does not mark USNEE's
+# Parquet stale. Trilogy probes this as MAX over the one column.
+root datasource usnee_community_update_time (
+    usnee_community_data_updated_through: usnee_community_data_updated_through
+)
+file `../community_update_time.py`;
+
+# Likewise for reviewed aerial-imagery detections: one column, this city's.
+root datasource usnee_satellite_update_time (
+    usnee_satellite_data_updated_through: usnee_satellite_data_updated_through
+)
+file `../satellite_update_time.py`;
+
+# Bulk imagery predictions: the publication time of the staged file this town
+# reads, which is the Boston metro run's (PREDICTED_STAGED_WITH).
+root datasource usnee_predicted_update_time (
+    usnee_predicted_data_updated_through: usnee_predicted_data_updated_through
+)
+file `../predicted_update_time.py`;
+
+# GCS publication time of the staged OSM parquet; it only moves when an
+# extraction is re-run and uploaded. Not a local mtime -- git does not preserve
+# it, so a committed staging file makes every fresh clone look like new data.
+root datasource usnee_osm_update_time (
+    data_updated_through: usnee_osm_data_updated_through
+)
+file `./needham_osm_probe.py`;
+
+# Every partition extends ../tree_dedup.preql's `tree_partition`, which maps
+# the shared raw_* columns; a source that names a column differently re-binds
+# it here (`dbh: ?raw_dbh`).
+
+# Approved community submissions for this city. The shared ingest script emits
+# every city's rows; the `complete where` clause narrows it to USNEE and makes
+# it a disjoint partition, and the `where` clause is what actually filters --
+# `complete where` asserts, it does not promise a predicate.  A submission
+# recorded under Boston that stands in Needham arrives here as USNEE
+# (`territory_city` in shared/ingest.py).
+root partial datasource usnee_community_tree_info extends tree_partition (
+    data_source: usnee_source,
+    species: ?raw_species,
+)
+complete where city = 'USNEE' and usnee_source = 'COMMUNITY_USNEE'
+file `../community_tree_info.py`
+where city = 'USNEE';
+
+
+# Reviewed aerial-imagery detections (reviewer/satellite.ts), read from the
+# public export the reviewer publishes -- see ../satellite_tree_info.py.  The
+# tiles were reviewed as Boston's; a detection that stands in Needham is
+# re-homed the same way.
+root partial datasource usnee_satellite_tree_info extends tree_partition (
+    data_source: usnee_source,
+    species: ?raw_species,
+)
+complete where city = 'USNEE' and usnee_source = 'SATELLITE_USNEE'
+file `../satellite_tree_info.py`
+where city = 'USNEE';
+
+
+# Bulk aerial-imagery predictions, published without per-tree review (see
+# ../predicted_tree_info.py): the rows of the Boston metro run that fall
+# inside Needham.  The weakest class in the shared merge: any tree another
+# source has absorbs the prediction and takes none of its values.  No
+# `source_kept` guard: a new run at a stricter threshold may rightly shed a
+# quarter of them.
+root partial datasource usnee_predicted_tree_info extends tree_partition (
+    data_source: usnee_source,
+    species: ?raw_species,
+)
+complete where city = 'USNEE' and usnee_source = 'PREDICTED_USNEE'
+file `../predicted_tree_info.py`
+where city = 'USNEE';
+
+
+# OpenStreetMap trees, read from the staged parquet in GCS rather than Overpass
+# -- extraction is decoupled from refresh. OSM overlaps the municipal inventory
+# by construction; the overlap is resolved by ../tree_dedup.preql. The `where`
+# is the city's territory (tools/sync_osm_territory.py keeps it so): a
+# staged extract keeps the territory it was cut with until its next firing.
+root partial datasource usnee_osm_tree_info extends tree_partition (
+    data_source: usnee_source,
+    species: ?raw_species,
+)
+complete where city = 'USNEE' and usnee_source = 'OSM_USNEE'
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usnee_osm_staging.parquet`
+where (raw_latitude >= 42.2548 and raw_latitude < 42.3166 and raw_longitude >= -71.3013 and raw_longitude < -71.1882);
+
+
+# --- Cross-source dedup and attribute merge --------------------------------
+#
+# Shared: ../tree_dedup.preql groups the partitions into one cluster per
+# tree and picks each canonical attribute across the cluster; this city's grid
+# cell size and its calibration live in DEDUP_CELL_METRES in shared/ingest.py.
+merge merged_dbh into diameter_at_breast_height;
+merge merged_latitude into latitude;
+merge merged_longitude into longitude;
+
+
+# The published target extends ../tree_dedup.preql's `published_tree_info`:
+# the canonical columns, the prune, and the guard that refuses a build which
+# lost a quarter of the city.  The `@source_kept` line is the same guard for
+# OSM (`test_every_city_refuses_a_collapsed_build`); predicted rows carry none.
+partial datasource needham_tree_info extends published_tree_info (
+    data_source: usnee_source,
+    ?species,
+    usnee_published_data_updated_through,
+)
+complete where city = 'USNEE'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usnee_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usnee_tree_info_v{data_version}.parquet`
+freshness by usnee_published_data_updated_through
+assert @source_kept(tree_id, usnee_source, 'OSM_USNEE', 0.75);

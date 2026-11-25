@@ -81,6 +81,9 @@ OSM_UNMAPPED_CITIES: frozenset[str] = frozenset(
     {
         # 2026-10-30: 0 nodes in the territory; Madison's isthmus 3,825.
         "USSTO",
+        # 2026-11-25: 0 nodes in the territory; Lynn's box next door 7,009
+        # (one request, the maps.mail.ru mirror).
+        "USSWA",
     }
 )
 
@@ -99,6 +102,14 @@ _CIRCUMFERENCE_RE = re.compile(r"^\s*(\d+(?:[.,]\d+)?)\s*(cm|m)?\s*$", re.I)
 # that type", which is a long way from "you forgot a column".  London is the
 # only instance today.
 OSM_CITY_NAMES: dict[str, str] = {
+    "USMLD": "Malden",
+    "USREV": "Revere",
+    "USMBH": "Marblehead",
+    "USARL": "Arlington, MA",
+    "USWLT": "Waltham",
+    "USSWA": "Swampscott",
+    "USNEE": "Needham",
+    "USSAU": "Saugus",
     "USQCY": "Quincy",
     "USDED": "Dedham",
     "USMED": "Medford",

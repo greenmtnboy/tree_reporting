@@ -27,3 +27,11 @@ property <*>.ussal_satellite_data_updated_through datetime; # when published sat
 property <*>.usmed_satellite_data_updated_through datetime; # when published satellite trees for USMED are through
 property <*>.usded_satellite_data_updated_through datetime; # when published satellite trees for USDED are through
 property <*>.usqcy_satellite_data_updated_through datetime; # when published satellite trees for USQCY are through
+property <*>.ussau_satellite_data_updated_through datetime; # when published satellite trees for USSAU are through
+property <*>.usnee_satellite_data_updated_through datetime; # when published satellite trees for USNEE are through
+property <*>.usswa_satellite_data_updated_through datetime; # when published satellite trees for USSWA are through
+property <*>.uswlt_satellite_data_updated_through datetime; # when published satellite trees for USWLT are through
+property <*>.usarl_satellite_data_updated_through datetime; # when published satellite trees for USARL are through
+property <*>.usmbh_satellite_data_updated_through datetime; # when published satellite trees for USMBH are through
+property <*>.usrev_satellite_data_updated_through datetime; # when published satellite trees for USREV are through
+property <*>.usmld_satellite_data_updated_through datetime; # when published satellite trees for USMLD are through

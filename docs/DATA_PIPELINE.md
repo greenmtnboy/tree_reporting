@@ -297,8 +297,8 @@ boundary is `boundaries/{code}.json`, its `CITY_TERRITORY` entry is that
 polygon's envelope, and membership is the polygon (`shared/boundary.py`).
 It is carved out of whichever rectangle city its envelope sits in. Boston
 is a polygon too, so it and Cambridge, Somerville, Brookline, Belmont and
-Watertown meet edge to edge, and ground in none of them (Newton, Milton, the
-North Shore) belongs to no city: the metro's predictions there stay staged,
+Watertown meet edge to edge, and ground in none of them (Everett, Chelsea,
+the towns still to be added) belongs to no city: the metro's predictions there stay staged,
 unpublished, until the town gets a boundary file and becomes a city.
 Three things follow where a polygon draws the line,
 and only there:
