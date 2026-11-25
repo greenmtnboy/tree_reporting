@@ -310,8 +310,16 @@ and only there:
   another: every community, satellite and predicted row in those five towns
   was recorded as Boston's. The per-city community and satellite freshness
   columns move a family together for the same reason.
-- **The staged OSM read is `geo_contains`** on the constants in
-  `boundaries.preql`, both written by `tools/sync_osm_territory.py`.
+- **The OSM extract keeps the nodes inside the polygon** (`in_city_territory`
+  in `shared/osm.py`); the model's read of the staged extract filters by the
+  envelope only (`tools/sync_osm_territory.py`). No model carries a polygon.
+  After changing a boundary file, force the town's `osm-{code}` job.
+- **A worker reads the polygons from one parquet**, not the files: the cloud
+  bundle excludes `raw/boundaries/*` (a polygon is tens of kilobytes and the
+  sync caps its body), and `tools/publish_boundaries.py --publish` uploads
+  them under their content hash and names it in `shared/boundary.py`
+  (`BOUNDARY_PARQUET`). `test_the_published_boundaries_are_the_files` fails
+  until a new or edited file is published.
 
 A prediction run and a LIDAR table cover ground, not a city, so a carved town
 reads the metro's staged file for each (`PREDICTED_STAGED_WITH`,

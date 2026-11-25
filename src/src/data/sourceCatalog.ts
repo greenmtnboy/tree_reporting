@@ -11,6 +11,8 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
+  { city: 'Dedham', label: 'Town of Dedham GIS - Tree Inventory (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://www.arcgis.com/home/item.html?id=9d23e28c88984fa0903da95792883d4a' },
+  { city: 'Salem, MA', label: 'City of Salem, MA (SalemGIS, Salem DPW) - Salem Street Trees (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://www.arcgis.com/home/item.html?id=df1d66111f2d481db82564d5b820dee0' },
   { city: 'Somerville', label: 'City of Somerville - TreeKeeper public tree inventory', url: 'https://somervillema.treekeepersoftware.com/' },
   { city: 'Watertown', label: 'City of Watertown - 2022 Tree Inventory (MapGeo)', url: 'https://watertownma.mapgeo.io/' },
   { city: 'Belmont', label: 'Town of Belmont - TreeKeeper public tree inventory', url: 'https://belmontma.treekeepersoftware.com/' },
@@ -199,6 +201,12 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
   // supplemental OpenStreetMap nodes.
   { city: 'Milos', label: 'Community submissions (no municipal inventory)' },
   { city: 'Santorini', label: 'Community submissions (no municipal inventory)' },
+  { city: 'Newton', label: 'Community submissions, OpenStreetMap and the Boston metro aerial-imagery run (no municipal inventory)' },
+  { city: 'Milton', label: 'Community submissions, OpenStreetMap and the Boston metro aerial-imagery run (no municipal inventory)' },
+  { city: 'Peabody', label: 'Community submissions, OpenStreetMap and the Boston metro aerial-imagery run (no municipal inventory)' },
+  { city: 'Lynn', label: 'Community submissions, OpenStreetMap and the Boston metro aerial-imagery run (no municipal inventory)' },
+  { city: 'Medford', label: 'Community submissions, OpenStreetMap and the Boston metro aerial-imagery run (no municipal inventory)' },
+  { city: 'Quincy', label: 'Community submissions, OpenStreetMap and the Boston metro aerial-imagery run (no municipal inventory)' },
   // Community submissions are reviewed and approved before they reach the map;
   // each published tree carries a COMMUNITY_<CITY> value in its data_source column.
   { city: 'All cities', label: 'Community submissions, reviewed before publication' },
@@ -217,6 +225,14 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
+  { city: 'Quincy', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
+  { city: 'Dedham', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
+  { city: 'Medford', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
+  { city: 'Salem, MA', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
+  { city: 'Lynn', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
+  { city: 'Peabody', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
+  { city: 'Milton', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
+  { city: 'Newton', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
   { city: 'Somerville', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
   { city: 'Watertown', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
   { city: 'Belmont', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },

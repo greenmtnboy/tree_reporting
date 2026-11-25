@@ -130,9 +130,7 @@ def run_boston(
     from test_satellite_reconciliation import write_modifications
 
     conn = duckdb.connect()
-    # Boston's staged OSM extract is read through the polygons of the towns
-    # carved out of it (`geo_contains`), which DuckDB answers from its spatial
-    # extension; a cloud refresh loads it the same way (`enable_spatial`).
+    # The spatial extension, as a cloud refresh loads it (`enable_spatial`).
     conn.execute("INSTALL spatial; LOAD spatial;")
     by_script = {
         "boston_tree_info.py": (MUNICIPAL if municipal is None else municipal, BOSTON_RENAME),

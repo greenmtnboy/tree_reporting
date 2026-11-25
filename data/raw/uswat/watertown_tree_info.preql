@@ -2,7 +2,6 @@ import ..tree_common;
 import ..community_tree_info;
 import ..satellite_tree_info;
 import ..tree_dedup;
-import ..boundaries;
 
 # Watertown was a partition of Boston's metro model until the map stopped needing
 # one parquet per metro (docs/SEAMLESS_WORLD.md); it is its own city now, with
@@ -116,8 +115,7 @@ root partial datasource uswat_osm_tree_info extends tree_partition (
 )
 complete where city = 'USWAT' and uswat_source = 'OSM_USWAT'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/uswat_osm_staging.parquet`
-where (raw_latitude >= 42.3584 and raw_latitude < 42.3861 and raw_longitude >= -71.2171 and raw_longitude < -71.1399)
-    and geo_contains(uswat_boundary, geo_point(raw_longitude, raw_latitude));
+where (raw_latitude >= 42.3584 and raw_latitude < 42.3861 and raw_longitude >= -71.2171 and raw_longitude < -71.1399);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

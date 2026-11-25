@@ -192,6 +192,14 @@ select * from (values
     ('USBKL', 339),
     ('USBEL', 339),
     ('USWAT', 339),
-    ('USSOM', 339)
+    ('USSOM', 339),
+    ('USNWT', 339),
+    ('USMIL', 339),
+    ('USPEA', 339),
+    ('USLYN', 339),
+    ('USSAL', 339),
+    ('USMED', 339),
+    ('USDED', 339),
+    ('USQCY', 339)
 ) as t(city, ecoregion_id)
 ''';

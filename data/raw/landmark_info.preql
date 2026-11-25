@@ -177,6 +177,14 @@ import usbkl.brookline_landmarks;
 import usbel.belmont_landmarks;
 import uswat.watertown_landmarks;
 import ussom.somerville_landmarks;
+import usnwt.newton_landmarks;
+import usmil.milton_landmarks;
+import uspea.peabody_landmarks;
+import uslyn.lynn_landmarks;
+import ussal.salem_ma_landmarks;
+import usmed.medford_landmarks;
+import usded.dedham_landmarks;
+import usqcy.quincy_landmarks;
 
 # The cross-city union is NOT declared here. It lives in
 # `full_landmark_publish.preql`, which reads the parquets these imports publish

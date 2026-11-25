@@ -1144,6 +1144,9 @@ SPECIES_MISSPELLINGS: dict[str, str] = {
     "Tilla platyphyllos": "Tilia platyphyllos",  # Belfast
     "Tilla x euchlora": "Tilia x euchlora",  # Belfast
     "Tilla x europaea": "Tilia x europaea",  # Belfast
+    "Tilla americana": "Tilia americana",  # Salem MA
+    "Ultmus americana": "Ulmus americana",  # Salem MA
+    "Castanea dentate": "Castanea dentata",  # Salem MA
     "Tilla": "Tilia",  # Belfast
     "Davidia involcrata": "Davidia involucrata",  # Belfast
     "Ilex acqufolium": "Ilex aquifolium",  # Belfast
@@ -2332,6 +2335,14 @@ def _sanitize_taxon(value: str | None) -> str | None:
 # Keyed by city code so `community_source_for` can derive the community label
 # and so tests can assert the two lists agree.
 MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
+    "USQCY": (),
+    "USDED": ("DEDHAM",),
+    "USMED": (),
+    "USSAL": ("SALEM_MA",),
+    "USLYN": (),
+    "USPEA": (),
+    "USMIL": (),
+    "USNWT": (),
     "USSOM": ("SOMERVILLE",),
     "USWAT": ("WATERTOWN",),
     "USBEL": ("BELMONT",),
@@ -2533,6 +2544,14 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # overlapping rows under one cluster id and publishes only the survivor — see
 # tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
+    "USQCY": "OSM_USQCY",
+    "USDED": "OSM_USDED",
+    "USMED": "OSM_USMED",
+    "USSAL": "OSM_USSAL",
+    "USLYN": "OSM_USLYN",
+    "USPEA": "OSM_USPEA",
+    "USMIL": "OSM_USMIL",
+    "USNWT": "OSM_USNWT",
     "USSOM": "OSM_USSOM",
     "USWAT": "OSM_USWAT",
     "USBEL": "OSM_USBEL",
@@ -2733,6 +2752,14 @@ SATELLITE_DATA_SOURCES: dict[str, str] = {
     "USSOM": satellite_source_for("USSOM"),
     "USWAT": satellite_source_for("USWAT"),
     "USNYC": satellite_source_for("USNYC"),
+    "USNWT": satellite_source_for("USNWT"),
+    "USMIL": satellite_source_for("USMIL"),
+    "USPEA": satellite_source_for("USPEA"),
+    "USLYN": satellite_source_for("USLYN"),
+    "USSAL": satellite_source_for("USSAL"),
+    "USMED": satellite_source_for("USMED"),
+    "USDED": satellite_source_for("USDED"),
+    "USQCY": satellite_source_for("USQCY"),
 }
 
 def predicted_source_for(city_code: str) -> str:
@@ -2756,6 +2783,14 @@ PREDICTED_DATA_SOURCES: dict[str, str] = {
     "USCAM": predicted_source_for("USCAM"),
     "USSOM": predicted_source_for("USSOM"),
     "USWAT": predicted_source_for("USWAT"),
+    "USNWT": predicted_source_for("USNWT"),
+    "USMIL": predicted_source_for("USMIL"),
+    "USPEA": predicted_source_for("USPEA"),
+    "USLYN": predicted_source_for("USLYN"),
+    "USSAL": predicted_source_for("USSAL"),
+    "USMED": predicted_source_for("USMED"),
+    "USDED": predicted_source_for("USDED"),
+    "USQCY": predicted_source_for("USQCY"),
 }
 
 # A prediction run covers the ground it was pointed at, not a city: Boston's
@@ -2769,6 +2804,14 @@ PREDICTED_STAGED_WITH: dict[str, str] = {
     "USCAM": "USBOS",
     "USSOM": "USBOS",
     "USWAT": "USBOS",
+    "USNWT": "USBOS",
+    "USMIL": "USBOS",
+    "USPEA": "USBOS",
+    "USLYN": "USBOS",
+    "USSAL": "USBOS",
+    "USMED": "USBOS",
+    "USDED": "USBOS",
+    "USQCY": "USBOS",
 }
 
 
@@ -3336,6 +3379,14 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
+    "USQCY": (42.2041, 42.3136, -71.0932, -70.9376),
+    "USDED": (42.2092, 42.2805, -71.2318, -71.1307),
+    "USMED": (42.3962, 42.4535, -71.1499, -71.0712),
+    "USSAL": (42.4818, 42.5521, -70.95, -70.7435),
+    "USLYN": (42.4382, 42.5123, -71.0117, -70.9014),
+    "USPEA": (42.4947, 42.5704, -71.0349, -70.9127),
+    "USMIL": (42.2007, 42.2781, -71.1308, -71.0313),
+    "USNWT": (42.2829, 42.3679, -71.2703, -71.1568),
     "USSOM": (42.36, 42.43, -71.15, -71.06),
     "USWAT": (42.35, 42.4, -71.23, -71.13),
     "USBEL": (42.36, 42.43, -71.22, -71.14),
@@ -3562,6 +3613,23 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
+    # Boston-metro towns added after Boston was clipped to its own line.
+    # Salem and Dedham measured 2026-11-24 against their staged extracts
+    # (osm_dedup_validation.py with the ingest's local parquet): mutual-NN
+    # 90% (Salem) and 100% (Dedham) in the 2-5m band, a coin flip in 5-10m
+    # -> a 5m guarantee, the 10m cell.  Salem's 10m costs 10.8% false
+    # flags at 71.6% recall (n=130); Dedham's 1.7% at 90.5% (n=58).
+    "USSAL": 10,
+    "USDED": 10,
+    # Newton, Milton, Peabody, Lynn, Medford, Quincy: no inventory, so
+    # nothing to calibrate against; community submissions are the only
+    # anchors, and a predicted row never anchors.  Default.
+    "USNWT": 10,
+    "USMIL": 10,
+    "USPEA": 10,
+    "USLYN": 10,
+    "USMED": 10,
+    "USQCY": 10,
     # Boston's cell, not a copy of it: these five towns' inventories were
     # partitions of Boston's model when its cell was grounded at the 5 m
     # break, so that measurement was taken over these rows.  Re-measure a
@@ -4307,7 +4375,7 @@ DEDUP_CELL_METRES: dict[str, int] = {
 # rectangle city its envelope sits in, with nothing to declare: the file is
 # the registration (`carved_out_of`).  Boston is a polygon itself, so it and
 # Cambridge, Somerville, Brookline, Belmont and Watertown simply meet; ground
-# in none of them (Newton, Milton, the North Shore) is no city's until that
+# in none of them (Saugus, Revere, Waltham...) is no city's until that
 # town has a boundary file of its own.
 # A polygon is exact where a staircase is not, so a polygon town's own
 # inventory is clipped to it too (`validate_coordinates`), and so is the
@@ -4317,6 +4385,14 @@ DEDUP_CELL_METRES: dict[str, int] = {
 Box = tuple[float, float, float, float]
 
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
+    'USQCY': ((42.2041, 42.3136, -71.0932, -70.9376),),
+    'USDED': ((42.2092, 42.2805, -71.2318, -71.1307),),
+    'USMED': ((42.3962, 42.4535, -71.1499, -71.0712),),
+    'USSAL': ((42.4818, 42.5521, -70.95, -70.7435),),
+    'USLYN': ((42.4382, 42.5123, -71.0117, -70.9014),),
+    'USPEA': ((42.4947, 42.5704, -71.0349, -70.9127),),
+    'USMIL': ((42.2007, 42.2781, -71.1308, -71.0313),),
+    'USNWT': ((42.2829, 42.3679, -71.2703, -71.1568),),
     'USSOM': ((42.3725, 42.4182, -71.1347, -71.0726),),
     'USWAT': ((42.3584, 42.3861, -71.2171, -71.1399),),
     'USBEL': ((42.375, 42.4154, -71.2113, -71.1522),),
@@ -5082,26 +5158,17 @@ def territory_city(named_city: str, latitude, longitude) -> str | None:
     return None
 
 
-def boundary_concept(city_code: str) -> str:
-    """The constant in boundaries.preql that holds a polygon town's boundary."""
-    return f"{city_code.lower()}_boundary"
-
-
 def city_territory_where(city_code: str) -> str:
-    """`territory_where` for a city by code: its rectangles, then its polygon
-    (`geo_contains`, pytrilogy 0.3.540) or the polygons carved out of it.  A
-    city of rectangles alone renders exactly as `territory_where` does."""
-    rendered = territory_where(CITY_TERRITORY[city_code])
-    point = "geo_point(raw_longitude, raw_latitude)"
-    clauses = []
-    if city_boundary(city_code) is not None:
-        clauses.append(f"geo_contains({boundary_concept(city_code)}, {point})")
-    clauses.extend(f"not geo_contains({boundary_concept(other)}, {point})" for other in carved_out_of(city_code))
-    if not clauses:
-        return rendered
-    if len(CITY_TERRITORY[city_code]) > 1:
-        rendered = f"({rendered})"
-    return "\n    and ".join([rendered, *clauses])
+    """`territory_where` for a city by code: its rectangles only.
+
+    A polygon town's rectangle is its boundary's envelope.  The polygon itself
+    is applied where the rows are made, in Python: the OSM extract keeps only
+    the nodes `in_city_territory` (shared/osm.py), and so does every ingest.
+    No model carries the polygon (it would ship every town's corners in the
+    cloud bundle), so a staged extract cut before a boundary changed holds
+    the old line until it is re-extracted; force the town's `osm-{code}` job
+    after changing a boundary file, as for any territory change."""
+    return territory_where(CITY_TERRITORY[city_code])
 
 
 def territory_where(boxes: tuple[Box, ...]) -> str:

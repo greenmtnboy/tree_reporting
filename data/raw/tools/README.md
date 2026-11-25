@@ -13,7 +13,8 @@ invocation assume:
 |------|--------------|
 | `new_city.py` | writes the mechanical registry edits a new city needs, from one spec. `--dry-run` first. See `EXTENDING.md`. |
 | `fetch_boundary.py` | downloads a US town's boundary (Census TIGER) into `boundaries/{code}.json` and prints its `CITY_TERRITORY` envelope. The file makes the town's territory a polygon; see "Register the code" in `EXTENDING.md`. |
-| `sync_osm_territory.py` | writes each city's territory into its model's OSM `where`, and `boundaries.preql` from the boundary files. Run after editing `CITY_TERRITORY` or adding a boundary. |
+| `sync_osm_territory.py` | writes each city's territory (rectangles; a polygon town's envelope) into its model's OSM `where`. Run after editing `CITY_TERRITORY` or adding a boundary. |
+| `publish_boundaries.py` | uploads `boundaries/*.json` as one content-hashed parquet and names it in `shared/boundary.py`; a worker reads that, never the files. Run with `--publish` after adding or editing a boundary. |
 | `osm_dedup_validation.py` | measures a city's mutual-nearest-neighbour rate per distance band, which is what its `DEDUP_CELL_METRES` row is calibrated from. Never copy a cell size from another city. |
 | `dedup_cells.py` | renders `DEDUP_CELL_METRES` into `tree_dedup.preql` as an inline `VALUES` table. `--check` is what `test_dedup_cells.py` asserts. |
 | `species_audit.py` | finds published names within two edits of each other and adjudicates each pair against Kew's WCVP (the published `wcvp_names` parquet, or `--wcvp wcvp.zip`). `--map` emits entries for `SPECIES_SYNONYMS` / `SPECIES_MISSPELLINGS`. Never curate those by eye. |

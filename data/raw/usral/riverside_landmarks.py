@@ -46,7 +46,8 @@ import pyarrow as pa
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from shared.platforms.arcgis import FeatureLayer, esri_geometry_to_wkt, iter_features
-from shared.ingest import CITY_BOUNDS, emit
+from shared.ingest import emit
+from shared.nrhp import national_register as shared_national_register  # noqa: E402
 
 REGISTER = FeatureLayer(
     "https://services.arcgis.com/Fu2oOWg1Aw7azh41/arcgis/rest/services/"
@@ -55,12 +56,8 @@ REGISTER = FeatureLayer(
 REGISTER_FIELDS = "OBJECTID,prop_key,historic_name,designation,rsrc_num,rsrc_name,rsrc_suff"
 LANDMARK_DESIGNATIONS = ("City Landmark", "City Landmark Structures", "City Landmark Object")
 
-NRHP = "https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer"
-NRHP_LAYERS = (FeatureLayer(f"{NRHP}/0"), FeatureLayer(f"{NRHP}/1"))  # points first
-NRHP_FIELDS = "OBJECTID,NRIS_Refnum,RESNAME,ResType,Address,City,CertDate,STATUS"
 
 LOCAL_TYPE = "Riverside City Landmark"
-NATIONAL_TYPE = "National Register of Historic Places"
 
 # The register should hold about 124 landmark rows; far fewer means the
 # `designation` vocabulary changed under the filter.
@@ -126,41 +123,7 @@ def riverside_register() -> dict[str, list]:
 
 
 def national_register() -> dict[str, list]:
-    lat_min, lat_max, lon_min, lon_max = CITY_BOUNDS["USRAL"]
-    box = {
-        "geometry": f"{lon_min},{lat_min},{lon_max},{lat_max}",
-        "geometryType": "esriGeometryEnvelope",
-        "inSR": "4326",
-        "spatialRel": "esriSpatialRelIntersects",
-    }
-    seen: set[str] = set()
-    rows: dict[str, list] = {k: [] for k in COLUMNS}
-    for layer in NRHP_LAYERS:
-        for feature in fetch_all(
-            layer, out_fields=NRHP_FIELDS, return_geometry=True, out_sr=4326, extra_params=box
-        ):
-            attrs = feature.get("attributes") or {}
-            ref = clean(attrs.get("NRIS_Refnum"))
-            name = clean(attrs.get("RESNAME"))
-            wkt = esri_geometry_to_wkt(feature.get("geometry"))
-            if not ref or not name or wkt is None or ref in seen:
-                continue
-            if (clean(attrs.get("City")) or "").lower() != "riverside":
-                continue
-            if clean(attrs.get("STATUS")) != "Listed":
-                continue
-            if (clean(attrs.get("ResType")) or "").lower() == "district":
-                continue
-            seen.add(ref)
-            cert = clean(attrs.get("CertDate")) or ""
-            rows["landmark_id"].append(f"riv-nr-{ref}")
-            rows["name"].append(name)
-            rows["geometry_raw"].append(wkt)
-            rows["address"].append(clean(attrs.get("Address")))
-            rows["lm_type"].append(NATIONAL_TYPE)
-            rows["register_number"].append(ref)
-            rows["year_designated"].append(int(cert[:4]) if cert[:4].isdigit() else None)
-    return rows
+    return shared_national_register("USRAL", "Riverside", "riv", COLUMNS, required=False)
 
 
 def build() -> pa.Table:
