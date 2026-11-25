@@ -81,6 +81,9 @@ OSM_UNMAPPED_CITIES: frozenset[str] = frozenset(
     {
         # 2026-10-30: 0 nodes in the territory; Madison's isthmus 3,825.
         "USSTO",
+        # 2026-11-25: 0 nodes in the territory; Lynn's box next door 7,009
+        # (one request, the maps.mail.ru mirror).
+        "USSWA",
     }
 )
 
