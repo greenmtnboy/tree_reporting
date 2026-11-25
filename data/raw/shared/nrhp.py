@@ -109,9 +109,14 @@ def national_register(
     return rows
 
 
-def national_register_table(city_code: str, city_name: str, prefix: str) -> pa.Table:
-    """The landmark table of a city whose only source is the register."""
-    data = national_register(city_code, city_name, prefix)
+def national_register_table(
+    city_code: str, city_name: str, prefix: str, *, required: bool = True
+) -> pa.Table:
+    """The landmark table of a city whose only source is the register.
+
+    *required* False is for a city the register has no listing in (Everett,
+    MA): it publishes an empty table instead of failing its landmark job."""
+    data = national_register(city_code, city_name, prefix, required=required)
     n = len(data["landmark_id"])
     return pa.table(
         {
