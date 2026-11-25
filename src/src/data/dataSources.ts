@@ -167,6 +167,7 @@ export const DATA_SOURCE_LABELS: Record<string, string> = {
   CITY_OF_BOSTON: 'City of Boston',
   ARNOLD_ARBORETUM: 'Arnold Arboretum',
   CAMBRIDGE: 'City of Cambridge',
+  MIT: 'MIT campus tree inventory',
   BROOKLINE: 'Town of Brookline',
   SOMERVILLE: 'City of Somerville',
   BELMONT: 'Town of Belmont',

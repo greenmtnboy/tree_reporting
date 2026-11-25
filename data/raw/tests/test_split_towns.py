@@ -93,7 +93,7 @@ def test_the_towns_are_cities_and_boston_no_longer_claims_them():
     assert labels == {
         "USBEL": ("BELMONT",),
         "USBKL": ("BROOKLINE",),
-        "USCAM": ("CAMBRIDGE",),
+        "USCAM": ("CAMBRIDGE", "MIT"),
         "USSOM": ("SOMERVILLE",),
         "USWAT": ("WATERTOWN",),
     }

@@ -6,10 +6,12 @@
 """Cambridge MA street and park trees, from the city's Socrata portal.
 
 `82zb-7qc9` is several inventories in one feed: the city's record, a Harvard
-campus survey under `H`-prefixed ids, and rows for planting sites that outlive
-their tree. Three stages reduce it to one row per living tree, in this order
-because each shrinks the next: empty sites, then replanted wells, then the
-Harvard re-survey. `raw/tree_dedup.preql` cannot do this: every municipal row
+campus survey under `H`-prefixed ids, an MIT campus survey under `M`-prefixed
+ids, and rows for planting sites that outlive their tree. The MIT rows are
+dropped first: MIT publishes the same survey itself, kept current, and
+`mit_tree_info.py` reads it as its own source. Three stages then reduce the
+rest to one row per living tree, in this order because each shrinks the next:
+empty sites, then replanted wells, then the Harvard re-survey. `raw/tree_dedup.preql` cannot do this: every municipal row
 is its own cluster there, and `sitetype`/`treewellid` never reach the model.
 """
 
@@ -39,7 +41,7 @@ PAGE_SIZE = 50_000
 # SITERETIREDREASON.
 SELECT = (
     "treeid,scientific,commonname,cultivar,plantdate,cartegra_1,the_geom,diameter,"
-    "sitetype,treewellid,siteretire,cartegraph"
+    "sitetype,treewellid,siteretire,cartegraph,ownership"
 )
 WHERE = "removaldat IS NULL"
 
@@ -162,6 +164,19 @@ def canonicalize_records(records: list[dict]) -> tuple[list[dict], int, int]:
             deduped[raw_id] = rec
 
     return list(deduped.values()), dropped_missing_id, duplicate_rows
+
+
+def drop_mit_campus_rows(records: list[dict]) -> tuple[list[dict], int]:
+    """Drop the rows MIT's own inventory supersedes.
+
+    The city republishes MIT's campus survey (`ownership = 'MIT'`, 2,256 rows
+    on 2026-11-25), an older copy of the layer `mit_tree_info.py` reads from
+    MIT: 494 of MIT's current trees have no city row within 10 m, and the city
+    keeps rows for trees MIT has since taken out.  Keeping both would publish
+    each campus tree twice, since the model never merges two inventories.
+    """
+    kept = [r for r in records if _text(r, "ownership").upper() != "MIT"]
+    return kept, len(records) - len(kept)
 
 
 def drop_sites_without_a_tree(
@@ -391,6 +406,13 @@ def build_table(records: list[dict]) -> pa.Table:
 
 if __name__ == "__main__":
     records = fetch_all()
+    records, mit_rows = drop_mit_campus_rows(records)
+    if mit_rows:
+        print(
+            f"Cambridge ingest: dropped {mit_rows} MIT-owned rows (mit_tree_info.py "
+            f"reads MIT's own inventory)",
+            file=sys.stderr,
+        )
     records, dropped_missing_id, duplicate_rows = canonicalize_records(records)
     if dropped_missing_id:
         print(

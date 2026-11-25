@@ -78,7 +78,8 @@ property <*>.usbel_data_updated_through datetime; # when Belmont data is through
 property <*>.usbel_osm_data_updated_through datetime; # GCS publication time of Belmont's staged OSM parquet
 property <*>.usbkl_data_updated_through datetime; # when Brookline data is through
 property <*>.usbkl_osm_data_updated_through datetime; # GCS publication time of Brookline's staged OSM parquet
-property <*>.uscam_data_updated_through datetime; # when Cambridge data is through
+# defined in uscam/cambridge_tree_info.preql as the greatest of the city's and MIT's probes
+# property <*>.uscam_data_updated_through datetime; # when Cambridge data is through
 property <*>.uscam_osm_data_updated_through datetime; # GCS publication time of Cambridge's staged OSM parquet
 property <*>.usmhd_data_updated_through datetime; # when Moorhead data is through
 property <*>.usmhd_osm_data_updated_through datetime; # GCS publication time of Moorhead's staged OSM parquet

@@ -19,6 +19,7 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
   { city: 'Belmont', label: 'Town of Belmont - TreeKeeper public tree inventory', url: 'https://belmontma.treekeepersoftware.com/' },
   { city: 'Brookline', label: 'Town of Brookline GIS - Tree Viewer', url: 'https://services1.arcgis.com/Oknk0tvfHOElpgGU/arcgis/rest/services/Brookline_Tree_Viewer_Web_WFL1/FeatureServer/0' },
   { city: 'Cambridge', label: 'Cambridge Open Data - Street Trees', url: 'https://data.cambridgema.gov/' },
+  { city: 'Cambridge', label: 'MIT Facility Information Systems - Campus Trees (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://services5.arcgis.com/FXrk7QY7CN707pF1/arcgis/rest/services/NEW_Administrative_Basemap_Layers/FeatureServer/56' },
   { city: 'Moorhead', label: 'City of Moorhead GIS - TreePlotter inventory (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://www.arcgis.com/home/item.html?id=efd9f39819d54020b610ef0f5f0c0c04' },
   { city: 'Evanston', label: 'City of Evanston Open Data - Trees (CC BY 4.0)', url: 'https://www.arcgis.com/home/item.html?id=845a3acb3dc0442a80b219691889f992' },
   { city: 'Orland Park', label: 'Village of Orland Park - Public Trees (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://www.arcgis.com/home/item.html?id=780d9c0a3883498b82e046ef231144c9' },

@@ -229,6 +229,7 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 | New York City | NYC Open Data - Street Tree Census | https://data.cityofnewyork.us/Environment/2015-Street-Tree-Census-Tree-Data/uvpi-gqnh |
 | Boston | Analyze Boston - Trees | https://data.boston.gov/dataset/bprd-trees |
 | Cambridge, MA | Cambridge Open Data - Trees | https://data.cambridgema.gov/ |
+| Cambridge (MIT) | MIT Facility Information Systems - Campus Trees (no licence stated; displayed with attribution only) | https://services5.arcgis.com/FXrk7QY7CN707pF1/arcgis/rest/services/NEW_Administrative_Basemap_Layers/FeatureServer/56 |
 | Brookline, MA | Brookline GIS - Tree Viewer | ArcGIS FeatureServer |
 | Somerville, MA | City of Somerville - TreeKeeper public tree inventory | https://somervillema.treekeepersoftware.com/ |
 | Belmont, MA | Town of Belmont - TreeKeeper public tree inventory | https://belmontma.treekeepersoftware.com/ |
