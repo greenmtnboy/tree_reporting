@@ -21,9 +21,18 @@ function appBase(): string {
   return process.env.GITHUB_PAGES === 'true' ? '/tree_reporting/' : '/'
 }
 
-export default defineConfig({
-  base: appBase(),
-  plugins: [vue(), stubMotherDuck],
+export default defineConfig(({ mode }) => ({
+  base: mode === 'ios' ? '/' : appBase(),
+  plugins: [vue(), stubMotherDuck, {
+    name: 'website-head',
+    transformIndexHtml() {
+      if (mode === 'ios') return []
+      return [
+        { tag: 'link', attrs: { rel: 'icon', type: 'image/svg+xml', href: appBase() + 'favicon.svg' }, injectTo: 'head' as const },
+        { tag: 'script', attrs: { 'data-goatcounter': 'https://sf-tree-reporting.goatcounter.com/count', async: true, src: 'https://gc.zgo.at/count.js' }, injectTo: 'head' as const },
+      ]
+    },
+  }],
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),
@@ -39,6 +48,9 @@ export default defineConfig({
     exclude: ['@duckdb/duckdb-wasm', '@motherduck/wasm-client'],
   },
   build: {
+    outDir: mode === 'ios' ? 'dist-ios' : 'dist',
+    // public/data and local-trees are developer fixtures, never phone data.
+    copyPublicDir: mode !== 'ios',
     rollupOptions: {
       external: ['@motherduck/wasm-client'],
     },
@@ -47,4 +59,4 @@ export default defineConfig({
     environment: 'node',
     include: ['src/tests/**/*.test.ts'],
   },
-})
+}))

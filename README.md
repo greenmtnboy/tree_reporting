@@ -1,5 +1,7 @@
 # Urban Tree Reporting
 
+The [iOS explorer and TestFlight guide](docs/IOS_EXPLORER.md) covers building the same map for iPhone.
+
 ### Share a filtered city map
 
 Map links use the hash route, for example:

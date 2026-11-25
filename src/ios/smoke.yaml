@@ -1,0 +1,21 @@
+appId: world.arborary.explorer
+---
+- launchApp:
+    permissions:
+      location: never
+- tapOn: "Near Me"
+- assertVisible: "Try location again"
+- assertVisible: "Explore City"
+- launchApp:
+    permissions:
+      location: inuse
+- setLocation:
+    latitude: 40.7308
+    longitude: -73.9973
+- tapOn: "Near Me"
+- extendedWaitUntil:
+    visible: ".*Find Me.*"
+    timeout: 30000
+- extendedWaitUntil:
+    visible: ".*Recorded crown.*"
+    timeout: 120000
