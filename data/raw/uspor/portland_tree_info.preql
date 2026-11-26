@@ -63,7 +63,7 @@ root partial datasource uspor_osm_tree_info extends tree_partition (
 )
 complete where city = 'USPOR' and uspor_source = 'OSM_USPOR'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/uspor_osm_staging.parquet`
-where (raw_latitude >= 45.42 and raw_latitude < 45.66 and raw_longitude >= -122.84 and raw_longitude < -122.47);
+where (raw_latitude >= 45.4325 and raw_latitude < 45.6529 and raw_longitude >= -122.8368 and raw_longitude < -122.472);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

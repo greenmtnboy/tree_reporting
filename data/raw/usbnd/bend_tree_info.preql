@@ -63,7 +63,7 @@ root partial datasource usbnd_osm_tree_info extends tree_partition (
 )
 complete where city = 'USBND' and usbnd_source = 'OSM_USBND'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usbnd_osm_staging.parquet`
-where (raw_latitude >= 43.99 and raw_latitude < 44.13 and raw_longitude >= -121.39 and raw_longitude < -121.23);
+where (raw_latitude >= 43.9991 and raw_latitude < 44.1238 and raw_longitude >= -121.3825 and raw_longitude < -121.2435);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

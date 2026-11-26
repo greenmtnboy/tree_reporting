@@ -1,11 +1,12 @@
 """A city's real boundary, for a territory a rectangle cannot draw.
 
-`CITY_TERRITORY` in `shared/ingest.py` is rectangles, which is enough for a
-city alone on the map and for neighbours a river separates.  It is not enough
-for towns that interlock street by street (Cambridge and Somerville, Brookline
-inside Boston): a staircase of rectangles fine enough to follow them is
-hundreds of boxes, slower to test and still a few metres wrong.  A city with
-a file in `data/raw/boundaries/` is its polygon instead:
+`CITY_TERRITORY` in `shared/ingest.py` is rectangles, which is enough for
+neighbours a river separates.  It is not enough for towns that interlock
+street by street (Cambridge and Somerville, Brookline inside Boston): a
+staircase of rectangles fine enough to follow them is hundreds of boxes,
+slower to test and still a few metres wrong.  Nor for a city alone on the
+map, whose rectangle takes in its suburbs' OSM trees.  A city with a file in
+`data/raw/boundaries/` is its polygon instead:
 
     boundaries/{code}.json   one Feature, a Polygon or MultiPolygon in
                                 WGS84 (longitude, latitude), with where it
@@ -46,7 +47,7 @@ from pathlib import Path
 BOUNDARY_DIR = Path(__file__).resolve().parents[1] / "boundaries"
 
 # Written by tools/publish_boundaries.py --publish; do not edit by hand.
-BOUNDARY_PARQUET = "boundaries_0a73cc0370bf.parquet"
+BOUNDARY_PARQUET = "boundaries_67de2235fbe1.parquet"
 BOUNDARY_PUBLIC_PREFIX = "https://storage.googleapis.com/trilogy_public_models/duckdb/trees/reference"
 
 Ring = list[tuple[float, float]]  # (longitude, latitude), closed

@@ -292,7 +292,9 @@ decides which city an unattributed tree (OSM node, community submission)
 belongs to. `test_city_territory.py` checks every pair; a city that gains a
 neighbour has to carve both. Municipal ingests keep using the box.
 
-A town that interlocks with its neighbours is a polygon instead: its real
+A town that interlocks with its neighbours is a polygon instead, and so is
+a US city alone on the map whose rectangle took in its suburbs (49 cities,
+from Seattle to New York; the selection rule is in EXTENDING.md): its real
 boundary is `boundaries/{code}.json`, its `CITY_TERRITORY` entry is that
 polygon's envelope, and membership is the polygon (`shared/boundary.py`).
 It is carved out of whichever rectangle city its envelope sits in. Boston

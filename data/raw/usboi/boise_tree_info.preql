@@ -63,7 +63,7 @@ root partial datasource usboi_osm_tree_info extends tree_partition (
 )
 complete where city = 'USBOI' and usboi_source = 'OSM_USBOI'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usboi_osm_staging.parquet`
-where (raw_latitude >= 43.53 and raw_latitude < 43.7 and raw_longitude >= -116.37 and raw_longitude < -116.08);
+where (raw_latitude >= 43.5021 and raw_latitude < 43.6923 and raw_longitude >= -116.3657 and raw_longitude < -116.0941);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

@@ -63,7 +63,7 @@ root partial datasource usdvn_osm_tree_info extends tree_partition (
 )
 complete where city = 'USDVN' and usdvn_source = 'OSM_USDVN'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usdvn_osm_staging.parquet`
-where (raw_latitude >= 41.45 and raw_latitude < 41.63 and raw_longitude >= -90.7 and raw_longitude < -90.49);
+where (raw_latitude >= 41.4606 and raw_latitude < 41.6243 and raw_longitude >= -90.688 and raw_longitude < -90.4907);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

@@ -63,7 +63,7 @@ root partial datasource usmsn_osm_tree_info extends tree_partition (
 )
 complete where city = 'USMSN' and usmsn_source = 'OSM_USMSN'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usmsn_osm_staging.parquet`
-where (raw_latitude >= 42.98 and raw_latitude < 43.2 and raw_longitude >= -89.58 and raw_longitude < -89.24);
+where (raw_latitude >= 42.9982 and raw_latitude < 43.1721 and raw_longitude >= -89.5717 and raw_longitude < -89.2318);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

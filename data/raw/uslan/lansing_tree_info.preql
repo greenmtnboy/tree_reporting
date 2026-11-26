@@ -63,7 +63,7 @@ root partial datasource uslan_osm_tree_info extends tree_partition (
 )
 complete where city = 'USLAN' and uslan_source = 'OSM_USLAN'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/uslan_osm_staging.parquet`
-where (raw_latitude >= 42.63 and raw_latitude < 42.8 and raw_longitude >= -84.64 and raw_longitude < -84.47);
+where (raw_latitude >= 42.6474 and raw_latitude < 42.7949 and raw_longitude >= -84.7013 and raw_longitude < -84.4176);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------

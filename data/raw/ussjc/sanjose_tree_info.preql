@@ -63,7 +63,7 @@ root partial datasource ussjc_osm_tree_info extends tree_partition (
 )
 complete where city = 'USSJC' and ussjc_source = 'OSM_USSJC'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/ussjc_osm_staging.parquet`
-where (raw_latitude >= 37.12 and raw_latitude < 37.47 and raw_longitude >= -122.05 and raw_longitude < -121.58);
+where (raw_latitude >= 37.1231 and raw_latitude < 37.4692 and raw_longitude >= -122.0457 and raw_longitude < -121.5858);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------
