@@ -209,17 +209,32 @@ def windows_needed(n: int, core: int, pixels: int, tiles: list[tuple[int, int]],
     ]
 
 
-def city_boxes(ingest_path: Path = INGEST_PATH) -> tuple[dict[str, Box], dict[str, tuple[Box, ...]]]:
-    """CITY_BOUNDS and CITY_TERRITORY, read as literals: importing the ingest
-    library would pull in pytrilogy for two dictionaries."""
+def ingest_literals(names: tuple[str, ...], ingest_path: Path = INGEST_PATH) -> dict[str, Any]:
+    """Top-level dictionaries of the ingest library, read as literals:
+    importing it would pull in pytrilogy for a few dictionaries."""
     tree = ast.parse(ingest_path.read_text(encoding="utf-8"))
     found: dict[str, Any] = {}
     for node in tree.body:
         target = getattr(node, "target", None) or (getattr(node, "targets", None) or [None])[0]
         name = getattr(target, "id", None)
-        if name in ("CITY_BOUNDS", "CITY_TERRITORY") and node.value is not None:
+        if name in names and node.value is not None:
             found[name] = ast.literal_eval(node.value)
+    return found
+
+
+def city_boxes(ingest_path: Path = INGEST_PATH) -> tuple[dict[str, Box], dict[str, tuple[Box, ...]]]:
+    """CITY_BOUNDS and CITY_TERRITORY."""
+    found = ingest_literals(("CITY_BOUNDS", "CITY_TERRITORY"), ingest_path)
     return found["CITY_BOUNDS"], found.get("CITY_TERRITORY", {})
+
+
+def staged_family(city: str, ingest_path: Path = INGEST_PATH) -> frozenset[str]:
+    """*city* and every city whose predictions are staged in *city*'s file
+    (PREDICTED_STAGED_WITH): Boston's run covers the towns carved out of its
+    metro, and each town reads its own rows from Boston's staged file."""
+    staged_with = ingest_literals(("PREDICTED_STAGED_WITH",), ingest_path).get("PREDICTED_STAGED_WITH", {})
+    city = city.upper()
+    return frozenset({city, *(code for code, host in staged_with.items() if host == city)})
 
 
 def box_meets(box: Box, bounds: dict[str, float]) -> bool:
@@ -474,6 +489,25 @@ def neighbour_tile(cache_dir: Path, *, crs: str, west: float, north: float, pixe
     return image
 
 
+_READ_POOL = None
+
+
+def read_pool():
+    """One pool of imagery-read threads for the process, never shut down.
+
+    A pool per block, whose threads exit when it closes, deadlocked on
+    Windows once ONNX Runtime's DirectML provider was loaded (--device dml):
+    the second block's pool waited forever on a worker that had finished its
+    last read and never finished exiting.  Threads that never exit avoid it.
+    """
+    global _READ_POOL
+    if _READ_POOL is None:
+        from concurrent.futures import ThreadPoolExecutor
+
+        _READ_POOL = ThreadPoolExecutor(max_workers=8, thread_name_prefix="imagery-read")
+    return _READ_POOL
+
+
 def context_image(image, cache_dir: Path, *, crs: str, west: float, north: float, pixels: int,
                   resolution_m: float, bands: list[int], stac_url: str):
     """*image*, the grid tile at (west, north), with a quarter tile of each of its
@@ -483,7 +517,6 @@ def context_image(image, cache_dir: Path, *, crs: str, west: float, north: float
     edge) are read once and cached like any other tile.
     """
     import numpy as np
-    from concurrent.futures import ThreadPoolExecutor
 
     tile_m, margin = pixels * resolution_m, pixels // 4
     canvas = np.zeros((image.shape[0], 3 * pixels, 3 * pixels), dtype=image.dtype)
@@ -498,8 +531,7 @@ def context_image(image, cache_dir: Path, *, crs: str, west: float, north: float
 
     # Together: a read is a decode (or, past the plan's edge, a download), and
     # GDAL releases the interpreter for both.
-    with ThreadPoolExecutor(max_workers=len(around)) as pool:
-        tiles = dict(zip(around, pool.map(read, around)))
+    tiles = dict(zip(around, read_pool().map(read, around)))
     tiles[(0, 0)] = image
     for (dx, dy), tile in tiles.items():
         canvas[:, (dy + 1) * pixels:(dy + 2) * pixels, (dx + 1) * pixels:(dx + 2) * pixels] = tile
@@ -517,7 +549,6 @@ def block_image(images: dict[tuple[int, int], Any], cache_dir: Path, *, crs: str
     read from the cache (``neighbour_tile``).
     """
     import numpy as np
-    from concurrent.futures import ThreadPoolExecutor
 
     tile_m = pixels * resolution_m
     positions = [(c, r) for r in range(-1, tiles + 1) for c in range(-1, tiles + 1)]
@@ -530,8 +561,7 @@ def block_image(images: dict[tuple[int, int], Any], cache_dir: Path, *, crs: str
             pixels=pixels, resolution_m=resolution_m, bands=bands, stac_url=stac_url,
         )
 
-    with ThreadPoolExecutor(max_workers=8) as pool:
-        found = {**images, **dict(zip(missing, pool.map(read, missing)))}
+    found = {**images, **dict(zip(missing, read_pool().map(read, missing)))}
     first = next(iter(found.values()))
     canvas = np.zeros((first.shape[0], (tiles + 2) * pixels, (tiles + 2) * pixels), dtype=first.dtype)
     for (c, r), tile in found.items():
@@ -567,6 +597,94 @@ def own_cohorts(run_dir: Path) -> list[Path]:
     ]
 
 
+def resolve_device(name: str = "auto"):
+    """(torch device, DirectML adapter or None) for a --device value: ``auto``
+    (CUDA when present, else the CPU), any torch device string, or
+    ``dml``/``dml:N``: adapter N through ONNX Runtime's DirectML provider (an
+    AMD or Intel GPU on Windows), with torch on the CPU for everything else."""
+    import torch
+
+    if name == "dml" or name.startswith("dml:"):
+        return torch.device("cpu"), int(name.partition(":")[2] or 0)
+    if name == "auto":
+        return torch.device("cuda" if torch.cuda.is_available() else "cpu"), None
+    return torch.device(name), None
+
+
+class OnnxNetwork:
+    """The network's forward pass on ONNX Runtime, for a GPU torch cannot
+    drive: an AMD or Intel card on Windows, through the DirectML provider.
+
+    torch-directml was tried first and computes wrong values (eval-mode
+    BatchNorm and the Swin shifted-window attention both diverge from the CPU
+    by tens of percent); ONNX Runtime agrees with torch on the CPU to 1e-5 on
+    every head, at ~40 ms a 512 px window on an RX 6800 XT against ~2 s on
+    the CPU.  Each region (``forward_region``'s fixed slice; None for the
+    whole output) and window size is exported once, with a free batch axis,
+    and cached under *cache_dir*, keyed by the checkpoint's digest.
+    """
+
+    def __init__(self, network, cache_dir: Path, digest: str, *, adapter: int = 0,
+                 providers: list[Any] | None = None):
+        self.network = network
+        self.cache_dir = Path(cache_dir)
+        self.digest = digest[:12]
+        self.providers = providers or [("DmlExecutionProvider", {"device_id": adapter}), "CPUExecutionProvider"]
+        self.sessions: dict[tuple[Any, int], tuple[Any, list[str]]] = {}
+
+    def _export(self, path: Path, region: tuple[int, int] | None, sample) -> None:
+        import torch
+
+        network = self.network
+
+        class Outputs(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.network = network
+
+            def forward(self, image):
+                output = self.network(image) if region is None else self.network.forward_region(image, *region)
+                return tuple(output[key] for key in sorted(output))
+
+        with torch.inference_mode():
+            probe = network(sample[:1]) if region is None else network.forward_region(sample[:1], *region)
+        keys = sorted(probe)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        partial = path.with_suffix(".partial")
+        torch.onnx.export(
+            Outputs().eval(), (sample[:1].contiguous(),), str(partial), input_names=["image"], output_names=keys,
+            dynamic_axes={"image": {0: "n"}, **{key: {0: "n"} for key in keys}}, opset_version=17, dynamo=False,
+        )
+        partial.replace(path)
+
+    def _session(self, region: tuple[int, int] | None, sample) -> tuple[Any, list[str]]:
+        side = int(sample.shape[-1])
+        if (region, side) not in self.sessions:
+            try:
+                import onnxruntime
+            except ImportError as error:
+                raise SystemExit("--device dml needs onnxruntime-directml and onnx "
+                                 "(uv sync --group directml)") from error
+            name = "full" if region is None else f"r{region[0]}x{region[1]}"
+            path = self.cache_dir / f"{self.digest}-{side}px-{name}.onnx"
+            if not path.exists():
+                self._export(path, region, sample)
+            options = onnxruntime.SessionOptions()
+            # The DirectML provider needs both (onnxruntime's DirectML notes).
+            options.enable_mem_pattern = False
+            options.execution_mode = onnxruntime.ExecutionMode.ORT_SEQUENTIAL
+            session = onnxruntime.InferenceSession(str(path), options, providers=self.providers)
+            self.sessions[(region, side)] = (session, [output.name for output in session.get_outputs()])
+        return self.sessions[(region, side)]
+
+    def __call__(self, tensor, region: tuple[int, int] | None = None) -> dict[str, Any]:
+        import torch
+
+        session, keys = self._session(region, tensor)
+        outputs = session.run(keys, {"image": tensor.contiguous().numpy()})
+        return {key: torch.from_numpy(value) for key, value in zip(keys, outputs)}
+
+
 class Predictor:
     def __init__(self, artifacts: Path, run: str, city_hint: str | None, device_name: str = "auto"):
         import torch
@@ -587,9 +705,7 @@ class Predictor:
         if not checkpoint.exists():
             raise SystemExit(f"checkpoint not found locally: {checkpoint}")
 
-        self.device = torch.device(
-            ("cuda" if torch.cuda.is_available() else "cpu") if device_name == "auto" else device_name
-        )
+        self.device, adapter = resolve_device(device_name)
         model = self.config["model"]
         self.network = load_network(
             checkpoint,
@@ -610,6 +726,9 @@ class Predictor:
         self.taxonomy_version = hashlib.sha256(
             json.dumps(self.taxonomy, sort_keys=True).encode("utf-8")
         ).hexdigest()[:12]
+        self.onnx = None if adapter is None else OnnxNetwork(
+            self.network, artifacts / "onnx" / run, self.checkpoint_sha256, adapter=adapter,
+        )
 
     def _forward(self, images, region: tuple[int, int] | None = None) -> dict[str, Any]:
         """The network's output maps for a batch of chips, [n, bands, pixels, pixels];
@@ -618,6 +737,8 @@ class Predictor:
 
         tensor = torch.from_numpy(images.astype("float32") * self.input_scale)
         tensor = ((tensor - self.mean) / self.std).to(self.device)
+        if self.onnx is not None:
+            return self.onnx(tensor, region)
         with torch.inference_mode():
             if region is None:
                 return self.network(tensor)

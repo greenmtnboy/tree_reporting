@@ -510,3 +510,45 @@ def test_a_block_image_is_the_block_and_a_margin_of_its_neighbours(tmp_path, mon
     assert (image[:, 10:18, 10:18] == 33).all()
     assert image[0, 0, 0] == 11 and image[0, 0, 19] == 14 and image[0, 19, 0] == 41
     assert image[0, 19, 19] == 0                       # no imagery there
+
+
+def test_a_device_names_torch_or_a_directml_adapter():
+    import torch
+
+    assert point_predict.resolve_device("cpu") == (torch.device("cpu"), None)
+    assert point_predict.resolve_device("dml") == (torch.device("cpu"), 0)
+    assert point_predict.resolve_device("dml:1") == (torch.device("cpu"), 1)
+    device, adapter = point_predict.resolve_device("auto")
+    assert adapter is None and device.type in ("cpu", "cuda")
+
+
+@pytest.mark.parametrize("backbone", ["resnet34", "swin_tiny"])
+def test_the_onnx_network_is_the_torch_network(tmp_path, backbone):
+    """--device dml runs the network on ONNX Runtime (DirectML there; the CPU
+    provider here): an exported region pass and a whole pass, any batch size,
+    must equal torch's, and the export is cached by checkpoint digest."""
+    pytest.importorskip("onnx")
+    pytest.importorskip("onnxruntime")
+    import torch
+
+    from urban_tree_ml.model import RawImageryTreeModel
+
+    torch.manual_seed(0)
+    model = RawImageryTreeModel(
+        input_channels=4, feature_channels=16, genus_classes=3, species_classes=5,
+        pretrained=False, backbone=backbone, crown_head=True,
+    ).eval()
+    onnx = point_predict.OnnxNetwork(model, tmp_path / "onnx", "abcdef0123456789",
+                                     providers=["CPUExecutionProvider"])
+    for batch, region in ((2, (14, 36)), (3, (14, 36)), (1, None)):
+        image = torch.randn(batch, 4, 128, 128)
+        with torch.inference_mode():
+            expected = model(image) if region is None else model.forward_region(image, *region)
+        got = onnx(image, region)
+        assert set(got) == set(expected)
+        for key, value in expected.items():
+            assert got[key].shape == value.shape
+            assert torch.allclose(got[key], value, atol=1e-4), key
+    assert sorted(p.name for p in (tmp_path / "onnx").iterdir()) == [
+        "abcdef012345-128px-full.onnx", "abcdef012345-128px-r14x36.onnx",
+    ]

@@ -41,6 +41,12 @@ train = [
   "torchmetrics>=1.6",
   "torchvision==0.25.0",
 ]
+# bulk_predict / point_predict --device dml: the network on an AMD or Intel GPU
+# on Windows, through ONNX Runtime's DirectML provider (point_predict.OnnxNetwork).
+directml = [
+  "onnx>=1.17",
+  "onnxruntime-directml>=1.20; sys_platform == 'win32'",
+]
 dev = [
   "pytest>=8.3",
   "ruff>=0.9",
