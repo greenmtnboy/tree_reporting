@@ -50,7 +50,7 @@ file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usnyc_
 where (raw_latitude >= 40.4765 and raw_latitude < 40.9178 and raw_longitude >= -74.2589 and raw_longitude < -73.7001);
 
 root partial datasource nyc_raw_tree_info extends tree_partition (
-    objectid: tree_id,
+    globalid: tree_id,
     data_source: usnyc_source,
     genusspecies: raw_species,
     dbh: ?raw_dbh,
