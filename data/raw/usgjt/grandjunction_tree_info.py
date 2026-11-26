@@ -24,8 +24,9 @@ Credited to the City of Grand Junction all the same.
 planting sites are recorded as the common name `Vacant` (77 rows in Nov
 2026).  A `Vacant` row with no scientific name is dropped with a logged
 count; the handful that also carry a scientific name and a DBH class (a tree
-planted on the site, the common name not updated) are kept as trees.  A row
-with a `Retired` date (none in Nov 2026) is a removed tree and is dropped.
+planted on the site, the common name not updated) are kept as trees.  The layer had
+a `Retired` date column (no row ever set it) until late Nov 2026, when the
+portal removed it and any query naming it failed; it is no longer read.
 Private trees (`Owner`/`Designation`) are trees and are kept.
 
 **The id is the GlobalID** (`grandjunction-{guid}`), non-null on every row;
@@ -79,7 +80,7 @@ LAYER = FeatureLayer(
     "https://external25-gis.gjcity.org/arcgis/rest/services/Hub/City_Hub/MapServer/1",
     timeout=180,
 )
-OUT_FIELDS = "OBJECTID,GlobalID,ScientificName,CommonName,TreeInspectionDBH,Installed,Retired"
+OUT_FIELDS = "OBJECTID,GlobalID,ScientificName,CommonName,TreeInspectionDBH,Installed"
 ID_PREFIX = "grandjunction"
 
 # Refuse to publish when more than this share of named rows cannot be read.
@@ -170,7 +171,6 @@ class Counts:
     no_geometry = 0
     no_id = 0
     vacant = 0
-    retired = 0
     unparsed: Counter = Counter()
     named = 0
     from_common = 0
@@ -183,9 +183,6 @@ SEEN_IDS: set[str] = set()
 
 def keep(feature: dict) -> bool:
     attrs = feature.get("attributes") or {}
-    if attrs.get("Retired") is not None:
-        COUNTS.retired += 1
-        return False
     if (clean(attrs.get("CommonName")) or "").lower() == "vacant" and not clean(
         attrs.get("ScientificName")
     ):
@@ -274,7 +271,7 @@ if __name__ == "__main__":
     table = stream_to_table(iter_chunks(), transform, keep=keep, label="Grand Junction OpenData")
     print(
         f"Grand Junction ingest: dropped {COUNTS.vacant} vacant sites, "
-        f"{COUNTS.retired} retired trees, {COUNTS.no_id} with no GlobalID, "
+        f"{COUNTS.no_id} with no GlobalID, "
         f"{COUNTS.no_geometry} with no geometry",
         file=sys.stderr,
     )
