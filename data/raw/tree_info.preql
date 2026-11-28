@@ -971,6 +971,10 @@ root partial datasource wellesley_tree_info extends app_city_trees (
 complete where city = 'USWEL'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uswel_tree_info_v{data_version}.parquet`;
 
+root partial datasource west_hollywood_tree_info extends app_city_trees ()
+complete where city = 'USWHO'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uswho_tree_info_v{data_version}.parquet`;
+
 root partial datasource waltham_tree_info extends app_city_trees (
     species: ?species,
 )

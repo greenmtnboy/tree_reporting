@@ -47,6 +47,7 @@ property <*>.usswa_satellite_data_updated_through datetime; # when published sat
 property <*>.uswas_satellite_data_updated_through datetime; # when published satellite trees for USWAS are through
 property <*>.uswat_satellite_data_updated_through datetime; # when published satellite trees for USWAT are through
 property <*>.uswel_satellite_data_updated_through datetime; # when published satellite trees for USWEL are through
+property <*>.uswho_satellite_data_updated_through datetime; # when published satellite trees for USWHO are through
 property <*>.uswlt_satellite_data_updated_through datetime; # when published satellite trees for USWLT are through
 property <*>.uswnc_satellite_data_updated_through datetime; # when published satellite trees for USWNC are through
 property <*>.uswnt_satellite_data_updated_through datetime; # when published satellite trees for USWNT are through

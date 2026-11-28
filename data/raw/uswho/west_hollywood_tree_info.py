@@ -3,7 +3,10 @@
 # requires-python = ">=3.13"
 # dependencies = ["pyarrow", "requests", "pytrilogy"]
 # ///
-"""City of West Hollywood's City Tree Inventory, a municipal partition of USLAX.
+"""City of West Hollywood's City Tree Inventory (USWHO).
+
+A partition of Los Angeles's model (USLAX) until 2026-11, when West Hollywood
+became a city of its own; the `data_source` and the `weh-` ids are unchanged.
 
 Source: Socrata dataset `qqwt-wx9z` on data.weho.org, "City Tree Inventory"
 ("an inventory of all City-managed trees within West Hollywood"), CC0 1.0.
@@ -132,7 +135,7 @@ def transform(rows: list[dict], failures: list[str]) -> pa.Table:
     plant_date: list[date | None] = [None] * n
     return pa.table({
         "tree_id": pa.array(tree_id, type=pa.string()),
-        "city": pa.array(["USLAX"] * n, type=pa.string()),
+        "city": pa.array(["USWHO"] * n, type=pa.string()),
         "species": pa.array(species, type=pa.string()),
         "plant_date": pa.array(plant_date, type=pa.date32()),
         "latitude": pa.array(latitude, type=pa.float64()),
@@ -167,6 +170,6 @@ if __name__ == "__main__":
 
         print(f"West Hollywood ingest: dropped {missing} row(s) without an id", file=sys.stderr)
         table = table.filter(pc.is_valid(table.column("tree_id")))
-    table = validate_coordinates(table, city="Los Angeles", city_code="USLAX")
-    table = enforce_tree_schema(table, city="Los Angeles", data_source="WEST_HOLLYWOOD")
+    table = validate_coordinates(table, city="West Hollywood", city_code="USWHO")
+    table = enforce_tree_schema(table, city="West Hollywood", data_source="WEST_HOLLYWOOD")
     emit(table)

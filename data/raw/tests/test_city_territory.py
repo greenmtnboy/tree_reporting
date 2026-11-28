@@ -192,9 +192,11 @@ def test_denver_is_its_own_line():
 
 
 def test_a_polygon_inside_a_rectangle_city_is_carved_out_of_it():
-    """Santa Monica in Los Angeles' box, the District against Northern
-    Virginia's staircase, Oakland's bay line against San Francisco's box."""
-    assert carved_out_of("USLAX") == ("USSMO",)
+    """The District against Northern Virginia's staircase, Oakland's bay line
+    against San Francisco's box.  Los Angeles was a box with Santa Monica
+    carved out; it is a polygon now (with West Hollywood's), so the two
+    simply meet and nothing is carved."""
+    assert carved_out_of("USLAX") == ()
     assert in_city_territory("USSMO", 34.0100, -118.4960)  # the pier
     assert not in_city_territory("USLAX", 34.0100, -118.4960)
     assert in_city_territory("USLAX", 34.0522, -118.2437)  # downtown Los Angeles

@@ -25,4 +25,4 @@ def fetch_modified_at() -> datetime:
 
 
 if __name__ == "__main__":
-    emit_freshness("USLAX", fetch_modified_at)
+    emit_freshness("USWHO", fetch_modified_at)

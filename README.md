@@ -254,7 +254,7 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 | Burlington VT | City of Burlington GIS - Tree Sites | https://maps.burlingtonvt.gov/ |
 | Washington, DC | Open Data DC - Urban Forestry Street Trees | https://opendata.dc.gov/datasets/DCGIS::urban-forestry-street-trees |
 | Los Angeles | LA GeoHub - Trees (Bureau of Street Services) | https://www.arcgis.com/home/item.html?id=266c6255b1fc4ae8b8f100d8696e1fa4 |
-| Los Angeles (West Hollywood) | City of West Hollywood - City Tree Inventory (2015, CC0) | https://data.weho.org/d/qqwt-wx9z |
+| West Hollywood | City of West Hollywood - City Tree Inventory (2015, CC0) | https://data.weho.org/d/qqwt-wx9z |
 | Tempe | City of Tempe - Tree Inventory | https://data.tempe.gov/datasets/tempegov::tree-inventory |
 | Denver | Denver Open Data - Parks, Medians, and Parkway Trees | https://opendata-geospatialdenver.hub.arcgis.com/datasets/geospatialDenver::parks-medians-and-parkway-trees |
 | Boulder, CO | City of Boulder - Tree Inventory Open Data (ArcGIS, CC0) | https://www.arcgis.com/home/item.html?id=dbbae8bdb0a44d17934243b88e85ef2b |
