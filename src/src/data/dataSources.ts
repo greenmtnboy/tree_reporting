@@ -10,6 +10,7 @@
  * gets round to naming it here.
  */
 export const DATA_SOURCE_LABELS: Record<string, string> = {
+  BEAVERTON: 'City of Beaverton',
   PLAINFIELD_PARK_DISTRICT: 'Plainfield Park District',
   EAST_LANSING: 'City of East Lansing',
   PORTLAND_ME_OPENDATA: 'Portland, ME Open Data',

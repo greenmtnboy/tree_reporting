@@ -18,7 +18,7 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
   { city: 'East Lansing', label: 'City of East Lansing - Trees, current status (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://gis2.cityofeastlansing.com/arcgis/rest/services/TREES_STATUS/FeatureServer/0' },
   { city: 'Aurora, IL', label: 'Community submissions and OpenStreetMap (no municipal inventory)' },
   { city: 'Chapel Hill', label: 'Community submissions and OpenStreetMap (no municipal inventory)' },
-  { city: 'Beaverton', label: 'Community submissions and OpenStreetMap (no municipal inventory)' },
+  { city: 'Beaverton', label: 'City of Beaverton - Tree Inventory (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://gisweb.beavertonoregon.gov/server/rest/services/Hosted/Tree_Inventory_Hosted/FeatureServer/0' },
   { city: 'Portland, ME', label: 'City of Portland Forestry - City Owned Trees (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://gis.portlandmaine.gov/portal/home/item.html?id=b12173632dfd448aa7a5bea80b6da47b' },
   { city: 'Coral Springs', label: 'City of Coral Springs - Cityworks Horticulture tree inventory (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://www.arcgis.com/home/item.html?id=5a5fd0d701e04a75ba945bf94e71db9f' },
   { city: 'St. Louis Park', label: 'City of St. Louis Park - Trees (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://www.arcgis.com/home/item.html?id=d8e68ae495d24f06a9adc233bf6e4c55' },

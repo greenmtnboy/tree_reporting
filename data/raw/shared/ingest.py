@@ -2379,7 +2379,7 @@ MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
     "USELN": ("EAST_LANSING",),
     "USAUR": (),
     "USCHH": (),
-    "USBVN": (),
+    "USBVN": ("BEAVERTON",),
     "USPWM": ("PORTLAND_ME_OPENDATA",),
     "USCRS": ("CORAL_SPRINGS_OPENDATA",),
     "USSLP": ("ST_LOUIS_PARK_OPENDATA",),
@@ -3826,7 +3826,7 @@ DEDUP_CELL_METRES: dict[str, int] = {
     "USAUR": 10,
     # Chapel Hill: no inventory, so nothing to calibrate against.  Default.
     "USCHH": 10,
-    # Beaverton: no inventory, so nothing to calibrate against.  Default.
+    # Beaverton: NOT YET CALIBRATED: default; measure after the first build.
     "USBVN": 10,
     # Calibrated 2026-11-28 (osm_dedup_validation): 8m flags 147, 1.4% false;
     # 10m adds 1 true for 2 false.

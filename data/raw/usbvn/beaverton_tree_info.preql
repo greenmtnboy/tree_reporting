@@ -2,21 +2,26 @@ import ..tree_common;
 import ..community_tree_info;
 import ..tree_dedup;
 
-# Beaverton has no municipal tree inventory on an open portal: Beaverton's street-tree layer answers on the city's own server but no public catalogue item points at it, and it names species by free-text common name only; it is a follow-up, not wired.
-# Its OSM trees were published by Portland's model (USPOR) under the rectangle
-# Portland had until #285 drew it to its Census line (issue #287).  It is its
-# own city now, its territory the place's real boundary
-# (boundaries/usbvn.json): a community-only city (EXTENDING.md) with
-# community and OSM partitions and no municipal term in its watermark.
+# Beaverton's OSM trees were published by Portland's model (USPOR) under the
+# rectangle Portland had until #285 drew it to its Census line (issue #287).
+# It is its own city now, its territory the city's real boundary
+# (boundaries/usbvn.json), with the City's own inventory (common names only,
+# resolved in the ingest; no licence stated, displayed with attribution only)
+# beside the community and OSM rows.
 
-auto usbvn_published_data_updated_through <- greatest(usbvn_community_data_updated_through, usbvn_osm_data_updated_through);
+auto usbvn_published_data_updated_through <- greatest(usbvn_data_updated_through, usbvn_community_data_updated_through, usbvn_osm_data_updated_through);
 
-key usbvn_source enum<string>['COMMUNITY_USBVN', 'OSM_USBVN']; # originating dataset for the row
+key usbvn_source enum<string>['BEAVERTON', 'COMMUNITY_USBVN', 'OSM_USBVN']; # originating dataset for the row
 
 # Feed the shared cross-source merge (../tree_dedup.preql): it classifies rows
 # by the label's prefix and records provenance from it.
 auto usbvn_source_label <- concat(usbvn_source, '');
 merge usbvn_source_label into source_label;
+
+root datasource beaverton_update_time (
+    data_updated_through: usbvn_data_updated_through
+)
+file `./beaverton_update_time.py`;
 
 # Only this city's column, so an approval elsewhere does not mark USBVN's
 # Parquet stale. Trilogy probes this as MAX over the one column.
@@ -35,6 +40,12 @@ file `./beaverton_osm_probe.py`;
 
 # Every partition extends ../tree_dedup.preql's `tree_partition`, which maps
 # the shared raw_* columns.
+root partial datasource beaverton_raw_tree_info extends tree_partition (
+    data_source: usbvn_source,
+    species: ?raw_species,
+)
+complete where city = 'USBVN' and usbvn_source = 'BEAVERTON'
+file `./beaverton_tree_info.py`;
 
 # Approved community submissions for this city. The shared ingest script emits
 # every city's rows; the `complete where` clause narrows it to USBVN and makes
@@ -76,8 +87,8 @@ merge merged_longitude into longitude;
 
 # The published target extends ../tree_dedup.preql's `published_tree_info`:
 # the canonical columns, the prune, and the guard that refuses a build which
-# lost a quarter of the city.  The `@source_kept` line is the same guard for
-# OSM (`test_every_city_refuses_a_collapsed_build`).
+# lost a quarter of the city.  The two `@source_kept` lines are the same guard
+# per bulk source (`test_every_city_refuses_a_collapsed_build`).
 partial datasource beaverton_tree_info extends published_tree_info (
     data_source: usbvn_source,
     ?species,
@@ -86,4 +97,5 @@ partial datasource beaverton_tree_info extends published_tree_info (
 complete where city = 'USBVN'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usbvn_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usbvn_tree_info_v{data_version}.parquet`
 freshness by usbvn_published_data_updated_through
+assert @source_kept(tree_id, usbvn_source, 'BEAVERTON', 0.75)
 assert @source_kept(tree_id, usbvn_source, 'OSM_USBVN', 0.75);

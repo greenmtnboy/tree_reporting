@@ -84,6 +84,7 @@ property <*>.useln_data_updated_through datetime; # when East Lansing data is th
 property <*>.useln_osm_data_updated_through datetime; # GCS publication time of East Lansing's staged OSM parquet
 property <*>.usaur_osm_data_updated_through datetime; # GCS publication time of Aurora, IL's staged OSM parquet
 property <*>.uschh_osm_data_updated_through datetime; # GCS publication time of Chapel Hill's staged OSM parquet
+property <*>.usbvn_data_updated_through datetime; # when Beaverton data is through
 property <*>.usbvn_osm_data_updated_through datetime; # GCS publication time of Beaverton's staged OSM parquet
 property <*>.uspwm_data_updated_through datetime; # when Portland, ME data is through
 property <*>.uspwm_osm_data_updated_through datetime; # GCS publication time of Portland, ME's staged OSM parquet
