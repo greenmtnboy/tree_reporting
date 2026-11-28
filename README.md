@@ -198,6 +198,14 @@ Currently has data from the following cities:
 - [Orland Park, Illinois](https://greenmtnboy.github.io/tree_reporting/#/?city=USOPK)
 - [Evanston, Illinois](https://greenmtnboy.github.io/tree_reporting/#/?city=USEVN)
 - [Moorhead, Minnesota](https://greenmtnboy.github.io/tree_reporting/#/?city=USMHD)
+- [Sarasota County, Florida](https://greenmtnboy.github.io/tree_reporting/#/?city=USSRQ)
+- [Pinellas County, Florida](https://greenmtnboy.github.io/tree_reporting/#/?city=USPIE)
+- [Bozeman, Montana](https://greenmtnboy.github.io/tree_reporting/#/?city=USBZN)
+- [Loveland, Colorado](https://greenmtnboy.github.io/tree_reporting/#/?city=USLVL)
+- [San Mateo, California](https://greenmtnboy.github.io/tree_reporting/#/?city=USSMQ)
+- [St. Louis Park, Minnesota](https://greenmtnboy.github.io/tree_reporting/#/?city=USSLP)
+- [Coral Springs, Florida](https://greenmtnboy.github.io/tree_reporting/#/?city=USCRS)
+- [Portland, Maine](https://greenmtnboy.github.io/tree_reporting/#/?city=USPWM)
 
 **[Live page](https://greenmtnboy.github.io/tree_reporting/)**
 
@@ -392,6 +400,14 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 | Orland Park | Village of Orland Park - Public Trees (no licence stated; displayed with attribution only, not licensed for reuse) | https://www.arcgis.com/home/item.html?id=780d9c0a3883498b82e046ef231144c9 |
 | Evanston | City of Evanston Open Data - Trees (CC BY 4.0) | https://www.arcgis.com/home/item.html?id=845a3acb3dc0442a80b219691889f992 |
 | Moorhead | City of Moorhead GIS - TreePlotter inventory (no licence stated; displayed with attribution only, not licensed for reuse) | https://www.arcgis.com/home/item.html?id=efd9f39819d54020b610ef0f5f0c0c04 |
+| Sarasota County | Sarasota County GIS - TreeInventory (no licence stated; displayed with attribution only, not licensed for reuse) | https://www.arcgis.com/home/item.html?id=d83796771ba64ea88f958c058ddcfa79 |
+| Pinellas County | Pinellas County Public Works - Tree Inventory (no licence stated; displayed with attribution only, not licensed for reuse) | https://www.arcgis.com/home/item.html?id=4d5bed2b3a3c4985aa4ffb2c7670fd8b |
+| Bozeman | City of Bozeman Forestry Division - Tree Inventory (no licence stated; displayed with attribution only, not licensed for reuse) | https://gisweb.bozeman.net/arcgis/rest/services/Public/Forestry_Public_Web_Map/MapServer/2 |
+| Loveland | City of Loveland GIS - City of Loveland Trees (no licence stated; displayed with attribution only, not licensed for reuse) | https://www.arcgis.com/home/item.html?id=0f66e47e8c7a4e60804ec871d5827ff1 |
+| San Mateo | City of San Mateo Public Works - Street Trees (no licence stated; displayed with attribution only, not licensed for reuse) | https://www.arcgis.com/home/item.html?id=67c8b57d2d91459c9f951df9de961a06 |
+| St. Louis Park | City of St. Louis Park - Trees (no licence stated; displayed with attribution only, not licensed for reuse) | https://www.arcgis.com/home/item.html?id=d8e68ae495d24f06a9adc233bf6e4c55 |
+| Coral Springs | City of Coral Springs - Cityworks Horticulture tree inventory (no licence stated; displayed with attribution only, not licensed for reuse) | https://www.arcgis.com/home/item.html?id=5a5fd0d701e04a75ba945bf94e71db9f |
+| Portland, ME | City of Portland Forestry - City Owned Trees (no licence stated; displayed with attribution only, not licensed for reuse) | https://gis.portlandmaine.gov/portal/home/item.html?id=b12173632dfd448aa7a5bea80b6da47b |
 | Bendigo | City of Greater Bendigo - Environment - Trees (CC BY 2.5 AU) | https://data.gov.au/data/dataset/city-of-greater-bendigo-environment-trees |
 | Melbourne | Melbourne Open Data - Urban Forest Trees | https://data.melbourne.vic.gov.au/explore/dataset/trees-with-species-and-dimensions-urban-forest/ |
 | Melbourne (Port Phillip) | City of Port Phillip - Trees (CC BY 2.5 AU) | https://data.gov.au/data/dataset/city-of-port-phillip-trees |
@@ -586,6 +602,17 @@ Every tree row carries a `data_source` column identifying which of the above it 
 | Orland Park | National Park Service - National Register of Historic Places | https://www.nps.gov/subjects/nationalregister/data-downloads.htm |
 | Evanston | National Park Service - National Register of Historic Places | https://www.nps.gov/subjects/nationalregister/data-downloads.htm |
 | Moorhead | National Park Service - National Register of Historic Places | https://www.nps.gov/subjects/nationalregister/data-downloads.htm |
+| Sarasota County | National Park Service - National Register of Historic Places | https://www.nps.gov/subjects/nationalregister/data-downloads.htm |
+| Pinellas County | Pinellas County - Historic Landmarks, unincorporated county (no licence stated; displayed with attribution only, not licensed for reuse) | https://www.arcgis.com/home/item.html?id=a050d3efccf2453091db507bb71be718 |
+| Pinellas County | National Park Service - National Register of Historic Places | https://www.nps.gov/subjects/nationalregister/data-downloads.htm |
+| Bozeman | National Park Service - National Register of Historic Places | https://www.nps.gov/subjects/nationalregister/data-downloads.htm |
+| Loveland | City of Loveland Development Services - Designated Local Historic Properties (no licence stated; displayed with attribution only, not licensed for reuse) | https://services1.arcgis.com/d4MV7N9xmuHYbLrF/arcgis/rest/services/Historic_Properties/FeatureServer/5 |
+| Loveland | National Park Service - National Register of Historic Places | https://www.nps.gov/subjects/nationalregister/data-downloads.htm |
+| San Mateo | National Park Service - National Register of Historic Places | https://www.nps.gov/subjects/nationalregister/data-downloads.htm |
+| St. Louis Park | National Park Service - National Register of Historic Places | https://www.nps.gov/subjects/nationalregister/data-downloads.htm |
+| Coral Springs | National Park Service - National Register of Historic Places | https://www.nps.gov/subjects/nationalregister/data-downloads.htm |
+| Portland, ME | City of Portland - Local Landmarks (no licence stated; displayed with attribution only, not licensed for reuse) | https://gis.portlandmaine.gov/portal/home/item.html?id=13d2773085ab41a1afad4f79d7b4b9d6 |
+| Portland, ME | National Park Service - National Register of Historic Places | https://www.nps.gov/subjects/nationalregister/data-downloads.htm |
 | Bendigo | Heritage Victoria - Victorian Heritage Register via Vicmap (CC BY 4.0) | https://discover.data.vic.gov.au/dataset/victorian-heritage-register |
 | Sydney | Sydney LEP 2012 heritage items (NSW DPHI, CC BY) | https://data.nsw.gov.au/data/dataset/environmental-planning-instrument-heritage-her |
 | Eindhoven | Rijksdienst voor het Cultureel Erfgoed - Rijksmonumenten via PDOK (CC BY 4.0) | https://service.pdok.nl/rce/ps-ch/wfs/v1_0?request=GetCapabilities&service=WFS |

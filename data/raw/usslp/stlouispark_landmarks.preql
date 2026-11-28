@@ -1,0 +1,31 @@
+import ..landmark_common;
+
+root datasource stlouispark_landmarks_update_time (
+    data_updated_through: usslp_landmark_data_updated_through
+)
+file `./stlouispark_landmarks_probe.py`;
+
+# St. Louis Park's National Register listings (the National Park Service's
+# nrhp_locations MapServer cut to the city), read live -- no Nominatim
+# geocoding, no committed CSV and no staging object.  The City publishes no
+# landmark register of its own.  `lm_type` names the register and
+# `register_number` the NRIS reference number.
+root partial datasource raw_stlouispark_landmark_info extends landmark_partition (
+    address: ?address,
+    lm_type: ?lm_type,
+    register_number: ?register_number,
+    year_designated: ?year_designated,
+)
+complete where city = 'USSLP'
+file `./stlouispark_landmarks.py`;
+
+partial datasource stlouispark_landmark_info extends published_landmark_info (
+    ?address,
+    ?lm_type,
+    ?register_number,
+    ?year_designated,
+    usslp_landmark_data_updated_through,
+)
+complete where city = 'USSLP'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/usslp_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/usslp_landmark_info_v{data_version}.parquet`
+freshness by usslp_landmark_data_updated_through;

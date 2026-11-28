@@ -1,0 +1,31 @@
+import ..landmark_common;
+
+root datasource sanmateo_landmarks_update_time (
+    data_updated_through: ussmq_landmark_data_updated_through
+)
+file `./sanmateo_landmarks_probe.py`;
+
+# The National Park Service's National Register listings in San Mateo, read
+# live -- no Nominatim geocoding, no committed CSV and no staging object.
+# San Mateo publishes no designation register of its own (its
+# Historic_Resources layer is an unnamed parcel eligibility survey).
+# `lm_type` names the register and `register_number` the NRIS reference number.
+root partial datasource raw_sanmateo_landmark_info extends landmark_partition (
+    address: ?address,
+    lm_type: ?lm_type,
+    register_number: ?register_number,
+    year_designated: ?year_designated,
+)
+complete where city = 'USSMQ'
+file `./sanmateo_landmarks.py`;
+
+partial datasource sanmateo_landmark_info extends published_landmark_info (
+    ?address,
+    ?lm_type,
+    ?register_number,
+    ?year_designated,
+    ussmq_landmark_data_updated_through,
+)
+complete where city = 'USSMQ'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/ussmq_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/ussmq_landmark_info_v{data_version}.parquet`
+freshness by ussmq_landmark_data_updated_through;

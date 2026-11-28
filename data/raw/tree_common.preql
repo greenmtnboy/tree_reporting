@@ -75,6 +75,22 @@ property <*>.usnah_osm_data_updated_through datetime; # GCS publication time of 
 property <*>.usdan_osm_data_updated_through datetime; # GCS publication time of Danvers's staged OSM parquet
 property <*>.uswnc_osm_data_updated_through datetime; # GCS publication time of Winchester's staged OSM parquet
 property <*>.uscan_osm_data_updated_through datetime; # GCS publication time of Canton's staged OSM parquet
+property <*>.uspwm_data_updated_through datetime; # when Portland, ME data is through
+property <*>.uspwm_osm_data_updated_through datetime; # GCS publication time of Portland, ME's staged OSM parquet
+property <*>.uscrs_data_updated_through datetime; # when Coral Springs data is through
+property <*>.uscrs_osm_data_updated_through datetime; # GCS publication time of Coral Springs's staged OSM parquet
+property <*>.usslp_data_updated_through datetime; # when St. Louis Park data is through
+property <*>.usslp_osm_data_updated_through datetime; # GCS publication time of St. Louis Park's staged OSM parquet
+property <*>.ussmq_data_updated_through datetime; # when San Mateo data is through
+property <*>.ussmq_osm_data_updated_through datetime; # GCS publication time of San Mateo's staged OSM parquet
+property <*>.uslvl_data_updated_through datetime; # when Loveland data is through
+property <*>.uslvl_osm_data_updated_through datetime; # GCS publication time of Loveland's staged OSM parquet
+property <*>.usbzn_data_updated_through datetime; # when Bozeman data is through
+property <*>.usbzn_osm_data_updated_through datetime; # GCS publication time of Bozeman's staged OSM parquet
+property <*>.uspie_data_updated_through datetime; # when Pinellas County data is through
+property <*>.uspie_osm_data_updated_through datetime; # GCS publication time of Pinellas County's staged OSM parquet
+property <*>.ussrq_data_updated_through datetime; # when Sarasota County data is through
+property <*>.ussrq_osm_data_updated_through datetime; # GCS publication time of Sarasota County's staged OSM parquet
 property <*>.usarl_data_updated_through datetime; # when Arlington, MA data is through
 property <*>.usarl_osm_data_updated_through datetime; # GCS publication time of Arlington, MA's staged OSM parquet
 property <*>.usded_data_updated_through datetime; # when Dedham data is through

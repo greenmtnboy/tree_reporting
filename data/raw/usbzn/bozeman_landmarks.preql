@@ -1,0 +1,32 @@
+import ..landmark_common;
+
+root datasource bozeman_landmarks_update_time (
+    data_updated_through: usbzn_landmark_data_updated_through
+)
+file `./bozeman_landmarks_probe.py`;
+
+# Bozeman's National Register listings (the National Park Service's
+# nrhp_locations MapServer cut to the city), read live -- no Nominatim
+# geocoding, no committed CSV and no staging object.  The City's own
+# individually listed properties are the same listings (see the script).
+# `lm_type` names the register and `register_number` the NRIS reference
+# number.
+root partial datasource raw_bozeman_landmark_info extends landmark_partition (
+    address: ?address,
+    lm_type: ?lm_type,
+    register_number: ?register_number,
+    year_designated: ?year_designated,
+)
+complete where city = 'USBZN'
+file `./bozeman_landmarks.py`;
+
+partial datasource bozeman_landmark_info extends published_landmark_info (
+    ?address,
+    ?lm_type,
+    ?register_number,
+    ?year_designated,
+    usbzn_landmark_data_updated_through,
+)
+complete where city = 'USBZN'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/usbzn_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/usbzn_landmark_info_v{data_version}.parquet`
+freshness by usbzn_landmark_data_updated_through;

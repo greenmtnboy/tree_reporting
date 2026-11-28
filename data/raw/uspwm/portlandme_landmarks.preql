@@ -1,0 +1,32 @@
+import ..landmark_common;
+
+root datasource portlandme_landmarks_update_time (
+    data_updated_through: uspwm_landmark_data_updated_through
+)
+file `./portlandme_landmarks_probe.py`;
+
+# Portland, Maine's Local Landmarks (the City's 2025 HistoricResources layer on
+# gis.portlandmaine.gov, one designated parcel per landmark) and the National
+# Park Service's National Register listings in Portland -- registers read live,
+# so no Nominatim geocoding, no committed CSV and no staging object.  `lm_type`
+# names the register and `register_number` the NRIS reference number (the
+# local register publishes none).
+root partial datasource raw_portlandme_landmark_info extends landmark_partition (
+    address: ?address,
+    lm_type: ?lm_type,
+    register_number: ?register_number,
+    year_designated: ?year_designated,
+)
+complete where city = 'USPWM'
+file `./portlandme_landmarks.py`;
+
+partial datasource portlandme_landmark_info extends published_landmark_info (
+    ?address,
+    ?lm_type,
+    ?register_number,
+    ?year_designated,
+    uspwm_landmark_data_updated_through,
+)
+complete where city = 'USPWM'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/uspwm_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/uspwm_landmark_info_v{data_version}.parquet`
+freshness by uspwm_landmark_data_updated_through;

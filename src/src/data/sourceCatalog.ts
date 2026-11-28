@@ -11,6 +11,14 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
+  { city: 'Portland, ME', label: 'City of Portland Forestry - City Owned Trees (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://gis.portlandmaine.gov/portal/home/item.html?id=b12173632dfd448aa7a5bea80b6da47b' },
+  { city: 'Coral Springs', label: 'City of Coral Springs - Cityworks Horticulture tree inventory (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://www.arcgis.com/home/item.html?id=5a5fd0d701e04a75ba945bf94e71db9f' },
+  { city: 'St. Louis Park', label: 'City of St. Louis Park - Trees (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://www.arcgis.com/home/item.html?id=d8e68ae495d24f06a9adc233bf6e4c55' },
+  { city: 'San Mateo', label: 'City of San Mateo Public Works - Street Trees (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://www.arcgis.com/home/item.html?id=67c8b57d2d91459c9f951df9de961a06' },
+  { city: 'Loveland', label: 'City of Loveland GIS - City of Loveland Trees (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://www.arcgis.com/home/item.html?id=0f66e47e8c7a4e60804ec871d5827ff1' },
+  { city: 'Bozeman', label: 'City of Bozeman Forestry Division - Tree Inventory (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://gisweb.bozeman.net/arcgis/rest/services/Public/Forestry_Public_Web_Map/MapServer/2' },
+  { city: 'Pinellas County', label: 'Pinellas County Public Works - Tree Inventory (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://www.arcgis.com/home/item.html?id=4d5bed2b3a3c4985aa4ffb2c7670fd8b' },
+  { city: 'Sarasota County', label: 'Sarasota County GIS - TreeInventory (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://www.arcgis.com/home/item.html?id=d83796771ba64ea88f958c058ddcfa79' },
   { city: 'Arlington, MA', label: 'Town of Arlington GIS - Public Shade Trees (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://www.arcgis.com/home/item.html?id=dc385c1084d1432ebc792ffcb20bcfa4' },
   { city: 'Dedham', label: 'Town of Dedham GIS - Tree Inventory (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://www.arcgis.com/home/item.html?id=9d23e28c88984fa0903da95792883d4a' },
   { city: 'Salem, MA', label: 'City of Salem, MA (SalemGIS, Salem DPW) - Salem Street Trees (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://www.arcgis.com/home/item.html?id=df1d66111f2d481db82564d5b820dee0' },
@@ -245,6 +253,17 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
+  { city: 'Portland, ME', label: 'City of Portland - Local Landmarks (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://gis.portlandmaine.gov/portal/home/item.html?id=13d2773085ab41a1afad4f79d7b4b9d6' },
+  { city: 'Portland, ME', label: 'National Park Service - National Register of Historic Places', url: 'https://www.nps.gov/subjects/nationalregister/data-downloads.htm' },
+  { city: 'Coral Springs', label: 'National Park Service - National Register of Historic Places', url: 'https://www.nps.gov/subjects/nationalregister/data-downloads.htm' },
+  { city: 'St. Louis Park', label: 'National Park Service - National Register of Historic Places', url: 'https://www.nps.gov/subjects/nationalregister/data-downloads.htm' },
+  { city: 'San Mateo', label: 'National Park Service - National Register of Historic Places', url: 'https://www.nps.gov/subjects/nationalregister/data-downloads.htm' },
+  { city: 'Loveland', label: 'City of Loveland Development Services - Designated Local Historic Properties (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://services1.arcgis.com/d4MV7N9xmuHYbLrF/arcgis/rest/services/Historic_Properties/FeatureServer/5' },
+  { city: 'Loveland', label: 'National Park Service - National Register of Historic Places', url: 'https://www.nps.gov/subjects/nationalregister/data-downloads.htm' },
+  { city: 'Bozeman', label: 'National Park Service - National Register of Historic Places', url: 'https://www.nps.gov/subjects/nationalregister/data-downloads.htm' },
+  { city: 'Pinellas County', label: 'Pinellas County - Historic Landmarks, unincorporated county (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://www.arcgis.com/home/item.html?id=a050d3efccf2453091db507bb71be718' },
+  { city: 'Pinellas County', label: 'National Park Service - National Register of Historic Places', url: 'https://www.nps.gov/subjects/nationalregister/data-downloads.htm' },
+  { city: 'Sarasota County', label: 'National Park Service - National Register of Historic Places', url: 'https://www.nps.gov/subjects/nationalregister/data-downloads.htm' },
   { city: 'Canton', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
   { city: 'Winchester', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
   { city: 'Danvers', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },

@@ -206,6 +206,14 @@ property <*>.usnah_community_data_updated_through datetime; # when approved comm
 property <*>.usdan_community_data_updated_through datetime; # when approved community submissions for USDAN are through
 property <*>.uswnc_community_data_updated_through datetime; # when approved community submissions for USWNC are through
 property <*>.uscan_community_data_updated_through datetime; # when approved community submissions for USCAN are through
+property <*>.ussrq_community_data_updated_through datetime; # when approved community submissions for USSRQ are through
+property <*>.uspie_community_data_updated_through datetime; # when approved community submissions for USPIE are through
+property <*>.usbzn_community_data_updated_through datetime; # when approved community submissions for USBZN are through
+property <*>.uslvl_community_data_updated_through datetime; # when approved community submissions for USLVL are through
+property <*>.ussmq_community_data_updated_through datetime; # when approved community submissions for USSMQ are through
+property <*>.usslp_community_data_updated_through datetime; # when approved community submissions for USSLP are through
+property <*>.uscrs_community_data_updated_through datetime; # when approved community submissions for USCRS are through
+property <*>.uspwm_community_data_updated_through datetime; # when approved community submissions for USPWM are through
 
 # The community *rows* are declared per city too, in each city's own tree model,
 # as a `complete where city = 'X' and {code}_source = 'COMMUNITY_X'` partition.
