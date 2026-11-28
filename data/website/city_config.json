@@ -194,5 +194,13 @@
   "USNAH": { "name": "Nahant", "center": [-70.9195, 42.4265] },
   "USDAN": { "name": "Danvers", "center": [-70.9301, 42.575] },
   "USWNC": { "name": "Winchester", "center": [-71.137, 42.4523] },
-  "USCAN": { "name": "Canton", "center": [-71.1448, 42.1584] }
+  "USCAN": { "name": "Canton", "center": [-71.1448, 42.1584] },
+  "USSRQ": { "name": "Sarasota County", "center": [-82.4, 27.17] },
+  "USPIE": { "name": "Pinellas County", "center": [-82.72, 27.89] },
+  "USBZN": { "name": "Bozeman", "center": [-111.0373, 45.6793] },
+  "USLVL": { "name": "Loveland", "center": [-105.075, 40.3978] },
+  "USSMQ": { "name": "San Mateo", "center": [-122.3255, 37.563] },
+  "USSLP": { "name": "St. Louis Park", "center": [-93.348, 44.9483] },
+  "USCRS": { "name": "Coral Springs", "center": [-80.2706, 26.2712] },
+  "USPWM": { "name": "Portland, ME", "center": [-70.2568, 43.6591] }
 }

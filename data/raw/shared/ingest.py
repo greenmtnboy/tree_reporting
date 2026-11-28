@@ -664,6 +664,12 @@ SENTINEL_ENRICHMENT: dict[str, dict[str, object]] = {
 # F. microcarpa, `Jacaranda acutifolia` for J. mimosifolia) is not a synonym
 # and is deliberately not here.
 SPECIES_SYNONYMS: dict[str, str] = {
+    # --- Batch 19: WCVP accepted names ---
+    "Populus x deltoides": "Populus deltoides",
+    "Psidium littorale": "Psidium cattleyanum",
+    "Pithecellobium saman": "Samanea saman",
+    "Cassia surattensis": "Senna surattensis",
+    "Tabebuia caraiba": "Tabebuia aurea",
     # --- Batch 16 (Port St. Lucie): WCVP accepted names ---
     "Roystonea elata": "Roystonea regia",
     "Veitchia merrillii": "Adonidia merrillii",
@@ -911,6 +917,37 @@ SPECIES_SYNONYMS: dict[str, str] = {
 # `Celtis`/`Cercis occidentalis`, `Pinus`/`Prunus nigra` and
 # `Malus`/`Taxus baccata`.  Add an entry only with that check behind it.
 SPECIES_MISSPELLINGS: dict[str, str] = {
+    # --- Batch 19 (St. Louis Park, Loveland, Sarasota, Portland ME, San Mateo, Bozeman, Coral Springs) ---
+    "Castenea dentata": "Castanea dentata",
+    "Gleditsia triacantho": "Gleditsia triacanthos",
+    "Ulmus davidana": "Ulmus davidiana",
+    "Carpunus caroliniana": "Carpinus caroliniana",
+    "Maackia amurense": "Maackia amurensis",
+    "Prunus serrotina": "Prunus serotina",
+    "Quercus gambelli": "Quercus gambelii",
+    "Sherpherdia argentea": "Shepherdia argentea",
+    "Ulmus davidiiana": "Ulmus davidiana",
+    "Gingko bilboa": "Ginkgo biloba",
+    "Swietenia mahogoni": "Swietenia mahagoni",
+    "Elaeocarpus decipens": "Elaeocarpus decipiens",
+    "Ailanthus atissima": "Ailanthus altissima",
+    "Chameaecyparis thyoides": "Chamaecyparis thyoides",
+    "Larix kaepheri": "Larix kaempferi",
+    "Larix laricinia": "Larix laricina",
+    "Liquidambar styracifua": "Liquidambar styraciflua",
+    "Taxxus baccata": "Taxus baccata",
+    "Zizyphus jujuba": "Ziziphus jujuba",
+    "Gymnocladis dioicus": "Gymnocladus dioicus",
+    "Beaucarnia recurvata": "Beaucarnea recurvata",
+    "Eleocarpus decipiens": "Elaeocarpus decipiens",
+    "Felicium decipiens": "Filicium decipiens",
+    "Leucana leucocephala": "Leucaena leucocephala",
+    "Ligustrum japanicum": "Ligustrum japonicum",
+    "Livistona chinense": "Livistona chinensis",
+    "Trachycarpus forunei": "Trachycarpus fortunei",
+    "Bursera simarouba": "Bursera simaruba",
+    "Colvillea racemose": "Colvillea racemosa",
+    "Koelruetaria elegans": "Koelreuteria elegans",
     # --- Batch 18 (Oxnard, Evanston, Plano, Orland Park, Bend, Moorhead) ---
     "Acacia cyclopsis": "Acacia cyclops",
     "Ulmus thomasi": "Ulmus thomasii",
@@ -2335,6 +2372,14 @@ def _sanitize_taxon(value: str | None) -> str | None:
 # Keyed by city code so `community_source_for` can derive the community label
 # and so tests can assert the two lists agree.
 MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
+    "USPWM": ("PORTLAND_ME_OPENDATA",),
+    "USCRS": ("CORAL_SPRINGS_OPENDATA",),
+    "USSLP": ("ST_LOUIS_PARK_OPENDATA",),
+    "USSMQ": ("SAN_MATEO_OPENDATA",),
+    "USLVL": ("LOVELAND_OPENDATA",),
+    "USBZN": ("BOZEMAN_OPENDATA",),
+    "USPIE": ("PINELLAS_COUNTY_OPENDATA",),
+    "USSRQ": ("SARASOTA_COUNTY_OPENDATA",),
     "USCAN": (),
     "USWNC": (),
     "USDAN": (),
@@ -2563,6 +2608,14 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # overlapping rows under one cluster id and publishes only the survivor — see
 # tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
+    "USPWM": "OSM_USPWM",
+    "USCRS": "OSM_USCRS",
+    "USSLP": "OSM_USSLP",
+    "USSMQ": "OSM_USSMQ",
+    "USLVL": "OSM_USLVL",
+    "USBZN": "OSM_USBZN",
+    "USPIE": "OSM_USPIE",
+    "USSRQ": "OSM_USSRQ",
     "USCAN": "OSM_USCAN",
     "USWNC": "OSM_USWNC",
     "USDAN": "OSM_USDAN",
@@ -3474,6 +3527,14 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
+    "USPWM": (43.5443, 43.74, -70.35, -69.9758),
+    "USCRS": (26.22, 26.32, -80.31, -80.19),
+    "USSLP": (44.91, 44.99, -93.42, -93.32),
+    "USSMQ": (37.5, 37.6022, -122.37, -122.26),
+    "USLVL": (40.35, 40.48, -105.29, -104.96),
+    "USBZN": (45.62, 45.74, -111.13, -110.9842),
+    "USPIE": (27.6, 28.18, -82.86, -82.58),
+    "USSRQ": (26.93, 27.4, -82.58, -82.2),
     "USCAN": (42.1376, 42.228, -71.1781, -71.0666),
     "USWNC": (42.4355, 42.4739, -71.1897, -71.1095),
     "USDAN": (42.5403, 42.6133, -71.0029, -70.9079),
@@ -3727,6 +3788,30 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
+    # Calibrated 2026-11-28 (osm_dedup_validation): 8m flags 147, 1.4% false;
+    # 10m adds 1 true for 2 false.
+    "USPWM": 8,
+    # Calibrated 2026-11-28 (osm_dedup_validation): 10m flags 48, 0 false;
+    # 14m adds 1 true for 1 false.
+    "USCRS": 10,
+    # Calibrated 2026-11-28 (osm_dedup_validation): 10m flags 98, 0 false;
+    # 14m is not a calibrated size, 20m is 5.1% false.
+    "USSLP": 10,
+    # Calibrated 2026-11-28 (osm_dedup_validation): 8m flags 330, 4.2% false;
+    # 10m adds 6 true for 6 false (5.8% false).
+    "USSMQ": 8,
+    # Calibrated 2026-11-28 (osm_dedup_validation): 6m flags 119, 0.8% false;
+    # 8m adds 4 true for 4 false.
+    "USLVL": 6,
+    # Calibrated 2026-11-28 (osm_dedup_validation): 4m flags 93, 1.1% false;
+    # 6m adds 12 true for 14 false (12.6% false).
+    "USBZN": 4,
+    # Calibrated 2026-11-28 (osm_dedup_validation): 6m flags 180, 1.1% false;
+    # 8m adds 9 true for 9 false (5.6% false).
+    "USPIE": 6,
+    # Calibrated 2026-11-28 (osm_dedup_validation): 8m flags 73, 2.7% false;
+    # 10m adds 0 true for 1 false.
+    "USSRQ": 8,
     # Everett, Chelsea, Winthrop, Beverly, Lynnfield, Melrose, Wellesley,
     # Nahant, Danvers, Winchester, Canton: no inventory, so nothing to
     # calibrate against.  Default.
@@ -4530,6 +4615,14 @@ DEDUP_CELL_METRES: dict[str, int] = {
 Box = tuple[float, float, float, float]
 
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
+    'USPWM': ((43.5443, 43.7277, -70.3474, -69.9758),),
+    'USCRS': ((26.2294, 26.3111, -80.2975, -80.2018),),
+    'USSLP': ((44.9196, 44.9786, -93.4106, -93.3286),),
+    'USSMQ': ((37.5125, 37.6022, -122.355, -122.2749),),
+    'USLVL': ((40.35, 40.48, -105.29, -104.96),),
+    'USBZN': ((45.6328, 45.7333, -111.1198, -110.9842),),
+    'USPIE': ((27.6, 28.18, -82.86, -82.58),),
+    'USSRQ': ((26.93, 27.4, -82.58, -82.2),),
     'USCAN': ((42.1376, 42.228, -71.1781, -71.0666),),
     'USWNC': ((42.4355, 42.4739, -71.1897, -71.1095),),
     'USDAN': ((42.5403, 42.6133, -71.0029, -70.9079),),

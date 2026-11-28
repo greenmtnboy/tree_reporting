@@ -10,6 +10,14 @@
  * gets round to naming it here.
  */
 export const DATA_SOURCE_LABELS: Record<string, string> = {
+  PORTLAND_ME_OPENDATA: 'Portland, ME Open Data',
+  CORAL_SPRINGS_OPENDATA: 'Coral Springs Open Data',
+  ST_LOUIS_PARK_OPENDATA: 'St. Louis Park Open Data',
+  SAN_MATEO_OPENDATA: 'San Mateo Open Data',
+  LOVELAND_OPENDATA: 'Loveland Open Data',
+  BOZEMAN_OPENDATA: 'Bozeman Open Data',
+  PINELLAS_COUNTY_OPENDATA: 'Pinellas County Open Data',
+  SARASOTA_COUNTY_OPENDATA: 'Sarasota County Open Data',
   ARLINGTON_MA: 'Town of Arlington, MA',
   DEDHAM: 'Town of Dedham',
   SALEM_MA: 'City of Salem, MA',

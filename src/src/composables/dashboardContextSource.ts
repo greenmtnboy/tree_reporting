@@ -1196,6 +1196,54 @@ const CITY_DASHBOARD_CONTEXT: Record<
     biome: 'Temperate Broadleaf & Mixed Forests',
     realm: 'nearctic',
   },
+  USSRQ: {
+    ecoregionId: 399, // Southeast US conifer savannas
+    usdaZone: 10,
+    biome: 'Temperate Grasslands, Savannas & Shrublands',
+    realm: 'nearctic',
+  },
+  USPIE: {
+    ecoregionId: 399, // Southeast US conifer savannas
+    usdaZone: 10,
+    biome: 'Temperate Grasslands, Savannas & Shrublands',
+    realm: 'nearctic',
+  },
+  USBZN: {
+    ecoregionId: 394, // Montana Valley and Foothill grasslands
+    usdaZone: 5,
+    biome: 'Temperate Grasslands, Savannas & Shrublands',
+    realm: 'nearctic',
+  },
+  USLVL: {
+    ecoregionId: 402, // Western shortgrass prairie
+    usdaZone: 6,
+    biome: 'Temperate Grasslands, Savannas & Shrublands',
+    realm: 'nearctic',
+  },
+  USSMQ: {
+    ecoregionId: 423, // California interior chaparral and woodlands
+    usdaZone: 10,
+    biome: 'Mediterranean Forests, Woodlands & Scrub',
+    realm: 'nearctic',
+  },
+  USSLP: {
+    ecoregionId: 343, // Upper Midwest US forest-savanna transition
+    usdaZone: 5,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'nearctic',
+  },
+  USCRS: {
+    ecoregionId: 581, // Everglades flooded grasslands
+    usdaZone: 11,
+    biome: 'Flooded Grasslands & Savannas',
+    realm: 'neotropical',
+  },
+  USPWM: {
+    ecoregionId: 339, // Northeast US Coastal forests
+    usdaZone: 6,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'nearctic',
+  },
 }
 
 function escapeStringLiteral(value: string) {
