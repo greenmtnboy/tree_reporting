@@ -24,6 +24,8 @@ dedup_cell_metres = 10
 data_freshness = "probe"
 data_freshness_comment = "when Washington DC data is through"
 osm_freshness_comment = "GCS publication time of Washington DC's staged OSM parquet"
+satellite = true
+predicted = true
 
 [labels]
 WASHINGTONDC_OPENDATA = "Open Data DC"

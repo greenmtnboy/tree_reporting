@@ -19,6 +19,8 @@ dedup_cell_metres = 10
 data_freshness = "probe"
 data_freshness_comment = "when SF data is through"
 osm_freshness_comment = "GCS publication time of San Francisco's staged OSM parquet # mtime of Boston's committed OSM staging parquet"
+satellite = true
+predicted = true
 
 [labels]
 SF_OPENDATA = "SF Open Data"

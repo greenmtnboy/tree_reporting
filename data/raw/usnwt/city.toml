@@ -19,6 +19,9 @@ anchors, and a predicted row never anchors.  Default.
 """
 dedup_cell_metres = 10
 data_freshness = "none"
+satellite = true
+predicted = true
+predicted_staged_with = "USBOS"
 
 [[tree_sources]]
 label = "Community submissions, OpenStreetMap and the Boston metro aerial-imagery run (no municipal inventory)"

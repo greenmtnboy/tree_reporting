@@ -20,6 +20,9 @@ town on its own once it has published (osm_dedup_validation.py).
 """
 dedup_cell_metres = 10
 data_freshness = "probe"
+satellite = true
+predicted = true
+predicted_staged_with = "USBOS"
 
 [labels]
 SOMERVILLE = "City of Somerville"

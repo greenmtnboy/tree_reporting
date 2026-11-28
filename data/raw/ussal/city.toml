@@ -24,6 +24,9 @@ dedup_cell_metres = 10
 data_freshness = "probe"
 data_freshness_comment = "when Salem data is through"
 osm_freshness_comment = "GCS publication time of Salem's staged OSM parquet"
+satellite = true
+predicted = true
+predicted_staged_with = "USBOS"
 
 [labels]
 SALEM_MA = "City of Salem, MA"

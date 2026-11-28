@@ -1,10 +1,11 @@
 import ..tree_common;
 import ..community_tree_info;
+import ..satellite_tree_info;
 import ..tree_dedup;
 
-auto uswas_published_data_updated_through <- greatest(uswas_data_updated_through, uswas_community_data_updated_through, uswas_osm_data_updated_through);
+auto uswas_published_data_updated_through <- greatest(uswas_data_updated_through, uswas_community_data_updated_through, uswas_osm_data_updated_through, uswas_satellite_data_updated_through, uswas_predicted_data_updated_through);
 
-key uswas_source enum<string>['WASHINGTONDC_OPENDATA', 'COMMUNITY_USWAS', 'OSM_USWAS']; # originating dataset for the row
+key uswas_source enum<string>['WASHINGTONDC_OPENDATA', 'COMMUNITY_USWAS', 'OSM_USWAS', 'SATELLITE_USWAS', 'PREDICTED_USWAS']; # originating dataset for the row
 
 # Feed the shared cross-source merge (../tree_dedup.preql): it classifies rows
 # by the label's prefix and records provenance from it.
@@ -23,7 +24,18 @@ root datasource uswas_community_update_time (
 )
 file `../community_update_time.py`;
 
+# Likewise for reviewed aerial-imagery detections: one column, this city's.
+root datasource uswas_satellite_update_time (
+    uswas_satellite_data_updated_through: uswas_satellite_data_updated_through
+)
+file `../satellite_update_time.py`;
 
+# Bulk imagery predictions: the GCS publication time of this city's staged
+# run file (../predicted_update_time.py).
+root datasource uswas_predicted_update_time (
+    uswas_predicted_data_updated_through: uswas_predicted_data_updated_through
+)
+file `../predicted_update_time.py`;
 
 
 # GCS publication time of the staged OSM parquet (see washingtondc_osm_extract.py);
@@ -63,9 +75,37 @@ file `../community_tree_info.py`
 where city = 'USWAS';
 
 
+# Reviewed aerial-imagery detections (reviewer/satellite.ts), read from the
+# public export the reviewer publishes -- see ../satellite_tree_info.py.  A
+# detection linked to an inventory tree is absorbed by the shared merge; an
+# unlinked one publishes as its own tree.
+root partial datasource uswas_satellite_tree_info extends tree_partition (
+    data_source: uswas_source,
+    species: ?raw_species,
+)
+complete where city = 'USWAS' and uswas_source = 'SATELLITE_USWAS'
+file `../satellite_tree_info.py`
+where city = 'USWAS';
+
+
+# Bulk aerial-imagery predictions, published without per-tree review (see
+# ../predicted_tree_info.py).  The weakest class in the shared merge: any tree
+# another source has absorbs the prediction and takes none of its values, so
+# these rows only show where nothing else has a tree.  No `source_kept` guard:
+# a new run at a stricter threshold may rightly shed a quarter of them.  Until
+# a run is staged the file is absent and this partition is empty.
+root partial datasource uswas_predicted_tree_info extends tree_partition (
+    data_source: uswas_source,
+    species: ?raw_species,
+)
+complete where city = 'USWAS' and uswas_source = 'PREDICTED_USWAS'
+file `../predicted_tree_info.py`
+where city = 'USWAS';
+
+
 # --- Cross-source dedup and attribute merge --------------------------------
 #
-# Shared: ../tree_dedup.preql groups the three partitions into one cluster per
+# Shared: ../tree_dedup.preql groups the partitions into one cluster per
 # tree and picks each canonical attribute across the cluster; this city's grid
 # cell size and its calibration live in DEDUP_CELL_METRES in shared/ingest.py.
 # The only per-city line is the dbh merge, because Boston imputes it.

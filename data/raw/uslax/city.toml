@@ -26,6 +26,8 @@ mutual-NN under 2 m, 86.8% at 2-5 m, 41.8% at 5-10 m (n=880) -- a clean
 dedup_cell_metres = 10
 data_freshness = "model"
 data_freshness_comment = "derived in uslax/losangeles_tree_info.preql from its two inventories"
+satellite = true
+predicted = true
 
 [labels]
 LOSANGELES_OPENDATA = "LA Bureau of Street Services"

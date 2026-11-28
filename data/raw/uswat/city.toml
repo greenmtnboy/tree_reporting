@@ -14,6 +14,9 @@ territory = [[42.3584, 42.3861, -71.2171, -71.1399]]
 municipal_sources = ["WATERTOWN"]
 dedup_cell_metres = 10
 data_freshness = "probe"
+satellite = true
+predicted = true
+predicted_staged_with = "USBOS"
 
 [labels]
 WATERTOWN = "City of Watertown"
