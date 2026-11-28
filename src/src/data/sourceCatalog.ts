@@ -11,6 +11,14 @@ export interface AttributionSourceLink {
 }
 
 export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
+  { city: 'Chula Vista', label: 'Community submissions and OpenStreetMap (no municipal inventory)' },
+  { city: 'Oswego, IL', label: 'Community submissions and OpenStreetMap (no municipal inventory)' },
+  { city: 'Louisville, CO', label: 'Community submissions and OpenStreetMap (no municipal inventory)' },
+  { city: 'Plainfield, IL', label: 'Plainfield Park District - Public Trees, park trees only (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://services8.arcgis.com/eOqUuAWRL4PqiMCt/arcgis/rest/services/Plainfield_Public_Trees/FeatureServer/0' },
+  { city: 'East Lansing', label: 'City of East Lansing - Trees, current status (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://gis2.cityofeastlansing.com/arcgis/rest/services/TREES_STATUS/FeatureServer/0' },
+  { city: 'Aurora, IL', label: 'Community submissions and OpenStreetMap (no municipal inventory)' },
+  { city: 'Chapel Hill', label: 'Community submissions and OpenStreetMap (no municipal inventory)' },
+  { city: 'Beaverton', label: 'Community submissions and OpenStreetMap (no municipal inventory)' },
   { city: 'Portland, ME', label: 'City of Portland Forestry - City Owned Trees (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://gis.portlandmaine.gov/portal/home/item.html?id=b12173632dfd448aa7a5bea80b6da47b' },
   { city: 'Coral Springs', label: 'City of Coral Springs - Cityworks Horticulture tree inventory (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://www.arcgis.com/home/item.html?id=5a5fd0d701e04a75ba945bf94e71db9f' },
   { city: 'St. Louis Park', label: 'City of St. Louis Park - Trees (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://www.arcgis.com/home/item.html?id=d8e68ae495d24f06a9adc233bf6e4c55' },
@@ -253,6 +261,14 @@ export const TREE_INVENTORY_SOURCES: CitySourceLink[] = [
 ]
 
 export const LANDMARK_SOURCES: CitySourceLink[] = [
+  { city: 'Chula Vista', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
+  { city: 'Oswego, IL', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
+  { city: 'Louisville, CO', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
+  { city: 'Plainfield, IL', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
+  { city: 'East Lansing', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
+  { city: 'Aurora, IL', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
+  { city: 'Chapel Hill', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
+  { city: 'Beaverton', label: 'National Park Service - National Register of Historic Places', url: 'https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer' },
   { city: 'Portland, ME', label: 'City of Portland - Local Landmarks (no licence stated; displayed with attribution only, not licensed for reuse)', url: 'https://gis.portlandmaine.gov/portal/home/item.html?id=13d2773085ab41a1afad4f79d7b4b9d6' },
   { city: 'Portland, ME', label: 'National Park Service - National Register of Historic Places', url: 'https://www.nps.gov/subjects/nationalregister/data-downloads.htm' },
   { city: 'Coral Springs', label: 'National Park Service - National Register of Historic Places', url: 'https://www.nps.gov/subjects/nationalregister/data-downloads.htm' },

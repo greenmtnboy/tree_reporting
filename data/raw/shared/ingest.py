@@ -2372,6 +2372,14 @@ def _sanitize_taxon(value: str | None) -> str | None:
 # Keyed by city code so `community_source_for` can derive the community label
 # and so tests can assert the two lists agree.
 MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
+    "USCHV": (),
+    "USOSW": (),
+    "USLSV": (),
+    "USPLF": ("PLAINFIELD_PARK_DISTRICT",),
+    "USELN": ("EAST_LANSING",),
+    "USAUR": (),
+    "USCHH": (),
+    "USBVN": (),
     "USPWM": ("PORTLAND_ME_OPENDATA",),
     "USCRS": ("CORAL_SPRINGS_OPENDATA",),
     "USSLP": ("ST_LOUIS_PARK_OPENDATA",),
@@ -2608,6 +2616,14 @@ COMMUNITY_DATA_SOURCES: dict[str, str] = {
 # overlapping rows under one cluster id and publishes only the survivor — see
 # tree_dedup.preql, which every city imports.
 OSM_DATA_SOURCES: dict[str, str] = {
+    "USCHV": "OSM_USCHV",
+    "USOSW": "OSM_USOSW",
+    "USLSV": "OSM_USLSV",
+    "USPLF": "OSM_USPLF",
+    "USELN": "OSM_USELN",
+    "USAUR": "OSM_USAUR",
+    "USCHH": "OSM_USCHH",
+    "USBVN": "OSM_USBVN",
     "USPWM": "OSM_USPWM",
     "USCRS": "OSM_USCRS",
     "USSLP": "OSM_USSLP",
@@ -3527,6 +3543,14 @@ def _check_tree_id_grain(
 # tight enough to catch wrong-hemisphere / wrong-continent geocoding errors.
 # Format: (lat_min, lat_max, lon_min, lon_max)
 CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
+    "USCHV": (32.578, 32.6857, -117.1239, -116.9277),
+    "USOSW": (41.6372, 41.7194, -88.4185, -88.2602),
+    "USLSV": (39.9396, 39.9982, -105.1893, -105.1073),
+    "USPLF": (41.5692, 41.6802, -88.3026, -88.1628),
+    "USELN": (42.6969, 42.8019, -84.5133, -84.4388),
+    "USAUR": (41.6798, 41.8222, -88.4083, -88.2049),
+    "USCHH": (35.8695, 35.9752, -79.0832, -78.9954),
+    "USBVN": (45.4246, 45.543, -122.8778, -122.7436),
     "USPWM": (43.5443, 43.74, -70.35, -69.9758),
     "USCRS": (26.22, 26.32, -80.31, -80.19),
     "USSLP": (44.91, 44.99, -93.42, -93.32),
@@ -3788,6 +3812,22 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
 # of them.  The measurements, the cost and the runbook are in
 # `docs/DEDUP_CELL_RECALIBRATION.md` at the repo root.
 DEDUP_CELL_METRES: dict[str, int] = {
+    # Chula Vista: no inventory, so nothing to calibrate against.  Default.
+    "USCHV": 10,
+    # Oswego, IL: no inventory, so nothing to calibrate against.  Default.
+    "USOSW": 10,
+    # Louisville, CO: no inventory, so nothing to calibrate against.  Default.
+    "USLSV": 10,
+    # Plainfield, IL: NOT YET CALIBRATED: default; measure after the first build.
+    "USPLF": 10,
+    # East Lansing: NOT YET CALIBRATED: default; measure after the first build.
+    "USELN": 10,
+    # Aurora, IL: no inventory, so nothing to calibrate against.  Default.
+    "USAUR": 10,
+    # Chapel Hill: no inventory, so nothing to calibrate against.  Default.
+    "USCHH": 10,
+    # Beaverton: no inventory, so nothing to calibrate against.  Default.
+    "USBVN": 10,
     # Calibrated 2026-11-28 (osm_dedup_validation): 8m flags 147, 1.4% false;
     # 10m adds 1 true for 2 false.
     "USPWM": 8,
@@ -4615,6 +4655,14 @@ DEDUP_CELL_METRES: dict[str, int] = {
 Box = tuple[float, float, float, float]
 
 CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
+    'USCHV': ((32.578, 32.6857, -117.1239, -116.9277),),
+    'USOSW': ((41.6372, 41.7194, -88.4185, -88.2602),),
+    'USLSV': ((39.9396, 39.9982, -105.1893, -105.1073),),
+    'USPLF': ((41.5692, 41.6802, -88.3026, -88.1628),),
+    'USELN': ((42.6969, 42.8019, -84.5133, -84.4388),),
+    'USAUR': ((41.6798, 41.8222, -88.4083, -88.2049),),
+    'USCHH': ((35.8695, 35.9752, -79.0832, -78.9954),),
+    'USBVN': ((45.4246, 45.543, -122.8778, -122.7436),),
     'USPWM': ((43.5443, 43.7277, -70.3474, -69.9758),),
     'USCRS': ((26.2294, 26.3111, -80.2975, -80.2018),),
     'USSLP': ((44.9196, 44.9786, -93.4106, -93.3286),),

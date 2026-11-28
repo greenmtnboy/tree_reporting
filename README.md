@@ -244,6 +244,8 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 | Watertown, MA | City of Watertown - 2022 Tree Inventory (MapGeo) | https://watertownma.mapgeo.io/ |
 | Salem, MA | City of Salem (SalemGIS, Salem DPW) - Salem Street Trees (no licence stated; displayed with attribution only) | https://www.arcgis.com/home/item.html?id=df1d66111f2d481db82564d5b820dee0 |
 | Dedham, MA | Town of Dedham GIS - Tree Inventory (no licence stated; displayed with attribution only) | https://www.arcgis.com/home/item.html?id=9d23e28c88984fa0903da95792883d4a |
+| East Lansing, MI | City of East Lansing - Trees, current status (no licence stated; displayed with attribution only) | https://gis2.cityofeastlansing.com/arcgis/rest/services/TREES_STATUS/FeatureServer/0 |
+| Plainfield, IL | Plainfield Park District - Public Trees, park trees only (no licence stated; displayed with attribution only) | https://services8.arcgis.com/eOqUuAWRL4PqiMCt/arcgis/rest/services/Plainfield_Public_Trees/FeatureServer/0 |
 | Arlington, MA | Town of Arlington GIS - Public Shade Trees (no licence stated; displayed with attribution only) | https://www.arcgis.com/home/item.html?id=dc385c1084d1432ebc792ffcb20bcfa4 |
 | Boston (Arboretum) | Arnold Arboretum / Harvard GIS | https://gis.arboretum.harvard.edu/ |
 | Boston (Northeastern) | Northeastern University Arboretum Viewer (ArcGIS Online) | https://experience.arcgis.com/experience/81872a0c5c044ba5a70613cc1086bff3 |
@@ -431,6 +433,7 @@ A chat panel to use with LLMs (bring your own API key or use a test key) lets yo
 | Milos | Community submissions (no municipal inventory published) | (contributed via the app) |
 | Santorini | Community submissions (no municipal inventory published) | (contributed via the app) |
 | Newton, Milton, Peabody, Lynn, Medford, Quincy, Saugus, Needham, Swampscott, Waltham, Marblehead, Revere, Malden, Everett, Chelsea, Winthrop, Beverly, Lynnfield, Melrose, Wellesley, Nahant, Danvers, Winchester, Canton (MA) | Community submissions, OpenStreetMap and the Boston metro's aerial-imagery predictions (no municipal inventory published) | (contributed via the app) |
+| Beaverton (OR), Chapel Hill (NC), Aurora (IL), Oswego (IL), Louisville (CO), Chula Vista (CA) | Community submissions and OpenStreetMap (no municipal inventory published) | (contributed via the app) |
 | All cities (supplemental) | © OpenStreetMap contributors (ODbL) | https://www.openstreetmap.org/copyright |
 | All cities | Community submissions, reviewed and approved before publication | (contributed via the app) |
 

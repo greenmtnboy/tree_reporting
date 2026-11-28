@@ -1196,6 +1196,54 @@ const CITY_DASHBOARD_CONTEXT: Record<
     biome: 'Temperate Broadleaf & Mixed Forests',
     realm: 'nearctic',
   },
+  USBVN: {
+    ecoregionId: 403, // Willamette Valley oak savanna
+    usdaZone: 8,
+    biome: 'Temperate Grasslands, Savannas & Shrublands',
+    realm: 'nearctic',
+  },
+  USCHH: {
+    ecoregionId: 330, // Appalachian Piedmont forests
+    usdaZone: 8,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'nearctic',
+  },
+  USAUR: {
+    ecoregionId: 387, // Central US forest-grasslands transition
+    usdaZone: 6,
+    biome: 'Temperate Grasslands, Savannas & Shrublands',
+    realm: 'nearctic',
+  },
+  USELN: {
+    ecoregionId: 342, // Southern Great Lakes forests
+    usdaZone: 6,
+    biome: 'Temperate Broadleaf & Mixed Forests',
+    realm: 'nearctic',
+  },
+  USPLF: {
+    ecoregionId: 387, // Central US forest-grasslands transition
+    usdaZone: 6,
+    biome: 'Temperate Grasslands, Savannas & Shrublands',
+    realm: 'nearctic',
+  },
+  USLSV: {
+    ecoregionId: 402, // Western shortgrass prairie
+    usdaZone: 6,
+    biome: 'Temperate Grasslands, Savannas & Shrublands',
+    realm: 'nearctic',
+  },
+  USOSW: {
+    ecoregionId: 387, // Central US forest-grasslands transition
+    usdaZone: 6,
+    biome: 'Temperate Grasslands, Savannas & Shrublands',
+    realm: 'nearctic',
+  },
+  USCHV: {
+    ecoregionId: 422, // California coastal sage and chaparral
+    usdaZone: 10,
+    biome: 'Mediterranean Forests, Woodlands & Scrub',
+    realm: 'nearctic',
+  },
   USSRQ: {
     ecoregionId: 399, // Southeast US conifer savannas
     usdaZone: 10,

@@ -1,0 +1,89 @@
+import ..tree_common;
+import ..community_tree_info;
+import ..tree_dedup;
+
+# Aurora, IL has no municipal tree inventory on an open portal: Aurora has put an inventory out to bid; nothing is published.
+# Its OSM trees were published by Naperville's model (USNPV) under the rectangle
+# Naperville had until #285 drew it to its Census line (issue #287).  It is its
+# own city now, its territory the place's real boundary
+# (boundaries/usaur.json): a community-only city (EXTENDING.md) with
+# community and OSM partitions and no municipal term in its watermark.
+
+auto usaur_published_data_updated_through <- greatest(usaur_community_data_updated_through, usaur_osm_data_updated_through);
+
+key usaur_source enum<string>['COMMUNITY_USAUR', 'OSM_USAUR']; # originating dataset for the row
+
+# Feed the shared cross-source merge (../tree_dedup.preql): it classifies rows
+# by the label's prefix and records provenance from it.
+auto usaur_source_label <- concat(usaur_source, '');
+merge usaur_source_label into source_label;
+
+# Only this city's column, so an approval elsewhere does not mark USAUR's
+# Parquet stale. Trilogy probes this as MAX over the one column.
+root datasource usaur_community_update_time (
+    usaur_community_data_updated_through: usaur_community_data_updated_through
+)
+file `../community_update_time.py`;
+
+# GCS publication time of the staged OSM parquet; it only moves when an
+# extraction is re-run and uploaded. Not a local mtime -- git does not preserve
+# it, so a committed staging file makes every fresh clone look like new data.
+root datasource usaur_osm_update_time (
+    data_updated_through: usaur_osm_data_updated_through
+)
+file `./aurora_il_osm_probe.py`;
+
+# Every partition extends ../tree_dedup.preql's `tree_partition`, which maps
+# the shared raw_* columns.
+
+# Approved community submissions for this city. The shared ingest script emits
+# every city's rows; the `complete where` clause narrows it to USAUR and makes
+# it a disjoint partition, and the `where` clause is what actually filters --
+# `complete where` asserts, it does not promise a predicate.  A submission
+# recorded under Naperville that stands in Aurora, IL arrives here as USAUR
+# (`territory_city` in shared/ingest.py).
+root partial datasource usaur_community_tree_info extends tree_partition (
+    data_source: usaur_source,
+    species: ?raw_species,
+)
+complete where city = 'USAUR' and usaur_source = 'COMMUNITY_USAUR'
+file `../community_tree_info.py`
+where city = 'USAUR';
+
+
+# OpenStreetMap trees, read from the staged parquet in GCS rather than Overpass
+# -- extraction is decoupled from refresh. The `where` is the city's territory
+# (tools/sync_osm_territory.py keeps it so): a staged extract keeps the
+# territory it was cut with until its next firing.
+root partial datasource usaur_osm_tree_info extends tree_partition (
+    data_source: usaur_source,
+    species: ?raw_species,
+)
+complete where city = 'USAUR' and usaur_source = 'OSM_USAUR'
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usaur_osm_staging.parquet`
+where (raw_latitude >= 41.6798 and raw_latitude < 41.8222 and raw_longitude >= -88.4083 and raw_longitude < -88.2049);
+
+
+# --- Cross-source dedup and attribute merge --------------------------------
+#
+# Shared: ../tree_dedup.preql groups the partitions into one cluster per
+# tree and picks each canonical attribute across the cluster; this city's grid
+# cell size lives in DEDUP_CELL_METRES in shared/ingest.py.
+merge merged_dbh into diameter_at_breast_height;
+merge merged_latitude into latitude;
+merge merged_longitude into longitude;
+
+
+# The published target extends ../tree_dedup.preql's `published_tree_info`:
+# the canonical columns, the prune, and the guard that refuses a build which
+# lost a quarter of the city.  The `@source_kept` line is the same guard for
+# OSM (`test_every_city_refuses_a_collapsed_build`).
+partial datasource aurora_il_tree_info extends published_tree_info (
+    data_source: usaur_source,
+    ?species,
+    usaur_published_data_updated_through,
+)
+complete where city = 'USAUR'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usaur_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/usaur_tree_info_v{data_version}.parquet`
+freshness by usaur_published_data_updated_through
+assert @source_kept(tree_id, usaur_source, 'OSM_USAUR', 0.75);

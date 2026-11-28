@@ -1,0 +1,31 @@
+import ..landmark_common;
+
+root datasource beaverton_landmarks_update_time (
+    data_updated_through: usbvn_landmark_data_updated_through
+)
+file `./beaverton_landmarks_probe.py`;
+
+# Beaverton's National Register listings (the National Park Service's
+# nrhp_locations MapServer cut to the city), read live -- no Nominatim
+# geocoding, no committed CSV and no staging object.  A register of the
+# city's own is a follow-up.  `lm_type` names the register and
+# `register_number` the NRIS reference number.
+root partial datasource raw_beaverton_landmark_info extends landmark_partition (
+    address: ?address,
+    lm_type: ?lm_type,
+    register_number: ?register_number,
+    year_designated: ?year_designated,
+)
+complete where city = 'USBVN'
+file `./beaverton_landmarks.py`;
+
+partial datasource beaverton_landmark_info extends published_landmark_info (
+    ?address,
+    ?lm_type,
+    ?register_number,
+    ?year_designated,
+    usbvn_landmark_data_updated_through,
+)
+complete where city = 'USBVN'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/landmarks/usbvn_landmark_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/landmarks/usbvn_landmark_info_v{data_version}.parquet`
+freshness by usbvn_landmark_data_updated_through;
