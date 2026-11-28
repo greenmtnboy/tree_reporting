@@ -212,13 +212,26 @@ def windows_needed(n: int, core: int, pixels: int, tiles: list[tuple[int, int]],
 def ingest_literals(names: tuple[str, ...], ingest_path: Path = INGEST_PATH) -> dict[str, Any]:
     """Top-level dictionaries of the ingest library, read as literals:
     importing it would pull in pytrilogy for a few dictionaries."""
-    tree = ast.parse(ingest_path.read_text(encoding="utf-8"))
+    return module_literals(names, ingest_path)
+
+
+def module_literals(names: tuple[str, ...], path: Path) -> dict[str, Any]:
+    """Top-level literal assignments in *path*.  The city registries are
+    generated into shared/city_registry.py and ingest.py re-exports them as
+    `NAME = city_registry.NAME`; that reference is followed to the sibling
+    file, so callers keep naming ingest.py."""
+    tree = ast.parse(path.read_text(encoding="utf-8"))
     found: dict[str, Any] = {}
     for node in tree.body:
         target = getattr(node, "target", None) or (getattr(node, "targets", None) or [None])[0]
         name = getattr(target, "id", None)
         if name in names and node.value is not None:
-            found[name] = ast.literal_eval(node.value)
+            value = node.value
+            if (isinstance(value, ast.Attribute) and isinstance(value.value, ast.Name)
+                    and value.value.id == "city_registry"):
+                found[name] = module_literals((value.attr,), path.with_name("city_registry.py"))[value.attr]
+            else:
+                found[name] = ast.literal_eval(value)
     return found
 
 

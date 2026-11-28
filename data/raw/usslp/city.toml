@@ -1,0 +1,59 @@
+# St. Louis Park's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "USSLP"
+name = "St. Louis Park"
+slug = "stlouispark"
+center = [-93.348, 44.9483]
+ecoregion = 343
+ecoregion_name = "Upper Midwest US forest-savanna transition"
+usda_zone = 5
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "nearctic"
+bounds = [44.91, 44.99, -93.42, -93.32]
+territory = [[44.9196, 44.9786, -93.4106, -93.3286]]
+municipal_sources = ["ST_LOUIS_PARK_OPENDATA"]
+dedup_note = """
+Calibrated 2026-11-28 (osm_dedup_validation): 10m flags 98, 0 false;
+14m is not a calibrated size, 20m is 5.1% false.
+"""
+dedup_cell_metres = 10
+data_freshness = "probe"
+
+[labels]
+ST_LOUIS_PARK_OPENDATA = "St. Louis Park Open Data"
+
+[[tree_sources]]
+label = "City of St. Louis Park - Trees (no licence stated; displayed with attribution only, not licensed for reuse)"
+url = "https://www.arcgis.com/home/item.html?id=d8e68ae495d24f06a9adc233bf6e4c55"
+
+[[landmark_sources]]
+label = "National Park Service - National Register of Historic Places"
+url = "https://www.nps.gov/subjects/nationalregister/data-downloads.htm"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city USSLP`.
+"""
+
+[jobs.osm]
+schedule = "0 0 15 * * SAT"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 47 1 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

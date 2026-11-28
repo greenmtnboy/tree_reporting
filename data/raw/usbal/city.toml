@@ -1,0 +1,61 @@
+# Baltimore's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "USBAL"
+name = "Baltimore"
+slug = "baltimore"
+center = [-76.6122, 39.2904]
+ecoregion = 399
+ecoregion_name = "Southeast US conifer savannas"
+usda_zone = 7
+biome = "Temperate Grasslands, Savannas & Shrublands"
+realm = "nearctic"
+bounds = [39.19, 39.38, -76.72, -76.52]
+territory = [[39.1972, 39.3723, -76.7116, -76.5294]]
+municipal_sources = ["BALTIMORE_OPENDATA"]
+dedup_note = """
+Baltimore: osm_dedup_validation.py --inventory-parquet: mutual-NN 34.0% in
+5-10 m (n=662): a 5 m guarantee caps it at 10.
+Marginal table: 6->8 removes 136 duplicates for 115 hidden trees (1.18),
+8->10 removes 77 for 151 (0.51), so 8 m.
+"""
+dedup_cell_metres = 8
+data_freshness = "probe"
+
+[labels]
+BALTIMORE_OPENDATA = "Baltimore Open Data"
+
+[[tree_sources]]
+label = "Baltimore City Recreation & Parks, Forestry - Street Tree Inventory (ArcGIS)"
+url = "https://gis.baltimorecity.gov/egis/rest/services/Foresty/TreeInventory_Public/MapServer/0"
+
+[[landmark_sources]]
+label = "Baltimore City Landmark List (CHAP, Open Baltimore); National Park Service - National Register of Historic Places"
+url = "https://data.baltimorecity.gov/datasets/8a570598d14c41ada202a6a0155bb0aa"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city USBAL`.
+"""
+
+[jobs.osm]
+schedule = "0 0 7 * * THU"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 28 2 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

@@ -1,0 +1,63 @@
+# Nottingham's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "GBNOT"
+name = "Nottingham"
+slug = "nottingham"
+center = [-1.1581, 52.9548]
+ecoregion = 651
+ecoregion_name = "Celtic broadleaf forests"
+usda_zone = 8
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "palearctic"
+bounds = [52.88, 53.02, -1.25, -1.08]
+territory = [[52.88, 53.02, -1.25, -1.08]]
+municipal_sources = ["NOTTINGHAM_OPENDATA"]
+dedup_note = """
+Calibrated 2026-11-16 before the first build (tools/osm_dedup_validation.py
+--inventory-parquet on a local ingest run).
+10,118 staged OSM nodes against 43,955 anchors.  Mutual-NN 62.6% in
+5-10 m and 22.2% in 10-20 m (n=297): a 10 m guarantee caps it at 20.
+Marginal table: 8->10 removes 112 duplicates for 73 hidden trees (1.53),
+10->14 removes 75 for 94 (0.80), so 10 m.
+"""
+dedup_cell_metres = 10
+data_freshness = "probe"
+
+[labels]
+NOTTINGHAM_OPENDATA = "Nottingham Open Data"
+
+[[tree_sources]]
+label = "Nottingham City Council - Trees (NCC Maintained) (ArcGIS, OGL v3; contains OS data © Crown copyright and database right)"
+url = "https://www.arcgis.com/home/item.html?id=854f59402043403eabce650cc7ab1150"
+
+[[landmark_sources]]
+label = "Historic England - National Heritage List for England (listed buildings, scheduled monuments, registered parks and gardens; OGL); ONS Local Authority District boundary (OGL)"
+url = "https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/National_Heritage_List_for_England_NHLE_v02_VIEW/FeatureServer"
+
+[jobs.city]
+schedule = "0 30 19 * * SAT,TUE"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city GBNOT`.
+"""
+
+[jobs.osm]
+schedule = "0 0 6 * * FRI"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 6 2 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

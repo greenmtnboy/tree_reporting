@@ -1,0 +1,63 @@
+# Longueuil's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "CALON"
+name = "Longueuil"
+slug = "longueuil"
+center = [-73.5185, 45.5312]
+ecoregion = 334
+ecoregion_name = "Eastern Great Lakes lowland forests"
+usda_zone = 5
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "nearctic"
+bounds = [45.4, 45.62, -73.58, -73.3]
+territory = [
+    [45.4, 45.54, -73.53, -73.3],
+    [45.54, 45.56, -73.52, -73.3],
+    [45.56, 45.58, -73.5, -73.3],
+    [45.58, 45.6, -73.498, -73.3],
+]
+municipal_sources = ["LONGUEUIL_OPENDATA"]
+dedup_note = """
+5-10 m band 36.5% mutual-NN over n=178; 4->6 removes 102 duplicates for
+56 hidden trees (1.82), 6->8 removes 36 for 46 (0.78).  Longueuil's OSM
+barely overlaps its inventory -- 1,523 duplicates out of 130,006 nodes,
+against Montreal's 325,284 -- so the whole table is small, but the turn
+is in the same place.
+"""
+dedup_cell_metres = 6
+data_freshness = "probe"
+
+[labels]
+LONGUEUIL_OPENDATA = "Longueuil Open Data"
+
+[[tree_sources]]
+label = "Donnees Quebec - Ville de Longueuil, Arbres (CC-BY 4.0)"
+url = "https://www.donneesquebec.ca/recherche/dataset/arbres"
+
+[[landmark_sources]]
+label = "Donnees Quebec - Ville de Longueuil, Parcs (CC-BY 4.0)"
+url = "https://www.donneesquebec.ca/recherche/dataset/parcs-longueuil"
+
+[jobs.city]
+schedule = "0 0 18 * * THU,SUN"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city CALON`.
+"""
+
+[jobs.osm]
+schedule = "0 30 3 * * WED"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 20 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048

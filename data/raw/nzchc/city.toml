@@ -1,0 +1,62 @@
+# Christchurch's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "NZCHC"
+name = "Christchurch"
+slug = "christchurch"
+center = [172.6362, -43.5321]
+ecoregion = 190
+ecoregion_name = "Canterbury-Otago tussock grasslands"
+usda_zone = 9
+biome = "Temperate Grasslands, Savannas & Shrublands"
+realm = "australasia"
+bounds = [-43.9, -43.35, 172.4, 173.15]
+territory = [[-43.9, -43.35, 172.4, 173.15]]
+municipal_sources = ["CHRISTCHURCH_OPENDATA"]
+dedup_note = """
+Christchurch: calibrated 2026-11-17 with --inventory-parquet (132,548 anchors)
+against the staged extract. Mutual-NN 91.5% in 2-5 m, 50.6% in 5-10 m
+(n=2,527): a 5 m guarantee caps it at 10. Marginal table: 6->8 removes
+686 duplicates for 396 hidden trees (1.73), 8->10 removes 426 for 427
+(1.00), so 8 m.
+"""
+dedup_cell_metres = 8
+data_freshness = "probe"
+
+[labels]
+CHRISTCHURCH_OPENDATA = "Christchurch Open Data"
+
+[[tree_sources]]
+label = "Christchurch City Council, Tree (OpenData) (CC BY 4.0)"
+url = "https://www.arcgis.com/home/item.html?id=0c557c04453e435ba1e50389db0ede90"
+
+[[landmark_sources]]
+label = "Christchurch District Plan heritage items (Christchurch City Council, CC BY 4.0)"
+url = "https://www.arcgis.com/home/item.html?id=f756c115142041fea96c3ac778ecbde4"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city NZCHC`.
+"""
+
+[jobs.osm]
+schedule = "0 30 7 * * MON"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 36 2 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

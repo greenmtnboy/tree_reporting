@@ -1,0 +1,50 @@
+# London's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "GBLON"
+name = "London"
+slug = "london"
+center = [-0.1278, 51.5074]
+ecoregion = 663
+ecoregion_name = "English Lowlands beech forests"
+usda_zone = 9
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "palearctic"
+bounds = [51.25, 51.75, -0.55, 0.35]
+territory = [[51.25, 51.75, -0.55, 0.35]]
+municipal_sources = ["LONDON_OPENDATA"]
+dedup_note = """
+51.5% over n=18,076: a coin flip, left unmatched (~8,800 real trees at
+stake if it were flagged).
+"""
+dedup_cell_metres = 10
+data_freshness = "probe"
+
+[labels]
+LONDON_OPENDATA = "London Datastore"
+
+[[tree_sources]]
+label = "London Datastore (Public Realm Trees)"
+url = "https://data.london.gov.uk/dataset/2r45m"
+
+[[landmark_sources]]
+label = "OpenStreetMap via Overpass API (historic=* tags)"
+
+[jobs.city]
+schedule = "0 40 13 * * FRI,MON"
+timeout_seconds = 3600
+memory_mb = 4096
+
+[jobs.osm]
+schedule = "0 0 2 * * THU"
+timeout_seconds = 3600
+memory_mb = 2048
+note = """
+London's OSM partition carries `borough` — its municipal and community
+sources declare it, and a partition missing a column drops out of the union
+and stops the remaining two covering the source enum.
+"""
+
+[jobs.landmarks]
+schedule = "0 52 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048

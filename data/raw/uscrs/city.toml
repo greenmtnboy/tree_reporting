@@ -1,0 +1,59 @@
+# Coral Springs's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "USCRS"
+name = "Coral Springs"
+slug = "coralsprings"
+center = [-80.2706, 26.2712]
+ecoregion = 581
+ecoregion_name = "Everglades flooded grasslands"
+usda_zone = 11
+biome = "Flooded Grasslands & Savannas"
+realm = "neotropical"
+bounds = [26.22, 26.32, -80.31, -80.19]
+territory = [[26.2294, 26.3111, -80.2975, -80.2018]]
+municipal_sources = ["CORAL_SPRINGS_OPENDATA"]
+dedup_note = """
+Calibrated 2026-11-28 (osm_dedup_validation): 10m flags 48, 0 false;
+14m adds 1 true for 1 false.
+"""
+dedup_cell_metres = 10
+data_freshness = "probe"
+
+[labels]
+CORAL_SPRINGS_OPENDATA = "Coral Springs Open Data"
+
+[[tree_sources]]
+label = "City of Coral Springs - Cityworks Horticulture tree inventory (no licence stated; displayed with attribution only, not licensed for reuse)"
+url = "https://www.arcgis.com/home/item.html?id=5a5fd0d701e04a75ba945bf94e71db9f"
+
+[[landmark_sources]]
+label = "National Park Service - National Register of Historic Places"
+url = "https://www.nps.gov/subjects/nationalregister/data-downloads.htm"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city USCRS`.
+"""
+
+[jobs.osm]
+schedule = "0 15 15 * * MON"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 49 1 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

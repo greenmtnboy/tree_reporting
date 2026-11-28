@@ -1,0 +1,57 @@
+# Quebec City's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "CAQUE"
+name = "Quebec City"
+slug = "quebec"
+center = [-71.208, 46.8139]
+ecoregion = 334
+ecoregion_name = "Eastern Great Lakes lowland forests"
+usda_zone = 4
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "nearctic"
+bounds = [46.68, 47.0, -71.6, -71.1]
+territory = [[46.68, 47.0, -71.6, -71.1]]
+municipal_sources = ["QUEBEC_OPENDATA"]
+dedup_note = """
+5-10 m band 43.9% mutual-NN over n=4,484, and the marginal table keeps
+paying to 8 m: 4->6 removes 2,320 duplicates for 560 hidden trees (4.14),
+6->8 removes 1,054 for 790 (1.33), 8->10 removes 632 for 878 (0.72).
+Same profile as San Francisco, the other city measured at 8.
+"""
+dedup_cell_metres = 8
+data_freshness = "probe"
+
+[labels]
+QUEBEC_OPENDATA = "Quebec City Open Data"
+
+[[tree_sources]]
+label = "Donnees Quebec - Ville de Quebec, Arbres repertories (CC-BY 4.0)"
+url = "https://www.donneesquebec.ca/recherche/dataset/vque_arbrerepertorie"
+
+[[landmark_sources]]
+label = "Repertoire du patrimoine culturel du Quebec - immeubles classes et cites (CC-BY 4.0)"
+url = "https://www.donneesquebec.ca/recherche/dataset/immeubles-patrimoniaux-classes-par-le-ministre-de-la-culture-et-des-communications"
+
+[jobs.city]
+schedule = "0 40 17 * * WED,SAT"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city CAQUE`.
+"""
+
+[jobs.osm]
+schedule = "0 30 3 * * TUE"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 32 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048

@@ -1,0 +1,70 @@
+# Denver's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "USDEN"
+name = "Denver"
+slug = "denver"
+center = [-104.9903, 39.7392]
+ecoregion = 402
+ecoregion_name = "Western shortgrass prairie"
+usda_zone = 6
+biome = "Temperate Grasslands, Savannas & Shrublands"
+realm = "nearctic"
+bounds_note = """
+Denver reaches a long way past its county line, and the inventory
+follows it: the box spans the detached airport parcel to the north-east
+and the Denver Mountain Parks system 40 miles west -- Red Rocks, Genesee,
+Echo Lake, Evergreen Golf Course -- which is Denver-owned land carrying
+3,700 city-maintained trees.  A box drawn to the county line dropped all
+of them as bad coordinates.  These bounds exist to catch a geocoding
+error, not to assert a municipal boundary.
+"""
+bounds = [39.45, 39.95, -105.65, -104.55]
+territory_note = """
+Denver's own line (boundaries/usden.json), not the metro box: the box
+published ~155k OSM trees in Lakewood, Aurora and the other suburbs as
+Denver's, and its inventory's Mountain Parks trees (~16 km west) are
+outside the city.
+"""
+territory = [[39.6143, 39.9142, -105.11, -104.5995]]
+municipal_sources = ["DENVER_OPENDATA"]
+dedup_note = """
+76.4% mutual-NN in the 2-5 m band collapsing to 17.3% in 5-10 m
+(n=20,233) -- as sharp a break as any wired city.  Median planting
+spacing 8.2 m, so 20 m would reach the next tree in the row.  No osm_ref.
+"""
+dedup_cell_metres = 10
+data_freshness = "probe"
+
+[labels]
+DENVER_OPENDATA = "Denver Open Data"
+
+[[tree_sources]]
+label = "Denver Open Data (Parks, Medians, and Parkway Trees)"
+url = "https://opendata-geospatialdenver.hub.arcgis.com/datasets/geospatialDenver::parks-medians-and-parkway-trees"
+
+[[landmark_sources]]
+label = "Denver Open Data (Historic Landmark Structures)"
+url = "https://opendata-geospatialdenver.hub.arcgis.com/datasets/geospatialDenver::historic-landmarks"
+
+[jobs.city]
+schedule = "0 40 15 * * SUN,WED"
+timeout_seconds = 2400
+memory_mb = 4096
+schedule_note = """
+Sun/Wed, the day after Saturday's osm-usden and again mid-week. Denver's
+portal last edited its inventory a month before the city was wired, so it
+starts in the twice-weekly tier; portal_cadence.py --city USDEN decides
+whether it earns daily. 359k municipal rows stacked against 278k staged OSM
+rows with the dedup grid aggregate over the union puts it near Berlin's
+footprint, hence 4 GiB rather than the 2 GiB most cities take.
+"""
+
+[jobs.osm]
+schedule = "0 30 2 * * SAT"
+timeout_seconds = 1800
+memory_mb = 1024
+
+[jobs.landmarks]
+schedule = "0 10 4 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048

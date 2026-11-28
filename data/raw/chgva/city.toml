@@ -1,0 +1,62 @@
+# Geneva's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "CHGVA"
+name = "Geneva"
+slug = "geneva"
+center = [6.1432, 46.2044]
+ecoregion = 686
+ecoregion_name = "Western European broadleaf forests"
+usda_zone = 8
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "palearctic"
+bounds = [46.12, 46.37, 5.95, 6.32]
+territory = [[46.12, 46.37, 5.95, 6.32]]
+municipal_sources = ["GENEVA_SITG"]
+dedup_note = """
+Calibrated 2026-11-17 (osm_dedup_validation.py, local inventory parquet)
+against the staged extract. Mutual-NN 85.6% in 2-5 m, 34.5% in 5-10 m
+(n=2,754): a 5 m guarantee caps it at 10. Marginal table: 4->6 removes
+1,576 duplicates for 572 hidden trees (2.76), 6->8 removes 563 for 657
+(0.86), so 6 m.
+"""
+dedup_cell_metres = 6
+data_freshness = "probe"
+
+[labels]
+GENEVA_SITG = "Geneva Open Data"
+
+[[tree_sources]]
+label = "SITG - Inventaire cantonal des arbres (Ville de Genève, Conservatoire et Jardin botaniques; Données SITG, open access; 1976 paper-inventory records omitted)"
+url = "https://sitg.ge.ch/donnees/sipv-ica-arbre-isole"
+
+[[landmark_sources]]
+label = "SITG - Objets classés (Inventaire des monuments d'art et d'histoire du canton de Genève)"
+url = "https://sitg.ge.ch/donnees/dps-classement"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city CHGVA`.
+"""
+
+[jobs.osm]
+schedule = "0 15 8 * * THU"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 54 2 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

@@ -1,0 +1,59 @@
+# Montpellier's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "FRMPL"
+name = "Montpellier"
+slug = "montpellier"
+center = [3.8767, 43.6108]
+ecoregion = 799
+ecoregion_name = "Northeast Spain and Southern France Mediterranean forests"
+usda_zone = 9
+biome = "Mediterranean Forests, Woodlands & Scrub"
+realm = "palearctic"
+bounds = [43.56, 43.66, 3.8, 3.95]
+territory = [[43.56, 43.66, 3.8, 3.95]]
+municipal_sources = ["MONTPELLIER_OPENDATA"]
+dedup_note = """
+Calibrated 2026-11-18: 6 m keeps 1.3 true per false at the margin (94.2% recall);
+8 m falls to 0.44.
+"""
+dedup_cell_metres = 6
+data_freshness = "probe"
+
+[labels]
+MONTPELLIER_OPENDATA = "Montpellier Open Data"
+
+[[tree_sources]]
+label = "Montpellier Méditerranée Métropole - Arbres de Montpellier (ODbL)"
+url = "https://data.montpellier3m.fr/dataset/arbres-de-montpellier"
+
+[[landmark_sources]]
+label = "Ministère de la Culture - Immeubles protégés au titre des Monuments Historiques (Licence Ouverte)"
+url = "https://www.data.gouv.fr/datasets/immeubles-proteges-au-titre-des-monuments-historiques-2"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city FRMPL`.
+"""
+
+[jobs.osm]
+schedule = "0 15 9 * * FRI"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 18 1 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

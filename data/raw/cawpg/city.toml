@@ -1,0 +1,56 @@
+# Winnipeg's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "CAWPG"
+name = "Winnipeg"
+slug = "winnipeg"
+center = [-97.1384, 49.8951]
+ecoregion = 397
+ecoregion_name = "Northern Tallgrass prairie"
+usda_zone = 3
+biome = "Temperate Grasslands, Savannas & Shrublands"
+realm = "nearctic"
+bounds = [49.66, 50.03, -97.4, -96.9]
+territory = [[49.66, 50.03, -97.4, -96.9]]
+municipal_sources = ["WINNIPEG_OPENDATA"]
+dedup_note = """
+5-10 m band 28.4% mutual-NN over n=134, and the marginal table turns at
+6 m: 4->6 removes 86 duplicates for 25 hidden trees (3.44), 6->8 removes
+30 for 43 (0.70).
+"""
+dedup_cell_metres = 6
+data_freshness = "probe"
+
+[labels]
+WINNIPEG_OPENDATA = "Winnipeg Open Data"
+
+[[tree_sources]]
+label = "City of Winnipeg Open Data - Tree Inventory"
+url = "https://data.winnipeg.ca/Parks/Tree-Inventory/hfwk-jp4h"
+
+[[landmark_sources]]
+label = "City of Winnipeg Open Data - Historical Resources"
+url = "https://data.winnipeg.ca/Heritage/Historical-Resources/ptpx-kgiu"
+
+[jobs.city]
+schedule = "0 40 16 * * MON,THU"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city CAWPG`.
+"""
+
+[jobs.osm]
+schedule = "0 0 3 * * SUN"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 40 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048

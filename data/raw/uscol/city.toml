@@ -1,0 +1,63 @@
+# Columbus's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "USCOL"
+name = "Columbus"
+slug = "columbus"
+center = [-82.9988, 39.9612]
+ecoregion = 342
+ecoregion_name = "Southern Great Lakes forests"
+usda_zone = 6
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "nearctic"
+bounds = [39.8, 40.16, -83.2108, -82.77]
+territory = [[39.8086, 40.1574, -83.2108, -82.7713]]
+municipal_sources = ["COLUMBUS_OPENDATA"]
+dedup_note = """
+Calibrated 2026-11-16 before the first build (tools/osm_dedup_validation.py
+--inventory-parquet on a local ingest run).
+20,320 staged OSM nodes against 170,308 anchors.  Mutual-NN 85.3% in
+2-5 m, 17.7% in 5-10 m (n=649): a 5 m guarantee caps it at 10.
+Marginal table: 4->6 removes 261 duplicates for 126 hidden trees (2.07),
+6->8 removes 83 for 167 (0.50), so 6 m.
+"""
+dedup_cell_metres = 6
+data_freshness = "probe"
+
+[labels]
+COLUMBUS_OPENDATA = "Columbus Open Data"
+
+[[tree_sources]]
+label = "City of Columbus Recreation and Parks, Urban Forestry - Public Owned Trees (ArcGIS, CC0)"
+url = "https://www.arcgis.com/home/item.html?id=674e4a358e8042f69a734f229a93823c"
+
+[[landmark_sources]]
+label = "City of Columbus - Register of Historic Properties (CC0); National Park Service - National Register of Historic Places"
+url = "https://maps2.columbus.gov/arcgis/rest/services/Schemas/Development/MapServer/0"
+
+[jobs.city]
+schedule = "0 10 18 * * TUE,FRI"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city USCOL`.
+"""
+
+[jobs.osm]
+schedule = "0 0 6 * * MON"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 56 4 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

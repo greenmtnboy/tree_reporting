@@ -1,0 +1,66 @@
+# Tokyo's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "JPTYO"
+name = "Tokyo"
+slug = "tokyo"
+center = [139.6917, 35.6895]
+ecoregion = 682
+ecoregion_name = "Taiheiyo evergreen forests"
+usda_zone = 9
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "palearctic"
+bounds = [35.48, 35.9, 138.93, 139.95]
+territory = [[35.48, 35.9, 138.93, 139.95]]
+municipal_sources = ["TOKYO_OPENDATA"]
+dedup_note = """
+5-10 m band 42.3% mutual-NN over n=468: neighbour-dominated, so the band
+rule stops at a 5 m guarantee and prints "a 10 m cell".  The marginal
+table says one step less, and Tokyo is the city where that difference is
+most worth taking: its inventory is the **tightest-planted measured
+anywhere here** -- a median 3.2 m to the nearest other inventory tree,
+a tenth within 1.1 m, against Tempe's 6.5 m median -- because the
+23-ward survey counts 中木, the medium-height plantings that run as a
+near-continuous line along a verge.  Planting spacing therefore starts
+much closer in than the band rule's calibration assumes, and the trade
+turns accordingly: 6->8 removes 108 duplicates for 95 hidden trees
+(1.14), 8->10 removes 48 for 97 (0.49).  A false flag hides a real tree
+and a missed duplicate double-renders a toggleable dot, so 8 m is where
+the paying stops.
+"""
+dedup_cell_metres = 8
+data_freshness = "probe"
+
+[labels]
+TOKYO_OPENDATA = "Tokyo Open Data"
+
+[[tree_sources]]
+label = "Tokyo Open Data Catalog - Bureau of Construction, Street Trees on Metropolitan Roads (CC BY 4.0)"
+url = "https://catalog.data.metro.tokyo.lg.jp/dataset/t000014d2000000029"
+
+[[landmark_sources]]
+label = "Tokyo Open Data Catalog - Board of Education, Designated Cultural Properties and Historic Sites (CC BY 4.0)"
+url = "https://catalog.data.metro.tokyo.lg.jp/dataset/t000021d0000000017"
+
+[jobs.city]
+schedule = "0 0 12 * * WED,SAT"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city JPTYO`.
+"""
+
+[jobs.osm]
+schedule = "0 30 4 * * TUE"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 0 4 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048

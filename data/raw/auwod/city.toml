@@ -1,0 +1,70 @@
+# Wodonga's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "AUWOD"
+name = "Wodonga"
+slug = "wodonga"
+center = [146.8875, -36.1218]
+ecoregion = 192
+ecoregion_name = "Southeast Australia temperate savanna"
+usda_zone = 9
+biome = "Temperate Grasslands, Savannas & Shrublands"
+realm = "australasia"
+bounds = [-36.3, -35.9, 146.65, 147.1]
+territory = [[-36.3, -35.9, 146.65, 147.1]]
+municipal_sources = ["WODONGA_OPENDATA", "ALBURY"]
+dedup_note = """
+Calibrated 2026-11-16 before the first build (tools/osm_dedup_validation.py
+--inventory-parquet on a local ingest run).
+1,322 staged OSM nodes against 94,652 anchors.  Mutual-NN stays above
+60% through 20 m, so the band rule says nothing and the marginal table
+decides: 8->10 removes 24 duplicates for 3 hidden trees (8.0); past 10 m
+it is 8 for 1 to 14 m and 4 for 3 to 20 m (n=9 in the 10-20 m band),
+too few to justify the next calibrated size, so 10 m.
+"""
+dedup_cell_metres = 10
+data_freshness = "model"
+data_freshness_comment = "derived in auwod/wodonga_tree_info.preql from its two council inventories"
+
+[labels]
+WODONGA_OPENDATA = "Wodonga Open Data"
+ALBURY = "Albury City Council"
+
+[[tree_sources]]
+label = "City of Wodonga - Street and reserve trees (ArcGIS, CC BY 4.0)"
+url = "https://www.arcgis.com/home/item.html?id=f6e5ca95559a4253bf7d25897bf8ed15"
+
+[[tree_sources]]
+label = "Albury City Council - Trees (Public) (ArcGIS; no licence stated; displayed with attribution only, not licensed for reuse)"
+url = "https://www.arcgis.com/home/item.html?id=605dc59091604f4b8aa99eaf56d71c3a"
+
+[[landmark_sources]]
+label = "Victorian Heritage Register (Vicmap, Department of Transport and Planning, CC BY 4.0)"
+url = "https://discover.data.vic.gov.au/dataset/victorian-heritage-register"
+
+[jobs.city]
+schedule = "0 50 17 * * MON,THU"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city AUWOD`.
+"""
+
+[jobs.osm]
+schedule = "0 0 6 * * SUN"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 54 4 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

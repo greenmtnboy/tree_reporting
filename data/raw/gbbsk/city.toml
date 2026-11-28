@@ -1,0 +1,58 @@
+# Basingstoke's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "GBBSK"
+name = "Basingstoke"
+slug = "basingstoke"
+center = [-1.087, 51.266]
+ecoregion = 663
+ecoregion_name = "English Lowlands beech forests"
+usda_zone = 8
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "palearctic"
+bounds = [51.13, 51.39, -1.47, -0.97]
+territory = [[51.13, 51.39, -1.47, -0.97]]
+municipal_sources = ["BASINGSTOKE_OPENDATA"]
+dedup_note = """
+osm_dedup_validation 2026-11-21: 8m 557/31 (5.6%), marginal 3.1; 10m 1.7.
+"""
+dedup_cell_metres = 8
+data_freshness = "probe"
+
+[labels]
+BASINGSTOKE_OPENDATA = "Basingstoke Open Data"
+
+[[tree_sources]]
+label = "Basingstoke and Deane Borough Council - BDBC Trees (no licence stated; displayed with attribution only, not licensed for reuse)"
+url = "https://gis.basingstoke.gov.uk/server/rest/services/AGOL/TreesInspections/FeatureServer/6"
+
+[[landmark_sources]]
+label = "Historic England - National Heritage List for England (Open Government Licence)"
+url = "https://historicengland.org.uk/listing/the-list/"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city GBBSK`.
+"""
+
+[jobs.osm]
+schedule = "0 15 11 * * WED"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 4 0 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

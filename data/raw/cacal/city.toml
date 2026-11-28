@@ -1,0 +1,59 @@
+# Calgary's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "CACAL"
+name = "Calgary"
+slug = "calgary"
+center = [-114.0719, 51.0447]
+ecoregion = 394
+ecoregion_name = "Montana Valley and Foothill grasslands"
+usda_zone = 4
+biome = "Temperate Grasslands, Savannas & Shrublands"
+realm = "nearctic"
+bounds = [50.8, 51.25, -114.35, -113.83]
+territory = [[50.8, 51.25, -114.35, -113.83]]
+municipal_sources = ["CALGARY_OPENDATA"]
+dedup_note = """
+Calgary's OSM is unusually well aligned -- 95.6% mutual-NN over 119,718
+pairs under 2 m -- but the 2-5 m band is already a coin flip at 49.0%
+over n=9,160, because the inventory itself is planted tight: a median
+5.1 m to the nearest other inventory tree, and a quarter within 3.2 m.
+The marginal table turns hard: 2->4 removes 5,403 duplicates for 2,546
+hidden trees (2.12), 4->6 removes 1,222 for 2,619 (0.47).
+"""
+dedup_cell_metres = 4
+data_freshness = "probe"
+
+[labels]
+CALGARY_OPENDATA = "Calgary Open Data"
+
+[[tree_sources]]
+label = "City of Calgary Open Data - Public Trees"
+url = "https://data.calgary.ca/Environment/Public-Trees/tfs4-3wwa"
+
+[[landmark_sources]]
+label = "City of Calgary Open Data - Historic Resource"
+url = "https://data.calgary.ca/Government/Historic-Resource/99yf-6c5u"
+
+[jobs.city]
+schedule = "0 0 16 * * MON,THU"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city CACAL`.
+"""
+
+[jobs.osm]
+schedule = "0 0 2 * * SUN"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 8 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048

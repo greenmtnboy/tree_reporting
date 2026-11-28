@@ -1,0 +1,46 @@
+# Paris's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "FRPAR"
+name = "Paris"
+slug = "paris"
+center = [2.3522, 48.8566]
+ecoregion = 664
+ecoregion_name = "European Atlantic mixed forests"
+usda_zone = 8
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "palearctic"
+bounds = [48.7, 49.05, 2.1, 2.6]
+territory = [[48.7, 49.05, 2.1, 2.6]]
+municipal_sources = ["PARIS_OPENDATA"]
+dedup_note = """
+15.9% over n=5,042, and Paris's 3,906 osm_ref exact-id matches break at
+the same 5 m line -- the strongest confirmation the method has.
+"""
+dedup_cell_metres = 10
+data_freshness = "probe"
+
+[labels]
+PARIS_OPENDATA = "Paris Open Data"
+
+[[tree_sources]]
+label = "Paris Open Data (les-arbres)"
+url = "https://opendata.paris.fr/explore/dataset/les-arbres/information/"
+
+[[landmark_sources]]
+label = "Ministère de la Culture - Immeubles protégés au titre des Monuments Historiques (Licence Ouverte)"
+url = "https://www.data.gouv.fr/datasets/immeubles-proteges-au-titre-des-monuments-historiques-2"
+
+[jobs.city]
+schedule = "0 0 11 * * *"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[jobs.osm]
+schedule = "0 0 2 * * WED"
+timeout_seconds = 2400
+memory_mb = 2048
+
+[jobs.landmarks]
+schedule = "0 50 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048

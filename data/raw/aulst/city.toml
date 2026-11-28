@@ -1,0 +1,59 @@
+# Launceston's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "AULST"
+name = "Launceston"
+slug = "launceston"
+center = [147.14, -41.435]
+ecoregion = 178
+ecoregion_name = "Tasmanian temperate forests"
+usda_zone = 9
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "australasia"
+bounds = [-41.5, -41.17, 147.02, 147.51]
+territory = [[-41.5, -41.17, 147.02, 147.51]]
+municipal_sources = ["LAUNCESTON_OPENDATA"]
+dedup_note = """
+osm_dedup_validation (2026-11-21): 6 m flags 767, 3.0% false, 71.7% recall;
+4 m is 1.3% false at 60%. Median planting spacing is wide.
+"""
+dedup_cell_metres = 6
+data_freshness = "probe"
+
+[labels]
+LAUNCESTON_OPENDATA = "Launceston Open Data"
+
+[[tree_sources]]
+label = "City of Launceston - Trees (CC BY 4.0, per the council's copyright notice for its mapping data)"
+url = "https://opendata.launceston.tas.gov.au"
+
+[[landmark_sources]]
+label = "Heritage Tasmania - Tasmanian Heritage Register via theLIST © State of Tasmania (CC BY 3.0 AU)"
+url = "https://services.thelist.tas.gov.au/arcgis/rest/services/HT/HT_Public/MapServer/0"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city AULST`.
+"""
+
+[jobs.osm]
+schedule = "0 30 11 * * TUE"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 18 0 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

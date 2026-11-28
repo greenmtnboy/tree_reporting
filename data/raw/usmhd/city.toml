@@ -1,0 +1,59 @@
+# Moorhead's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "USMHD"
+name = "Moorhead"
+slug = "moorhead"
+center = [-96.7678, 46.8738]
+ecoregion = 397
+ecoregion_name = "Northern Tallgrass prairie"
+usda_zone = 4
+biome = "Temperate Grasslands, Savannas & Shrublands"
+realm = "nearctic"
+bounds = [46.8, 46.96, -96.82, -96.6477]
+territory = [[46.811, 46.9487, -96.8002, -96.6477]]
+municipal_sources = ["MOORHEAD_OPENDATA"]
+dedup_note = """
+Calibrated 2026-11-24 (osm_dedup_validation): 4m flags 1059, 2.8% false;
+6m adds 73 true for 32 false (5.3% false).
+"""
+dedup_cell_metres = 4
+data_freshness = "probe"
+
+[labels]
+MOORHEAD_OPENDATA = "Moorhead Open Data"
+
+[[tree_sources]]
+label = "City of Moorhead GIS - TreePlotter inventory (no licence stated; displayed with attribution only, not licensed for reuse)"
+url = "https://www.arcgis.com/home/item.html?id=efd9f39819d54020b610ef0f5f0c0c04"
+
+[[landmark_sources]]
+label = "National Park Service - National Register of Historic Places"
+url = "https://www.nps.gov/subjects/nationalregister/data-downloads.htm"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city USMHD`.
+"""
+
+[jobs.osm]
+schedule = "0 45 12 * * SUN"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 31 0 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

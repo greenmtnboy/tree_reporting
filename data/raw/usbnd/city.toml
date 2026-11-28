@@ -1,0 +1,63 @@
+# Bend's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "USBND"
+name = "Bend"
+slug = "bend"
+center = [-121.3153, 44.0582]
+ecoregion = 354
+ecoregion_name = "Eastern Cascades forests"
+usda_zone = 6
+biome = "Temperate Conifer Forests"
+realm = "nearctic"
+bounds = [43.99, 44.13, -121.39, -121.23]
+territory = [[43.9991, 44.1238, -121.3825, -121.2435]]
+municipal_sources = ["BEND_OPENDATA"]
+dedup_note = """
+Calibrated 2026-11-23 (osm_dedup_validation): 4m flags 303, 0 false;
+6m adds 15 true for 9 false.
+"""
+dedup_cell_metres = 4
+data_freshness = "probe"
+
+[labels]
+BEND_OPENDATA = "Bend Open Data"
+
+[[tree_sources]]
+label = "City of Bend - Volunteer Tree Inventory (no licence stated; displayed with attribution only, not licensed for reuse)"
+url = "https://www.arcgis.com/home/item.html?id=3a518917e1fc407cbc5d72ab4260101b"
+
+[[landmark_sources]]
+label = "City of Bend - Historic Resources (no licence stated; displayed with attribution only, not licensed for reuse)"
+url = "https://www.arcgis.com/home/item.html?id=70b88002805f42dfa94d0c470d49eec1"
+
+[[landmark_sources]]
+label = "National Park Service - National Register of Historic Places"
+url = "https://www.nps.gov/subjects/nationalregister/data-downloads.htm"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city USBND`.
+"""
+
+[jobs.osm]
+schedule = "0 0 12 * * THU"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 25 0 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

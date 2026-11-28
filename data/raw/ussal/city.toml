@@ -1,0 +1,65 @@
+# Salem, MA's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "USSAL"
+name = "Salem, MA"
+slug = "salem_ma"
+center = [-70.8967, 42.5195]
+ecoregion = 339
+ecoregion_name = "Northeast US Coastal forests"
+usda_zone = 7
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "nearctic"
+bounds = [42.4818, 42.5521, -70.95, -70.7435]
+territory = [[42.4818, 42.5521, -70.95, -70.7435]]
+municipal_sources = ["SALEM_MA"]
+dedup_note = """
+Boston-metro towns added after Boston was clipped to its own line.
+Salem and Dedham measured 2026-11-24 against their staged extracts
+(osm_dedup_validation.py with the ingest's local parquet): mutual-NN
+90% (Salem) and 100% (Dedham) in the 2-5m band, a coin flip in 5-10m
+-> a 5m guarantee, the 10m cell.  Salem's 10m costs 10.8% false
+flags at 71.6% recall (n=130); Dedham's 1.7% at 90.5% (n=58).
+"""
+dedup_cell_metres = 10
+data_freshness = "probe"
+data_freshness_comment = "when Salem data is through"
+osm_freshness_comment = "GCS publication time of Salem's staged OSM parquet"
+
+[labels]
+SALEM_MA = "City of Salem, MA"
+
+[[tree_sources]]
+label = "City of Salem, MA (SalemGIS, Salem DPW) - Salem Street Trees (no licence stated; displayed with attribution only, not licensed for reuse)"
+url = "https://www.arcgis.com/home/item.html?id=df1d66111f2d481db82564d5b820dee0"
+
+[[landmark_sources]]
+label = "National Park Service - National Register of Historic Places"
+url = "https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer"
+
+[jobs.city]
+schedule = "0 25 13 * * MON,THU"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city USSAL`.
+"""
+
+[jobs.osm]
+schedule = "0 0 9 * * SUN"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 51 0 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

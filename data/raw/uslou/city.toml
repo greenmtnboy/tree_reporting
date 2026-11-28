@@ -1,0 +1,59 @@
+# Louisville's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "USLOU"
+name = "Louisville"
+slug = "louisville"
+center = [-85.7585, 38.2527]
+ecoregion = 336
+ecoregion_name = "Interior Plateau US Hardwood Forests"
+usda_zone = 7
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "nearctic"
+bounds = [37.99, 38.3803, -85.95, -85.4]
+territory = [[37.9972, 38.3803, -85.9472, -85.4048]]
+municipal_sources = ["LOUISVILLE_OPENDATA"]
+dedup_note = """
+Calibrated 2026-11-18: 6 m keeps 2.0 true per false at the margin;
+8 m falls to 0.36 (dense planting projects).
+"""
+dedup_cell_metres = 6
+data_freshness = "probe"
+
+[labels]
+LOUISVILLE_OPENDATA = "Louisville Open Data"
+
+[[tree_sources]]
+label = "Louisville Metro Urban Forestry - Urban Forestry Trees, public data view (no licence stated; displayed with attribution only, not licensed for reuse)"
+url = "https://www.arcgis.com/home/item.html?id=a04b388a30d84f8baeba9c9fa67b639e"
+
+[[landmark_sources]]
+label = "Louisville Metro Landmarks Commission individual landmarks (LOJIC, Louisville Metro Open Data, PDDL); National Park Service - National Register of Historic Places"
+url = "https://www.arcgis.com/home/item.html?id=db2b664ddfee430fad4fa1da4123be30"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city USLOU`.
+"""
+
+[jobs.osm]
+schedule = "0 15 9 * * THU"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 16 1 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

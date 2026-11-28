@@ -1,0 +1,62 @@
+# Halifax's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "CAHFX"
+name = "Halifax"
+slug = "halifax"
+center = [-63.5752, 44.6488]
+ecoregion = 338
+ecoregion_name = "New England-Acadian forests"
+usda_zone = 6
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "nearctic"
+bounds = [44.4, 45.05, -64.05, -62.35]
+territory = [[44.4, 45.05, -64.05, -62.35]]
+municipal_sources = ["HALIFAX_OPENDATA"]
+dedup_note = """
+The only city here to earn a 10 m guarantee, and both measures agree.
+Halifax plants wide -- a median 9.2 m to the nearest other inventory
+tree, against Calgary's 5.1 -- so a match out at 10-15 m is far more
+likely a re-mapped tree than the next one in the row.  The 5-10 m band
+is duplicate-dominated at 72.4% (n=29) rather than the coin flip every
+other city in this batch shows there, and the marginal table never
+turns: 10->14 removes 14 duplicates for 3 hidden trees (4.67), 14->20
+removes 10 for 4 (2.50).  Small absolute numbers -- HRM has only 1,602
+OSM nodes against 80,050 inventory trees -- but they point one way.
+"""
+dedup_cell_metres = 20
+data_freshness = "probe"
+
+[labels]
+HALIFAX_OPENDATA = "Halifax Open Data"
+
+[[tree_sources]]
+label = "Halifax Regional Municipality Open Data - Public Trees"
+url = "https://catalogue-hrm.opendata.arcgis.com/datasets/public-trees"
+
+[[landmark_sources]]
+label = "Halifax Regional Municipality Open Data - Heritage Properties"
+url = "https://catalogue-hrm.opendata.arcgis.com/datasets/heritage-properties"
+
+[jobs.city]
+schedule = "0 20 18 * * FRI,MON"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city CAHFX`.
+"""
+
+[jobs.osm]
+schedule = "0 30 3 * * THU"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 12 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048

@@ -1,0 +1,63 @@
+# Basel's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "CHBAS"
+name = "Basel"
+slug = "basel"
+center = [7.5886, 47.5596]
+ecoregion = 686
+ecoregion_name = "Western European broadleaf forests"
+usda_zone = 7
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "palearctic"
+bounds = [47.51, 47.6, 7.54, 7.7]
+territory = [[47.51, 47.6, 7.54, 7.7]]
+municipal_sources = ["BASEL_OPENDATA"]
+dedup_note = """
+Calibrated 2026-11-16 before the first build (tools/osm_dedup_validation.py
+--inventory-parquet on a local ingest run).
+10,227 staged OSM nodes against 32,520 anchors.  Mutual-NN 93.1% in
+2-5 m, 38.0% in 5-10 m (n=216): a 5 m guarantee caps it at 10.
+Marginal table: 6->8 removes 53 duplicates for 47 hidden trees (1.13),
+8->10 removes 27 for 43 (0.63), so 8 m.
+"""
+dedup_cell_metres = 8
+data_freshness = "probe"
+
+[labels]
+BASEL_OPENDATA = "Basel Open Data"
+
+[[tree_sources]]
+label = "Stadtgärtnerei Basel-Stadt - Baumkataster: Baumbestand (data.bs.ch 100052, CC BY 4.0, Geodaten Kanton Basel-Stadt)"
+url = "https://data.bs.ch/explore/dataset/100052/"
+
+[[landmark_sources]]
+label = "Kanton Basel-Stadt - Inventar der schützenswerten Gartenanlagen (CC BY 4.0, Geodaten Kanton Basel-Stadt)"
+url = "https://wfs.geo.bs.ch/"
+
+[jobs.city]
+schedule = "0 50 19 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city CHBAS`.
+"""
+
+[jobs.osm]
+schedule = "0 0 6 * * SAT"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 8 2 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

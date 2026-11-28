@@ -1,0 +1,58 @@
+# Guelph's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "CAGLP"
+name = "Guelph"
+slug = "guelph"
+center = [-80.2482, 43.5448]
+ecoregion = 334
+ecoregion_name = "Eastern Great Lakes lowland forests"
+usda_zone = 5
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "nearctic"
+bounds = [43.475, 43.61, -80.33, -80.15]
+territory = [[43.475, 43.61, -80.33, -80.15]]
+municipal_sources = ["GUELPH_OPENDATA"]
+dedup_note = """
+osm_dedup_validation 2026-11-21: 4m 9471/666 (7.0%), marginal 5.7; 6m 0.8.
+"""
+dedup_cell_metres = 4
+data_freshness = "probe"
+
+[labels]
+GUELPH_OPENDATA = "Guelph Open Data"
+
+[[tree_sources]]
+label = "City of Guelph Open Data - Trees (Open Government Licence - City of Guelph; contains information licensed under the Open Government Licence - City of Guelph)"
+url = "https://explore.guelph.ca/datasets/cityofguelph::trees"
+
+[[landmark_sources]]
+label = "City of Guelph Heritage Register - Cultural Heritage Resources (no licence stated; displayed with attribution only, not licensed for reuse)"
+url = "https://explore.guelph.ca/apps/cityofguelph::cultural-heritage-resources"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city CAGLP`.
+"""
+
+[jobs.osm]
+schedule = "0 45 10 * * FRI"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 56 1 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

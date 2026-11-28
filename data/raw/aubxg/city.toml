@@ -1,0 +1,58 @@
+# Bendigo's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "AUBXG"
+name = "Bendigo"
+slug = "bendigo"
+center = [144.279, -36.757]
+ecoregion = 176
+ecoregion_name = "Southeast Australia temperate forests"
+usda_zone = 9
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "australasia"
+bounds = [-37.1, -36.4, 143.95, 144.9]
+territory = [[-37.1, -36.4, 143.95, 144.9]]
+municipal_sources = ["BENDIGO_OPENDATA"]
+dedup_note = """
+osm_dedup_validation 2026-11-21: 8m 1074/36 (3.4%), marginal 3.8; 10m 1.9.
+"""
+dedup_cell_metres = 8
+data_freshness = "probe"
+
+[labels]
+BENDIGO_OPENDATA = "Bendigo Open Data"
+
+[[tree_sources]]
+label = "City of Greater Bendigo - Environment - Trees (CC BY 2.5 AU)"
+url = "https://data.gov.au/data/dataset/city-of-greater-bendigo-environment-trees"
+
+[[landmark_sources]]
+label = "Heritage Victoria - Victorian Heritage Register via Vicmap (CC BY 4.0)"
+url = "https://discover.data.vic.gov.au/dataset/victorian-heritage-register"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city AUBXG`.
+"""
+
+[jobs.osm]
+schedule = "0 15 11 * * TUE"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 2 0 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

@@ -1,0 +1,75 @@
+# Bogotá's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "COBOG"
+name = "Bogotá"
+slug = "bogota"
+center = [-74.0721, 4.711]
+ecoregion = 477
+ecoregion_name = "Magdalena Valley montane forests"
+usda_zone = 10
+biome = "Tropical & Subtropical Moist Broadleaf Forests"
+realm = "neotropical"
+bounds = [4.4, 4.9, -74.3, -73.95]
+territory = [[4.4, 4.9, -74.3, -73.95]]
+municipal_sources = ["BOGOTA_OPENDATA"]
+dedup_note = """
+Calibrated 2026-09-11 against the staged extract (40,359 OSM nodes) and
+the first published parquet (1,390,646 municipal rows, read from GCS --
+the workstation could not hold the ingest's output).  The inventory is
+the tightest-planted on the map by a distance, a 2.3 m median to the
+nearest other row and a tenth within 0.3 m, because the census counts
+shrubs.  5-10 m band 54.4% mutual-NN over n=5,007: a coin flip, which
+the script reports as such, and the rule for a coin flip is to leave
+the rows visible.  The marginal table agrees: 6->8 removes 1,895
+duplicates for 918 hidden trees (2.06), 8->10 removes 731 for 730
+(1.00, break-even), 10->14 removes 542 for 987 (0.55).  8 m is where
+the paying stops, as it did for Tokyo, Helsinki and Copenhagen.
+"""
+dedup_cell_metres = 8
+data_freshness = "probe"
+
+[labels]
+BOGOTA_OPENDATA = "Bogotá Open Data"
+
+[[tree_sources]]
+label = "Datos Abiertos Bogotá - Jardín Botánico de Bogotá, Arbolado Urbano (CC BY 4.0)"
+url = "https://datosabiertos.bogota.gov.co/dataset/censo-arbolado-urbano"
+
+[[landmark_sources]]
+label = "Datos Abiertos Bogotá - IDPC, Monumentos and Bienes de Interés Cultural (CC BY-SA 4.0)"
+url = "https://datosabiertos.bogota.gov.co/dataset/inventario-patrimonio-mueble-bogota-d-c"
+
+[jobs.city]
+schedule = "0 0 22 * * MON,THU"
+timeout_seconds = 3600
+memory_mb = 6144
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city COBOG`.
+"""
+timeout_seconds_note = """
+1.39M municipal rows -- the largest single inventory on the map, twice
+NYC's -- read as ~700 ArcGIS pages at just under a second each, then the
+cluster merge over them in DuckDB.  Sized from a memory profile of the
+cluster merge (NYC peaks at 3.1 GiB, London at 3.6); the paging alone is
+ten to twelve minutes of the budget.  A worker only claims a run whose
+declared memory fits its own container, so a figure above what the fleet
+offers waits "dispatched" for ever with no error -- 6144 was claimed in
+four minutes on 2026-09-11, so the fleet has that; check `runs show` for
+the `claimed` event before raising it further.
+"""
+
+[jobs.osm]
+schedule = "0 30 4 * * SUN"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 42 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048

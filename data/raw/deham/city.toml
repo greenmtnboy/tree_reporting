@@ -1,0 +1,62 @@
+# Hamburg's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "DEHAM"
+name = "Hamburg"
+slug = "hamburg"
+center = [9.9937, 53.5511]
+ecoregion = 664
+ecoregion_name = "European Atlantic mixed forests"
+usda_zone = 8
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "palearctic"
+bounds = [53.39, 53.74, 9.7, 10.33]
+territory = [[53.39, 53.74, 9.7, 10.33]]
+municipal_sources = ["HAMBURG_OPENDATA"]
+dedup_note = """
+Hamburg: osm_dedup_validation.py --inventory-parquet: 279,840 OSM nodes
+(largely an import of the Strassenbaumkataster) against 229,876 anchors.
+Mutual-NN 89.8% in 2-5 m, 13.2% in 5-10 m (n=2,363): a 5 m guarantee caps
+it at 10. Marginal table: 4->6 removes 1,068 duplicates for 362 hidden
+trees (2.95), 6->8 removes 299 for 514 (0.58), so 6 m.
+"""
+dedup_cell_metres = 6
+data_freshness = "probe"
+
+[labels]
+HAMBURG_OPENDATA = "Hamburg Open Data"
+
+[[tree_sources]]
+label = "Freie und Hansestadt Hamburg, BUKEA - Straßenbaumkataster (WFS, dl-de/by-2.0)"
+url = "http://www.hamburg.de/fhh-permalink/1065232"
+
+[[landmark_sources]]
+label = "Freie und Hansestadt Hamburg - Denkmalkartierung: listed gardens, monuments and buildings (WFS, dl-de/by-2.0)"
+url = "https://geodienste.hamburg.de/HH_WFS_Denkmalschutz?SERVICE=WFS&REQUEST=GetCapabilities"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city DEHAM`.
+"""
+
+[jobs.osm]
+schedule = "0 0 7 * * MON"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 22 2 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

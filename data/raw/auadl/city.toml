@@ -1,0 +1,74 @@
+# Adelaide's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "AUADL"
+name = "Adelaide"
+slug = "adelaide"
+center = [138.6007, -34.9285]
+ecoregion = 200
+ecoregion_name = "Flinders-Lofty montane woodlands"
+usda_zone = 10
+biome = "Mediterranean Forests, Woodlands & Scrub"
+realm = "australasia"
+bounds = [-34.98, -34.88, 138.56, 138.71]
+territory = [[-34.98, -34.88, 138.56, 138.71]]
+municipal_sources = ["ADELAIDE_OPENDATA", "UNLEY", "BURNSIDE"]
+dedup_note = """
+Calibrated 2026-11-16 before the first build (tools/osm_dedup_validation.py
+--inventory-parquet on a local ingest run).
+17,825 staged OSM nodes against 6,030 anchors.  Mutual-NN 96.1% in
+2-5 m, 47.8% in 5-10 m (n=297): a 5 m guarantee caps it at 10.
+Marginal table: 6->8 removes 82 duplicates for 52 hidden trees (1.58),
+8->10 removes 42 for 46 (0.91), so 8 m.
+"""
+dedup_cell_metres = 8
+data_freshness = "model"
+data_freshness_comment = "derived in auadl/adelaide_tree_info.preql from its three council inventories"
+
+[labels]
+ADELAIDE_OPENDATA = "Adelaide Open Data"
+UNLEY = "City of Unley"
+BURNSIDE = "City of Burnside"
+
+[[tree_sources]]
+label = "City of Adelaide via data.sa.gov.au (Street Trees)"
+url = "https://data.sa.gov.au/data/dataset/street-trees"
+
+[[tree_sources]]
+label = "City of Unley - Street Trees (ArcGIS; no licence stated; displayed with attribution only, not licensed for reuse)"
+url = "https://www.arcgis.com/home/item.html?id=60272d3be3d34d7598a05f495fe347be"
+
+[[tree_sources]]
+label = "City of Burnside - Burnside Street Trees (data.sa.gov.au, 2019, CC BY 4.0)"
+url = "https://data.sa.gov.au/data/dataset/burnside-street-trees"
+
+[[landmark_sources]]
+label = "SA Heritage Places (State and Local Heritage), data.sa.gov.au"
+url = "https://data.sa.gov.au/data/dataset/sa-heritage-places"
+
+[jobs.city]
+schedule = "0 50 14 * * FRI,MON"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city AUADL`.
+"""
+
+[jobs.osm]
+schedule = "0 30 5 * * THU"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 48 4 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

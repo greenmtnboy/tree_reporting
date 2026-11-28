@@ -1,0 +1,58 @@
+# Syracuse's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "USSYR"
+name = "Syracuse"
+slug = "syracuse"
+center = [-76.1474, 43.0481]
+ecoregion = 334
+ecoregion_name = "Eastern Great Lakes lowland forests"
+usda_zone = 5
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "nearctic"
+bounds = [42.98, 43.09, -76.21, -76.07]
+territory = [[42.9841, 43.0862, -76.2045, -76.0742]]
+municipal_sources = ["SYRACUSE_OPENDATA"]
+dedup_note = """
+osm_dedup_validation 2026-11-20: 8m 731/41 (5.3%), marginal 2.5; 14m turns below 1.
+"""
+dedup_cell_metres = 8
+data_freshness = "probe"
+
+[labels]
+SYRACUSE_OPENDATA = "Syracuse Open Data"
+
+[[tree_sources]]
+label = "City of Syracuse Department of Parks & Recreation, Forestry - Tree Inventory (TreeKeeper; Open Data Syracuse Terms of Use). The City of Syracuse makes no representation, warranty or guarantee relating to the data or analyses derived from these data."
+url = "https://data.syr.gov/pages/termsofuse"
+
+[[landmark_sources]]
+label = "National Park Service - National Register of Historic Places"
+url = "https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city USSYR`.
+"""
+
+[jobs.osm]
+schedule = "0 15 10 * * WED"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 40 1 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

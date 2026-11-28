@@ -26,8 +26,14 @@ cd data/raw && uv run tools/new_city.py \
     --city-cron "0 40 15 * * SUN,WED" --osm-cron "0 30 2 * * SAT"
 ```
 
-`--dry-run` lists the edits first. The scaffolder is idempotent and stages
+`--dry-run` lists the files first. The scaffolder is idempotent and stages
 everything in memory, so a failure leaves the tree untouched.
+
+**It edits no shared file.** It writes the city's manifest,
+`data/raw/{code}/city.toml`, and runs `tools/sync_cities.py`, which generates
+every shared registry from all the manifests (see "The city manifest" below).
+Everything later in this guide that names a registry (`CITY_TERRITORY`,
+`DEDUP_CELL_METRES`, a cloud job, an attribution row) is a key in that file.
 
 **Then the four things it does not do**, each needing a measurement or a look at the portal:
 
@@ -40,7 +46,8 @@ everything in memory, so a failure leaves the tree untouched.
    query, then list the city in `OSM_UNMAPPED_CITIES` (`shared/osm.py`) and
    re-run, which stages an empty object. Stoughton is the instance.
 4. **Calibrate the dedup cell size**: `uv run tools/osm_dedup_validation.py --city {CODE}`,
-   then set `DEDUP_CELL_METRES` and run `uv run tools/dedup_cells.py --write`.
+   then set `dedup_cell_metres` (and why, in `dedup_note`) in the manifest and
+   run `uv run tools/sync_cities.py`.
    Never copy one. Before the first cloud build pass `--osm-parquet` and
    `--inventory-parquet` to calibrate against local files. A city with no OSM
    rows cannot be calibrated; keep the default and say so in its comment.
@@ -152,12 +159,14 @@ or size classes may map every code to the binomial or to published bands.
 
 ### 2-3. Register the code
 
-The scaffolder does this: the `city` enum in `core.preql`, the source label in
-`MUNICIPAL_DATA_SOURCES`, `CITY_BOUNDS` (the generous sanity box) and
-`CITY_TERRITORY` (the non-overlapping rectangles that decide which city an
-OSM node or community submission belongs to). **If the city has a neighbour on
-the map, carve both territories along the real boundary**; the scaffolder
-writes the envelope, and `test_city_territory.py` fails on an overlap.
+The scaffolder does this, in the manifest: the code (the `city` enum in
+`core.preql`), `municipal_sources` (`MUNICIPAL_DATA_SOURCES`), `bounds`
+(`CITY_BOUNDS`, the generous sanity box) and `territory` (`CITY_TERRITORY`,
+the non-overlapping rectangles that decide which city an OSM node or
+community submission belongs to; a string between two boxes is a comment
+line). **If the city has a neighbour on the map, carve both territories
+along the real boundary**, in both manifests; the scaffolder writes the
+envelope, and `test_city_territory.py` fails on an overlap.
 
 **A town that interlocks with its neighbours is a polygon, not a staircase.**
 Where a river separates two cities a few rectangles follow it. Where towns
@@ -169,10 +178,11 @@ still metres wrong: on Boston's 2.98M published rows a bbox-prefiltered
 **A US city alone on the map is a polygon too.** Its envelope takes in the
 suburbs, and every OSM node and submission there was published as the
 city's (the audit that moved 49 US cities: Portland's box held 15,034 OSM
-trees outside the city limits, Denver's 155k). Skip a city whose own
-inventory reaches well past its line, because the clip below drops those
-rows: Denver (5.9k trees in its mountain parks, ~16 km out), a model that
-unions several inventories (Los Angeles with West Hollywood, Northern
+trees outside the city limits, Denver's 155k). Decide case by case for a
+city whose own inventory reaches well past its line, because the clip below
+drops those rows: Denver took its polygon anyway (#290), dropping 5,864
+inventory trees (1.9%), mostly its Mountain Parks in unincorporated
+Jefferson County. Skip a model that unions several inventories (Los Angeles with West Hollywood, Northern
 Virginia, Atlanta's metro-wide planting), and San Francisco, whose
 predictions cover Daly City. Measure first: the share of the published
 inventory outside the polygon, and how far outside. So:
@@ -187,8 +197,8 @@ second the consolidated city or incorporated place containing the city's
 `cityConfig.json` centre, everywhere else. Neighbours must come from the
 same layer (a place and a county subdivision can overlap). Either writes
 `boundaries/{code}.json` (US Census TIGER, public domain) and prints the
-`CITY_TERRITORY` line: the polygon's envelope, one rectangle; widen
-`CITY_BOUNDS` if it does not hold it. The file is the whole registration
+territory: the polygon's envelope, one rectangle, for the manifest's
+`territory`; widen `bounds` if it does not hold it. The file is the whole registration
 (`shared/boundary.py`):
 
 - the town's territory is the polygon inside that envelope;
@@ -329,15 +339,17 @@ so a new city's target must publish every column of
 city file, and `test_browser_bundle.py` keeps it that way. `full_tree_publish.preql` gets one line in its file list
 (`test_rollup_reads_every_city`). `osm_staging/{code}_osm_staging.preql` is
 the thin per-city extract model over the shared `osm_rows.py`, selected by
-`where city = '{CODE}'`. Add the city to `OSM_DATA_SOURCES`, give it a
-`DEDUP_CELL_METRES` row (start at 10, then measure), and run
-`uv run tools/dedup_cells.py --write`. A city-unique column (`borough`) must
+`where city = '{CODE}'`. `OSM_DATA_SOURCES` and the dedup grid come from the
+manifest (`dedup_cell_metres`: start at 10, then measure); the sync writes
+both. A city-unique column (`borough`) must
 be declared on the OSM partition too (`OSM_EXTRA_NULL_COLUMNS`).
 
 ### 9. Schedule it
 
-Three `[[cloud.job]]` entries in `data/trilogy.toml`. Nothing errors when
-one is missing; `test_cloud_jobs.py` is the check.
+Three `[[cloud.job]]` entries in `data/trilogy.toml`, generated from the
+manifest's `[jobs.city]`, `[jobs.osm]` and `[jobs.landmarks]` (schedule,
+timeout, memory, and a `*_note` above any of them). Nothing errors when one
+is missing; `test_cloud_jobs.py` is the check.
 
 - Write the day of week as a name (`SUN,WED`). The parser numbers days 1-7
   from Sunday, so a numeric day fires a day early, silently.
@@ -354,12 +366,53 @@ one is missing; `test_cloud_jobs.py` is the check.
 ### 10-11. Frontend and attribution
 
 `src/src/cityConfig.json` gets `"USDEN": { "name": "Denver", "center":
-[lon, lat] }` (longitude first; `test_city_is_in_the_frontend_config`
-catches a swap). That entry adds the city to the picker, the worker's parquet
-URL, the chat's model glob and the `pnpm test:queries` sweep. Then
-`README.md` and `src/src/data/sourceCatalog.ts` for attribution (OSM data is
-ODbL: credit OpenStreetMap contributors), and a display label in
-`src/src/data/dataSources.ts`.
+[lon, lat] }` from the manifest's `name` and `center` (longitude first;
+`test_city_is_in_the_frontend_config` catches a swap). That entry adds the
+city to the picker, the worker's parquet URL, the chat's model glob and the
+`pnpm test:queries` sweep. Attribution is the manifest's `[[tree_sources]]`
+and `[[landmark_sources]]` (`src/src/data/sourceCatalog.ts`; OSM data is
+ODbL: credit OpenStreetMap contributors) and `[labels]`
+(`src/src/data/dataSources.ts`); `README.md`'s source tables are still
+written by hand.
+
+## The city manifest
+
+`data/raw/{code}/city.toml` holds every fact about a city that a shared file
+used to carry: `tools/city_manifest.py` lists the keys, and any `*_note` key
+is a comment the generator writes above the entry (the reasoning behind a
+territory cut or a dedup cell lives there now). `tools/sync_cities.py`
+writes, from all of them:
+
+- `shared/city_registry.py`, which `shared/ingest.py` and `shared/osm.py`
+  re-export (`MUNICIPAL_DATA_SOURCES`, `OSM_DATA_SOURCES`, `CITY_BOUNDS`,
+  `CITY_TERRITORY`, `DEDUP_CELL_METRES`, `OSM_CITY_NAMES`);
+- the regions between `>>> sync_cities:` and `<<< sync_cities:` markers in
+  `core.preql`, `city_ecoregion.preql`, `tree_common.preql`,
+  `community_tree_info.preql`, `landmark_common.preql`, the two rollups,
+  `trilogy.toml`, `dataSources.ts`, `sourceCatalog.ts` and
+  `dashboardContextSource.ts`, plus both city configs whole;
+- then it runs the generators that read those (`sync_osm_territory`,
+  `dedup_cells`, `sync_city_derived`, `sync_app_models`).
+
+Never edit a marked region: edit the manifest and rerun the sync.
+`test_sync_cities.py` fails while anything is stale. The manifests stay out
+of the cloud bundle (`exclude` in `trilogy.toml`); jobs read only the
+generated files.
+
+**Two branches that each add cities meet only in generated files**, and
+regenerating is the merge: after `git merge` (or a rebase stop) reports
+conflicts in them, run
+
+```bash
+cd data/raw && uv run tools/sync_cities.py --resolve
+```
+
+which takes the current side of every conflict inside a generated region
+(merge or diff3 style) and then rewrites the regions from the manifests,
+which hold both branches' cities. A conflict anywhere else (a manifest both
+branches changed, a hand-edited schedule or prose outside the regions, a
+hunk across a region's markers) is a real one: `--resolve` lists it and
+writes nothing until it is merged by hand.
 
 ## Splitting a metro into its towns
 
@@ -378,7 +431,7 @@ Brookline, Belmont, Watertown) is the worked example; per town:
    source with no date of its own, which used to publish when a sibling moved,
    needs a probe now (Belmont's emits the inventory's date and lets the weekly
    OSM extract re-read the portal).
-3. **Fetch its boundary** (above) and set its `CITY_TERRITORY` envelope.
+3. **Fetch its boundary** (above) and set its manifest's `territory` envelope.
 4. **Carry over every class of row the metro published there.** Rows with no
    municipal attribution were recorded under the metro's code, and the shared
    ingests re-home them within a carved family (`territory_city`), but only
@@ -390,8 +443,8 @@ Brookline, Belmont, Watertown) is the worked example; per town:
 5. **Take the town out of the metro's model**: its partition, probe, enum
    value, `@source_kept` line, and any border-dedup block (the clip replaces
    it; `docs/BORDER_DEDUP.md`).
-6. `tools/sync_osm_territory.py`, `tools/sync_city_derived.py`, the tests,
-   and a dry run of each model.
+6. `tools/sync_cities.py` (it runs the territory and derived syncs), the
+   tests, and a dry run of each model.
 
 Rollout, in this order, because the metro's published parquet still holds the
 towns' trees until it rebuilds:
@@ -409,8 +462,8 @@ both codes; keep that window short.
 
 ## Community-only cities
 
-A city with no municipal inventory has an empty `MUNICIPAL_DATA_SOURCES`
-tuple, no municipal script or probe, and a published watermark over the
+A city with no municipal inventory has an empty `municipal_sources` list in
+its manifest (and `data_freshness = "none"`), no municipal script or probe, and a published watermark over the
 community and OSM columns only. A city with **exactly one** partition must
 also pin that enum value on the published target's `complete where`, because
 a lone partial source is never a union candidate. Start from

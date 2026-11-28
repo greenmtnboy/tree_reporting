@@ -1,0 +1,58 @@
+# Las Vegas's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "USLAS"
+name = "Las Vegas"
+slug = "las_vegas"
+center = [-115.1398, 36.1699]
+ecoregion = 433
+ecoregion_name = "Mojave desert"
+usda_zone = 9
+biome = "Deserts & Xeric Shrublands"
+realm = "nearctic"
+bounds = [36.1, 36.4015, -115.42, -115.05]
+territory = [[36.1295, 36.4015, -115.4066, -115.0621]]
+municipal_sources = ["LAS_VEGAS_OPENDATA"]
+dedup_note = """
+osm_dedup_validation 2026-11-20: 8m 392/19 (4.6%), marginal 4.4; 10m is 1:1.
+"""
+dedup_cell_metres = 8
+data_freshness = "probe"
+
+[labels]
+LAS_VEGAS_OPENDATA = "Las Vegas Open Data"
+
+[[tree_sources]]
+label = "City of Las Vegas - Park Trees (no licence stated; displayed with attribution only, not licensed for reuse)"
+url = "https://www.arcgis.com/home/item.html?id=05622dec3c454882abf26c4e0ec8370f"
+
+[[landmark_sources]]
+label = "City of Las Vegas - Historic Property Register (no licence stated; displayed with attribution only, not licensed for reuse); National Park Service - National Register of Historic Places"
+url = "https://services1.arcgis.com/F1v0ufATbBQScMtY/arcgis/rest/services/HistoricAreas/FeatureServer/163"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city USLAS`.
+"""
+
+[jobs.osm]
+schedule = "0 15 10 * * THU"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 42 1 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

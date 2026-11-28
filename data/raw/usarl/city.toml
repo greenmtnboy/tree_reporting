@@ -1,0 +1,63 @@
+# Arlington, MA's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "USARL"
+name = "Arlington, MA"
+slug = "arlington_ma"
+center = [-71.1565, 42.4154]
+ecoregion = 339
+ecoregion_name = "Northeast US Coastal forests"
+usda_zone = 7
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "nearctic"
+bounds = [42.3974, 42.4363, -71.2027, -71.1322]
+territory = [[42.3974, 42.4363, -71.2027, -71.1322]]
+municipal_sources = ["ARLINGTON_MA"]
+dedup_note = """
+Arlington, MA measured 2026-11-25 against its staged extract
+(osm_dedup_validation.py with the ingest's local parquet, 116 OSM
+trees): mutual-NN 100% under 5m, 67% in 5-10m, 43% in 10-20m.  The
+tool suggests a 20m cell, but past 14m each added false flag
+outweighs the true one (20m: +5 true/+7 false); 10m costs 5.9% false
+flags at 64.9% recall.  Default kept, as Salem's and Dedham's.
+"""
+dedup_cell_metres = 10
+data_freshness = "probe"
+
+[labels]
+ARLINGTON_MA = "Town of Arlington, MA"
+
+[[tree_sources]]
+label = "Town of Arlington GIS - Public Shade Trees (no licence stated; displayed with attribution only, not licensed for reuse)"
+url = "https://www.arcgis.com/home/item.html?id=dc385c1084d1432ebc792ffcb20bcfa4"
+
+[[landmark_sources]]
+label = "National Park Service - National Register of Historic Places"
+url = "https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer"
+
+[jobs.city]
+schedule = "0 5 14 * * MON,THU"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city USARL`.
+"""
+
+[jobs.osm]
+schedule = "0 45 13 * * SUN"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 7 1 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

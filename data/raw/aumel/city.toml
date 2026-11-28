@@ -1,0 +1,80 @@
+# Melbourne's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "AUMEL"
+name = "Melbourne"
+slug = "melbourne"
+center = [144.9631, -37.8136]
+ecoregion = 176
+ecoregion_name = "Southeast Australia temperate forests"
+usda_zone = 9
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "australasia"
+bounds = [-38.1, -37.55, 144.55, 145.4]
+territory = [[-38.1, -37.57, 144.55, 145.4]]
+municipal_sources = ["MELBOURNE_OPENDATA", "PORT_PHILLIP", "YARRA", "GLEN_EIRA", "HOBSONS_BAY", "BRIMBANK", "MANNINGHAM"]
+dedup_note = """
+47.6% over n=884: a coin flip.
+"""
+dedup_cell_metres = 10
+data_freshness = "model"
+data_freshness_comment = "derived in aumel/melbourne_tree_info.preql from its five council inventories"
+
+[labels]
+MELBOURNE_OPENDATA = "City of Melbourne"
+PORT_PHILLIP = "City of Port Phillip"
+YARRA = "City of Yarra"
+GLEN_EIRA = "Glen Eira City Council"
+HOBSONS_BAY = "Hobsons Bay City Council"
+BRIMBANK = "Brimbank City Council"
+MANNINGHAM = "Manningham City Council"
+
+[[tree_sources]]
+label = "City of Melbourne Open Data (Urban Forest)"
+url = "https://data.melbourne.vic.gov.au/explore/dataset/trees-with-species-and-dimensions-urban-forest/"
+
+[[tree_sources]]
+label = "City of Port Phillip Trees (data.gov.au, CC BY 2.5 AU)"
+url = "https://data.gov.au/data/dataset/city-of-port-phillip-trees"
+
+[[tree_sources]]
+label = "City of Yarra Street and Park Trees (data.gov.au, CC BY 4.0)"
+url = "https://data.gov.au/data/dataset/yarra-street-park-trees"
+
+[[tree_sources]]
+label = "Glen Eira City Council Park and Street Trees (data.gov.au, CC BY 2.5 AU)"
+url = "https://data.gov.au/data/dataset/park-and-street-trees"
+
+[[tree_sources]]
+label = "Hobsons Bay City Council Street and Park Trees (data.gov.au, CC BY 2.5 AU)"
+url = "https://data.gov.au/data/dataset/hbcc-street-and-park-trees"
+
+[[tree_sources]]
+label = "Brimbank City Council - Street Trees (data.gov.au, 2019, CC BY 2.5 AU)"
+url = "https://data.gov.au/data/dataset/brimbank-street-trees"
+
+[[tree_sources]]
+label = "Brimbank City Council - Open Space Trees (data.gov.au, 2019, CC BY 2.5 AU)"
+url = "https://data.gov.au/data/dataset/brimbank-open-space-trees"
+
+[[tree_sources]]
+label = "Manningham City Council - Street Trees (data.gov.au, 2019, CC BY 3.0 AU)"
+url = "https://data.gov.au/data/dataset/manningham-streettrees"
+
+[[landmark_sources]]
+label = "City of Melbourne Open Data (Landmarks and Places of Interest)"
+url = "https://data.melbourne.vic.gov.au/explore/dataset/landmarks-and-places-of-interest-including-schools-theatres-health-services-spor/"
+
+[jobs.city]
+schedule = "0 0 14 * * FRI,MON"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[jobs.osm]
+schedule = "0 30 2 * * THU"
+timeout_seconds = 1800
+memory_mb = 1024
+
+[jobs.landmarks]
+schedule = "0 2 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048

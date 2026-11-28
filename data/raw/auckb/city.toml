@@ -1,0 +1,59 @@
+# Cockburn's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "AUCKB"
+name = "Cockburn"
+slug = "cockburn"
+center = [115.83, -32.12]
+ecoregion = 206
+ecoregion_name = "Southwest Australia woodlands"
+usda_zone = 11
+biome = "Mediterranean Forests, Woodlands & Scrub"
+realm = "australasia"
+bounds = [-32.2, -32.06, 115.73, 115.93]
+territory = [[-32.2, -32.06, 115.73, 115.93]]
+municipal_sources = ["COCKBURN_OPENDATA"]
+dedup_note = """
+Calibrated 2026-11-21 (osm_dedup_validation, 5.7k OSM vs 68.8k street trees):
+4 m keeps 59% recall at 1.8% false; 6 m adds 43 true for 18 false.
+"""
+dedup_cell_metres = 4
+data_freshness = "probe"
+
+[labels]
+COCKBURN_OPENDATA = "Cockburn Open Data"
+
+[[tree_sources]]
+label = "City of Cockburn - Street Trees (no licence stated; displayed with attribution only, not licensed for reuse)"
+url = "https://www.arcgis.com/home/item.html?id=4e25763b23fe47c1bb928920152789a9"
+
+[[landmark_sources]]
+label = "City of Cockburn - Local Heritage Survey (no licence stated; displayed with attribution only, not licensed for reuse)"
+url = "https://www.arcgis.com/home/item.html?id=19b51e4ff02a4c32ad0c92d7f08e005a"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city AUCKB`.
+"""
+
+[jobs.osm]
+schedule = "0 15 11 * * MON"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 0 0 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

@@ -1,0 +1,44 @@
+# Buenos Aires's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "ARBUE"
+name = "Buenos Aires"
+slug = "buenosaires"
+center = [-58.3816, -34.6037]
+ecoregion = 576
+ecoregion_name = "Humid Pampas"
+usda_zone = 10
+biome = "Temperate Grasslands, Savannas & Shrublands"
+realm = "neotropical"
+bounds = [-34.8, -34.45, -58.55, -58.3]
+territory = [[-34.8, -34.45, -58.55, -58.3]]
+municipal_sources = ["BUENOSAIRES_OPENDATA"]
+dedup_note = """
+61.0% over n=421: duplicate-dominated.
+"""
+dedup_cell_metres = 20
+data_freshness = "probe"
+
+[labels]
+BUENOSAIRES_OPENDATA = "Buenos Aires Data"
+
+[[tree_sources]]
+label = "Buenos Aires Data (Arbolado publico lineal)"
+url = "https://data.buenosaires.gob.ar/dataset/arbolado-publico-lineal"
+
+[[landmark_sources]]
+label = "No landmark dataset in production yet (empty placeholder parquet)"
+
+[jobs.city]
+schedule = "0 20 14 * * FRI,MON"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[jobs.osm]
+schedule = "0 0 3 * * THU"
+timeout_seconds = 1800
+memory_mb = 1024
+
+[jobs.landmarks]
+schedule = "0 0 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048

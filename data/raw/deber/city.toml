@@ -1,0 +1,60 @@
+# Berlin's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "DEBER"
+name = "Berlin"
+slug = "berlin"
+center = [13.405, 52.52]
+ecoregion = 654
+ecoregion_name = "Central European mixed forests"
+usda_zone = 7
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "palearctic"
+bounds = [52.3, 52.7, 13.05, 13.8]
+territory = [[52.3, 52.7, 13.05, 13.8]]
+municipal_sources = ["BERLIN_OPENDATA"]
+dedup_note = """
+18.4% over n=12,630; Berlin's 6,157 osm_ref matches confirm the break.
+"""
+dedup_cell_metres = 10
+data_freshness = "probe"
+
+[labels]
+BERLIN_OPENDATA = "Berlin GDI"
+
+[[tree_sources]]
+label = "Berlin GDI WFS (Strassenbaume / baumbestand)"
+url = "https://gdi.berlin.de/services/wfs/baumbestand"
+
+[[landmark_sources]]
+label = "OpenStreetMap via Overpass API (historic=* tags)"
+
+[jobs.city]
+schedule = "0 20 13 * * THU,SUN"
+timeout_seconds = 3600
+memory_mb = 4096
+note = """
+Berlin: the largest rebuild in the set. 330,178 staged OSM rows against a
+434,765-row municipal inventory, with the four-grid dedup aggregate running
+over the union; `parallelism = 3` means up to three asset builds share the
+container. 4 GiB against a measured 1 GiB peak.
+
+Berlin is also the one city whose published watermark deliberately omits
+its OSM term (see WATERMARK_EXEMPT in raw/tests/test_data_sources.py):
+gdi.berlin.de was in maintenance for days and the greatest() over sources
+left the city permanently stale against a portal that could not answer. So
+a fresh osm-deber extract does NOT by itself mark Berlin stale — that is
+the documented cost of the exemption, not a scheduling mistake here.
+"""
+
+[jobs.osm]
+schedule = "0 30 2 * * WED"
+timeout_seconds = 3600
+memory_mb = 2048
+note = """
+Berlin's is the largest extract in the set (~330k nodes).
+"""
+
+[jobs.landmarks]
+schedule = "0 44 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048

@@ -1,0 +1,71 @@
+# Singapore's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "SGSIN"
+name = "Singapore"
+slug = "singapore"
+center = [103.8198, 1.3521]
+ecoregion = 265
+ecoregion_name = "Peninsular Malaysian rain forests"
+usda_zone = 13
+biome = "Tropical & Subtropical Moist Broadleaf Forests"
+realm = "indo_malay"
+bounds = [1.15, 1.48, 103.59, 104.1]
+territory_note = """
+Singapore's shore, not the scaffold box: the box also held Johor Bahru's
+waterfront (Malaysia, north of ~1.452 west of the Causeway) and Batam's
+north coast (Indonesia, south of 1.25 east of 103.90). All 255 NParks
+heritage trees fall inside; the north strip loses a sliver of
+Woodlands' waterfront west of 103.80.
+"""
+territory = [
+    [1.15, 1.44, 103.59, 103.9],
+    [1.25, 1.44, 103.9, 104.1],
+    [1.44, 1.47, 103.8, 103.88],
+    [1.44, 1.452, 103.66, 103.8],
+]
+municipal_sources = ["SINGAPORE_NPARKS"]
+dedup_note = """
+osm_dedup_validation (2026-11-22): 255 heritage anchors against 5,348 OSM trees;
+10 m flags 26, none false; 14 m adds 10 for 2 false.
+"""
+dedup_cell_metres = 10
+data_freshness = "probe"
+
+[labels]
+SINGAPORE_NPARKS = "Singapore Open Data"
+
+[[tree_sources]]
+label = "National Parks Board - Heritage Trees via data.gov.sg (Singapore Open Data Licence v1.0)"
+url = "https://data.gov.sg/datasets/d_644ff187b6d14d6316f47284a4a6c81f/view"
+
+[[landmark_sources]]
+label = "National Heritage Board - National Monuments and Historic Sites via data.gov.sg (Singapore Open Data Licence v1.0)"
+url = "https://data.gov.sg/datasets/d_b29c230ec6b609e29ed42f71ca9a8767/view"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city SGSIN`.
+"""
+
+[jobs.osm]
+schedule = "0 30 12 * * SUN"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 50 0 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

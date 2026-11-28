@@ -1,0 +1,58 @@
+# Rochester, NY's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "USROC"
+name = "Rochester, NY"
+slug = "rochester"
+center = [-77.6088, 43.1566]
+ecoregion = 334
+ecoregion_name = "Eastern Great Lakes lowland forests"
+usda_zone = 6
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "nearctic"
+bounds = [43.1, 43.27, -77.7017, -77.53]
+territory = [[43.1033, 43.2691, -77.7017, -77.5311]]
+municipal_sources = ["ROCHESTER_OPENDATA"]
+dedup_note = """
+osm_dedup_validation 2026-11-20: thin OSM (56 matched); no false flags through 8m, 10m adds only a false one.
+"""
+dedup_cell_metres = 8
+data_freshness = "probe"
+
+[labels]
+ROCHESTER_OPENDATA = "Rochester, NY Open Data"
+
+[[tree_sources]]
+label = "City of Rochester Department of Environmental Services, Forestry Division - Trees Open Data (DataROC Terms of Use). The data made available here has been modified for use from its original source, which is the official website of the City of Rochester, NY. The City of Rochester makes no claims as to the accuracy, timeliness, content, or completeness of any of the data provided in this application. The City of Rochester makes no warranty of the accuracy or fitness for any particular use; nor are any such warranties to be implied or inferred with respect to the information or data furnished herein. The data is subject to change as modifications and updates are complete."
+url = "https://www.arcgis.com/home/item.html?id=4c209944e2984b4a908a14b0cbe48075"
+
+[[landmark_sources]]
+label = "National Park Service - National Register of Historic Places"
+url = "https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city USROC`.
+"""
+
+[jobs.osm]
+schedule = "0 15 10 * * TUE"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 38 1 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

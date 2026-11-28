@@ -1,0 +1,62 @@
+# Helsinki's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "FIHEL"
+name = "Helsinki"
+slug = "helsinki"
+center = [24.9384, 60.1699]
+ecoregion = 717
+ecoregion_name = "Scandinavian and Russian taiga"
+usda_zone = 6
+biome = "Boreal Forests/Taiga"
+realm = "palearctic"
+bounds = [60.05, 60.35, 24.75, 25.3]
+territory = [[60.05, 60.35, 24.75, 25.3]]
+municipal_sources = ["HELSINKI_OPENDATA"]
+dedup_note = """
+Calibrated 2026-09-11 against the staged extract (67,545 OSM nodes --
+more than the register itself) and the ingest's 66,380 rows.  5-10 m
+band 19.2% mutual-NN over n=1,358: neighbour-dominated, so the band
+rule stops at a 5 m guarantee and prints "a 10 m cell".  The marginal
+table turns one step earlier, as Tokyo's did: 4->6 removes 607
+duplicates for 307 hidden trees (1.98), 6->8 removes 152 for 363
+(0.42), 8->10 removes 68 for 360 (0.19).  Helsinki plants at a 5.8 m
+median, so from 8 m on a flag is more often the next tree in the row
+than the same tree re-mapped; 8 m is where the paying stops.
+"""
+dedup_cell_metres = 8
+data_freshness = "probe"
+
+[labels]
+HELSINKI_OPENDATA = "Helsinki Open Data"
+
+[[tree_sources]]
+label = "Helsinki Region Infoshare - City of Helsinki Tree Register (Puurekisteri, CC BY 4.0)"
+url = "https://hri.fi/data/en_GB/dataset/helsingin-kaupungin-puurekisteri"
+
+[[landmark_sources]]
+label = "City of Helsinki WFS - Buildings Protected by Detailed Plans, Protected Natural Monuments (CC BY 4.0)"
+url = "https://hri.fi/data/en_GB/dataset/asemakaavoilla-suojellut-rakennukset-ja-alueet-helsingissa"
+
+[jobs.city]
+schedule = "0 0 23 * * SAT,TUE"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city FIHEL`.
+"""
+
+[jobs.osm]
+schedule = "0 30 4 * * FRI"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 48 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048

@@ -1,0 +1,59 @@
+# Penticton's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "CAPEN"
+name = "Penticton"
+slug = "penticton"
+center = [-119.5937, 49.4991]
+ecoregion = 362
+ecoregion_name = "Okanogan dry forests"
+usda_zone = 6
+biome = "Temperate Conifer Forests"
+realm = "nearctic"
+bounds = [49.42, 49.56, -119.66, -119.5]
+territory = [[49.42, 49.56, -119.66, -119.5]]
+municipal_sources = ["PENTICTON_OPENDATA"]
+dedup_note = """
+osm_dedup_validation (2026-11-22): 8 m flags 716, 21 false (2.9%), recall 96%;
+10 m adds 19 for 12 more false.
+"""
+dedup_cell_metres = 8
+data_freshness = "probe"
+
+[labels]
+PENTICTON_OPENDATA = "Penticton Open Data"
+
+[[tree_sources]]
+label = "City of Penticton - City Owned Trees (Open Government Licence - City of Penticton; contains information licenced under the Open Government Licence - City of Penticton)"
+url = "https://www.arcgis.com/home/item.html?id=e0905b0677bf4b468b57fb52d2d725db"
+
+[[landmark_sources]]
+label = "City of Penticton - Community Heritage Register (no licence stated; displayed with attribution only, not licensed for reuse)"
+url = "https://maps.penticton.ca/utility/rest/services/External_PRD/Planning/MapServer/235"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city CAPEN`.
+"""
+
+[jobs.osm]
+schedule = "0 15 12 * * TUE"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 38 0 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

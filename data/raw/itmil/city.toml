@@ -1,0 +1,68 @@
+# Milan's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "ITMIL"
+name = "Milan"
+slug = "milan"
+center = [9.19, 45.4642]
+ecoregion = 675
+ecoregion_name = "Po Basin mixed forests"
+usda_zone = 8
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "palearctic"
+bounds = [45.38, 45.54, 9.03, 9.29]
+territory = [[45.38, 45.54, 9.03, 9.29]]
+municipal_sources = ["MILAN_OPENDATA"]
+dedup_note = """
+Calibrated 2026-11-15 before the first build, on a local Overpass
+extract (40,356 nodes) against the Comune's 255,075-row inventory:
+planting spacing p50 5.5 m; mutual-NN 99.7% under 2 m, 90.4% at 2-5 m,
+54.6% at 5-10 m, so the bands say a 10 m cell.  Marginal table: 6->8
+removes 539 duplicates for 277 hidden trees (1.95), 8->10 219 for 201
+(1.09), 10->14 228 for 311 (0.73).  10 m is the last step that removes
+more duplicates than it hides trees.
+"""
+dedup_cell_metres = 10
+data_freshness = "probe"
+
+[labels]
+MILAN_OPENDATA = "Milan Open Data"
+
+[[tree_sources]]
+label = "Comune di Milano - Territorio: localizzazione degli alberi (DS2484, 2023-03-31 release, CC BY 4.0)"
+url = "https://dati.comune.milano.it/dataset/ds2484_infogeo_alberi_localizzazione"
+
+[[tree_sources]]
+label = "Comune di Milano - Gli alberi monumentali nel Comune di Milano (DS2489, CC BY 4.0)"
+url = "https://dati.comune.milano.it/dataset/ds2489-gli-alberi-monumentali-nel-comune-di-milano"
+
+[[landmark_sources]]
+label = "Comune di Milano - Spazi freschi: parchi ed aree verdi (DS3018, CC BY 4.0)"
+url = "https://dati.comune.milano.it/dataset/ds3018-spazi-freschi-parchi-ed-aree-verdi"
+
+[jobs.city]
+schedule = "0 40 15 * * SUN,MON"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city ITMIL`.
+"""
+
+[jobs.osm]
+schedule = "0 30 6 * * SAT"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 42 4 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

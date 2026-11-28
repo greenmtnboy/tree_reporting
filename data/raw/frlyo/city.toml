@@ -1,0 +1,61 @@
+# Lyon's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "FRLYO"
+name = "Lyon"
+slug = "lyon"
+center = [4.8357, 45.764]
+ecoregion = 686
+ecoregion_name = "Western European broadleaf forests"
+usda_zone = 8
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "palearctic"
+bounds = [45.55, 45.95, 4.66, 5.07]
+territory = [[45.55, 45.95, 4.66, 5.07]]
+municipal_sources = ["LYON_OPENDATA"]
+dedup_note = """
+Lyon: osm_dedup_validation.py --inventory-parquet: mutual-NN 86.0% in
+2-5 m, 29.6% in 5-10 m (n=3,288): a 5 m guarantee caps it at 10.
+Marginal table: 4->6 removes 1,682 duplicates for 663 hidden trees (2.54),
+6->8 removes 598 for 763 (0.78), so 6 m.
+"""
+dedup_cell_metres = 6
+data_freshness = "probe"
+
+[labels]
+LYON_OPENDATA = "Lyon Open Data"
+
+[[tree_sources]]
+label = "Métropole de Lyon - Arbres d'alignement (data.grandlyon.com WFS, Licence Ouverte)"
+url = "https://data.grandlyon.com/portail/fr/jeux-de-donnees/arbres-alignement-metropole-lyon/info"
+
+[[landmark_sources]]
+label = "Ministère de la Culture - Immeubles protégés au titre des Monuments Historiques (Mérimée, Licence Ouverte)"
+url = "https://www.data.gouv.fr/datasets/immeubles-proteges-au-titre-des-monuments-historiques-2"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city FRLYO`.
+"""
+
+[jobs.osm]
+schedule = "0 0 7 * * TUE"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 24 2 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

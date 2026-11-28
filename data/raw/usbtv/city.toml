@@ -1,0 +1,47 @@
+# Burlington, VT's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "USBTV"
+name = "Burlington, VT"
+slug = "burlington"
+center = [-73.2121, 44.4759]
+osm_name = "Burlington"
+ecoregion = 334
+ecoregion_name = "Eastern Great Lakes lowland forests"
+usda_zone = 5
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "nearctic"
+bounds = [44.35, 44.6, -73.35, -73.1]
+territory = [[44.4459, 44.5399, -73.2771, -73.1762]]
+municipal_sources = ["BURLINGTON_OPENDATA"]
+dedup_note = """
+63.6% over n=22: duplicate-dominated, on a very small band.
+"""
+dedup_cell_metres = 20
+data_freshness = "probe"
+data_freshness_comment = "when Burlington VT data is through"
+osm_freshness_comment = "GCS publication time of Burlington's staged OSM parquet"
+
+[labels]
+BURLINGTON_OPENDATA = "City of Burlington, VT"
+
+[[tree_sources]]
+label = "City of Burlington VT ArcGIS FeatureServer"
+url = "https://maps.burlingtonvt.gov/arcgis/rest/services/Tree_Sites_Public_View/FeatureServer/0"
+
+[[landmark_sources]]
+label = "Geocoded from city landmark directory via Nominatim"
+
+[jobs.city]
+schedule = "0 0 13 * * WED,SAT"
+timeout_seconds = 1200
+memory_mb = 1024
+
+[jobs.osm]
+schedule = "0 0 3 * * TUE"
+timeout_seconds = 1800
+memory_mb = 1024
+
+[jobs.landmarks]
+schedule = "0 8 4 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048

@@ -29,342 +29,406 @@ property tree_id.submission_photo_url string; # publicly readable photo of this 
 
 
 
-property <*>.ussfo_data_updated_through datetime; # when SF data is through
-property <*>.usnyc_data_updated_through datetime; # when NYC data is through
-# defined in boston dataset as it's a erivation
-# property <*>.usbos_data_updated_through datetime; # when Boston data is through
-property <*>.frpar_data_updated_through datetime; # when Paris data is through
-property <*>.usbtv_data_updated_through datetime; # when Burlington VT data is through
-property <*>.cavan_data_updated_through datetime; # when Vancouver data is through
-property <*>.deber_data_updated_through datetime; # when Berlin data is through
-property <*>.nlams_data_updated_through datetime; # when Amsterdam data is through
-property <*>.gblon_data_updated_through datetime; # when London data is through
-# property <*>.aumel_data_updated_through datetime; # derived in aumel/melbourne_tree_info.preql from its five council inventories
-property <*>.arbue_data_updated_through datetime; # when Buenos Aires data is through
-# property <*>.uslax_data_updated_through datetime; # derived in uslax/losangeles_tree_info.preql from its two inventories
-property <*>.uswas_data_updated_through datetime; # when Washington DC data is through
-property <*>.ustem_data_updated_through datetime; # when Tempe data is through
-property <*>.grath_data_updated_through datetime; # when Athens data is through
-property <*>.usden_data_updated_through datetime; # when Denver data is through
 # GRMLO (Milos) and GRSAN (Santorini) have no municipal source, so no
 # municipal freshness property: their published watermarks combine the
 # community column with the staged OSM one and nothing else.
-property <*>.ustem_osm_data_updated_through datetime; # mtime of Tempe's committed OSM staging parquet
-property <*>.usbos_osm_data_updated_through datetime;
-property <*>.usnwt_osm_data_updated_through datetime; # GCS publication time of Newton's staged OSM parquet
-property <*>.usmil_osm_data_updated_through datetime; # GCS publication time of Milton's staged OSM parquet
-property <*>.uspea_osm_data_updated_through datetime; # GCS publication time of Peabody's staged OSM parquet
-property <*>.uslyn_osm_data_updated_through datetime; # GCS publication time of Lynn's staged OSM parquet
-property <*>.usmed_osm_data_updated_through datetime; # GCS publication time of Medford's staged OSM parquet
-property <*>.usqcy_osm_data_updated_through datetime; # GCS publication time of Quincy's staged OSM parquet
-property <*>.ussau_osm_data_updated_through datetime; # GCS publication time of Saugus's staged OSM parquet
-property <*>.usnee_osm_data_updated_through datetime; # GCS publication time of Needham's staged OSM parquet
-property <*>.usswa_osm_data_updated_through datetime; # GCS publication time of Swampscott's staged OSM parquet
-property <*>.uswlt_osm_data_updated_through datetime; # GCS publication time of Waltham's staged OSM parquet
-property <*>.usmbh_osm_data_updated_through datetime; # GCS publication time of Marblehead's staged OSM parquet
-property <*>.usrev_osm_data_updated_through datetime; # GCS publication time of Revere's staged OSM parquet
-property <*>.usmld_osm_data_updated_through datetime; # GCS publication time of Malden's staged OSM parquet
-property <*>.useve_osm_data_updated_through datetime; # GCS publication time of Everett's staged OSM parquet
-property <*>.usche_osm_data_updated_through datetime; # GCS publication time of Chelsea's staged OSM parquet
-property <*>.uswnt_osm_data_updated_through datetime; # GCS publication time of Winthrop's staged OSM parquet
-property <*>.usbev_osm_data_updated_through datetime; # GCS publication time of Beverly's staged OSM parquet
-property <*>.uslyf_osm_data_updated_through datetime; # GCS publication time of Lynnfield's staged OSM parquet
-property <*>.usmrs_osm_data_updated_through datetime; # GCS publication time of Melrose's staged OSM parquet
-property <*>.uswel_osm_data_updated_through datetime; # GCS publication time of Wellesley's staged OSM parquet
-property <*>.usnah_osm_data_updated_through datetime; # GCS publication time of Nahant's staged OSM parquet
-property <*>.usdan_osm_data_updated_through datetime; # GCS publication time of Danvers's staged OSM parquet
-property <*>.uswnc_osm_data_updated_through datetime; # GCS publication time of Winchester's staged OSM parquet
-property <*>.uscan_osm_data_updated_through datetime; # GCS publication time of Canton's staged OSM parquet
-property <*>.uschv_osm_data_updated_through datetime; # GCS publication time of Chula Vista's staged OSM parquet
-property <*>.usosw_osm_data_updated_through datetime; # GCS publication time of Oswego, IL's staged OSM parquet
-property <*>.uslsv_osm_data_updated_through datetime; # GCS publication time of Louisville, CO's staged OSM parquet
-property <*>.usplf_data_updated_through datetime; # when Plainfield, IL data is through
-property <*>.usplf_osm_data_updated_through datetime; # GCS publication time of Plainfield, IL's staged OSM parquet
-property <*>.useln_data_updated_through datetime; # when East Lansing data is through
-property <*>.useln_osm_data_updated_through datetime; # GCS publication time of East Lansing's staged OSM parquet
-property <*>.usaur_osm_data_updated_through datetime; # GCS publication time of Aurora, IL's staged OSM parquet
-property <*>.uschh_osm_data_updated_through datetime; # GCS publication time of Chapel Hill's staged OSM parquet
-property <*>.usbvn_data_updated_through datetime; # when Beaverton data is through
-property <*>.usbvn_osm_data_updated_through datetime; # GCS publication time of Beaverton's staged OSM parquet
-property <*>.uspwm_data_updated_through datetime; # when Portland, ME data is through
-property <*>.uspwm_osm_data_updated_through datetime; # GCS publication time of Portland, ME's staged OSM parquet
-property <*>.uscrs_data_updated_through datetime; # when Coral Springs data is through
-property <*>.uscrs_osm_data_updated_through datetime; # GCS publication time of Coral Springs's staged OSM parquet
-property <*>.usslp_data_updated_through datetime; # when St. Louis Park data is through
-property <*>.usslp_osm_data_updated_through datetime; # GCS publication time of St. Louis Park's staged OSM parquet
-property <*>.ussmq_data_updated_through datetime; # when San Mateo data is through
-property <*>.ussmq_osm_data_updated_through datetime; # GCS publication time of San Mateo's staged OSM parquet
-property <*>.uslvl_data_updated_through datetime; # when Loveland data is through
-property <*>.uslvl_osm_data_updated_through datetime; # GCS publication time of Loveland's staged OSM parquet
-property <*>.usbzn_data_updated_through datetime; # when Bozeman data is through
-property <*>.usbzn_osm_data_updated_through datetime; # GCS publication time of Bozeman's staged OSM parquet
-property <*>.uspie_data_updated_through datetime; # when Pinellas County data is through
-property <*>.uspie_osm_data_updated_through datetime; # GCS publication time of Pinellas County's staged OSM parquet
-property <*>.ussrq_data_updated_through datetime; # when Sarasota County data is through
-property <*>.ussrq_osm_data_updated_through datetime; # GCS publication time of Sarasota County's staged OSM parquet
-property <*>.usarl_data_updated_through datetime; # when Arlington, MA data is through
-property <*>.usarl_osm_data_updated_through datetime; # GCS publication time of Arlington, MA's staged OSM parquet
-property <*>.usded_data_updated_through datetime; # when Dedham data is through
-property <*>.usded_osm_data_updated_through datetime; # GCS publication time of Dedham's staged OSM parquet
-property <*>.ussal_data_updated_through datetime; # when Salem data is through
-property <*>.ussal_osm_data_updated_through datetime; # GCS publication time of Salem's staged OSM parquet
-property <*>.ussom_data_updated_through datetime; # when Somerville data is through
-property <*>.ussom_osm_data_updated_through datetime; # GCS publication time of Somerville's staged OSM parquet
-property <*>.uswat_data_updated_through datetime; # when Watertown data is through
-property <*>.uswat_osm_data_updated_through datetime; # GCS publication time of Watertown's staged OSM parquet
-property <*>.usbel_data_updated_through datetime; # when Belmont data is through
-property <*>.usbel_osm_data_updated_through datetime; # GCS publication time of Belmont's staged OSM parquet
-property <*>.usbkl_data_updated_through datetime; # when Brookline data is through
-property <*>.usbkl_osm_data_updated_through datetime; # GCS publication time of Brookline's staged OSM parquet
-# defined in uscam/cambridge_tree_info.preql as the greatest of the city's and MIT's probes
-# property <*>.uscam_data_updated_through datetime; # when Cambridge data is through
-property <*>.uscam_osm_data_updated_through datetime; # GCS publication time of Cambridge's staged OSM parquet
-property <*>.usmhd_data_updated_through datetime; # when Moorhead data is through
-property <*>.usmhd_osm_data_updated_through datetime; # GCS publication time of Moorhead's staged OSM parquet
-property <*>.usevn_data_updated_through datetime; # when Evanston data is through
-property <*>.usevn_osm_data_updated_through datetime; # GCS publication time of Evanston's staged OSM parquet
-property <*>.usopk_data_updated_through datetime; # when Orland Park data is through
-property <*>.usopk_osm_data_updated_through datetime; # GCS publication time of Orland Park's staged OSM parquet
-property <*>.usbnd_data_updated_through datetime; # when Bend data is through
-property <*>.usbnd_osm_data_updated_through datetime; # GCS publication time of Bend's staged OSM parquet
-property <*>.uspln_data_updated_through datetime; # when Plano data is through
-property <*>.uspln_osm_data_updated_through datetime; # GCS publication time of Plano's staged OSM parquet
-property <*>.usdvn_data_updated_through datetime; # when Davenport data is through
-property <*>.usdvn_osm_data_updated_through datetime; # GCS publication time of Davenport's staged OSM parquet
-property <*>.usrdl_data_updated_through datetime; # when Redlands data is through
-property <*>.usrdl_osm_data_updated_through datetime; # GCS publication time of Redlands's staged OSM parquet
-property <*>.usoxr_data_updated_through datetime; # when Oxnard data is through
-property <*>.usoxr_osm_data_updated_through datetime; # GCS publication time of Oxnard's staged OSM parquet
-property <*>.usslm_data_updated_through datetime; # when Salem data is through
-property <*>.usslm_osm_data_updated_through datetime; # GCS publication time of Salem's staged OSM parquet
-property <*>.cawhi_data_updated_through datetime; # when Whitby data is through
-property <*>.cawhi_osm_data_updated_through datetime; # GCS publication time of Whitby's staged OSM parquet
-property <*>.cayrk_data_updated_through datetime; # when York Region data is through
-property <*>.cayrk_osm_data_updated_through datetime; # GCS publication time of York Region's staged OSM parquet
-property <*>.krsel_data_updated_through datetime; # when Seoul data is through
-property <*>.krsel_osm_data_updated_through datetime; # GCS publication time of Seoul's staged OSM parquet
-property <*>.uspsl_data_updated_through datetime; # when Port St. Lucie data is through
-property <*>.uspsl_osm_data_updated_through datetime; # GCS publication time of Port St. Lucie's staged OSM parquet
-property <*>.usgjt_data_updated_through datetime; # when Grand Junction data is through
-property <*>.usgjt_osm_data_updated_through datetime; # GCS publication time of Grand Junction's staged OSM parquet
-property <*>.usboi_data_updated_through datetime; # when Boise data is through
-property <*>.usboi_osm_data_updated_through datetime; # GCS publication time of Boise's staged OSM parquet
-property <*>.usspf_data_updated_through datetime; # when Springfield data is through
-property <*>.usspf_osm_data_updated_through datetime; # GCS publication time of Springfield's staged OSM parquet
-property <*>.usbis_data_updated_through datetime; # when Bismarck data is through
-property <*>.usbis_osm_data_updated_through datetime; # GCS publication time of Bismarck's staged OSM parquet
-property <*>.usmso_data_updated_through datetime; # when Missoula data is through
-property <*>.usmso_osm_data_updated_through datetime; # GCS publication time of Missoula's staged OSM parquet
-property <*>.uslan_data_updated_through datetime; # when Lansing data is through
-property <*>.uslan_osm_data_updated_through datetime; # GCS publication time of Lansing's staged OSM parquet
-property <*>.usbtr_data_updated_through datetime; # when Baton Rouge data is through
-property <*>.usbtr_osm_data_updated_through datetime; # GCS publication time of Baton Rouge's staged OSM parquet
-property <*>.sgsin_data_updated_through datetime; # when Singapore data is through
-property <*>.sgsin_osm_data_updated_through datetime; # GCS publication time of Singapore's staged OSM parquet
-property <*>.esbcn_data_updated_through datetime; # when Barcelona data is through
-property <*>.esbcn_osm_data_updated_through datetime; # GCS publication time of Barcelona's staged OSM parquet
-property <*>.aucol_data_updated_through datetime; # when Colac Otway data is through
-property <*>.aucol_osm_data_updated_through datetime; # GCS publication time of Colac Otway's staged OSM parquet
+# >>> sync_cities: city freshness
+property <*>.arbue_data_updated_through datetime; # when Buenos Aires data is through
+property <*>.arbue_osm_data_updated_through datetime; # GCS publication time of Buenos Aires's staged OSM parquet
+property <*>.atvie_data_updated_through datetime; # when Vienna data is through
+property <*>.atvie_osm_data_updated_through datetime; # GCS publication time of Vienna's staged OSM parquet
+# property <*>.auadl_data_updated_through datetime; # derived in auadl/adelaide_tree_info.preql from its three council inventories
+property <*>.auadl_osm_data_updated_through datetime; # GCS publication time of Adelaide's staged OSM parquet
+property <*>.aubal_data_updated_through datetime; # when Ballarat data is through
+property <*>.aubal_osm_data_updated_through datetime; # GCS publication time of Ballarat's staged OSM parquet
 property <*>.aubsd_data_updated_through datetime; # when Bassendean data is through
 property <*>.aubsd_osm_data_updated_through datetime; # GCS publication time of Bassendean's staged OSM parquet
-property <*>.cawld_data_updated_through datetime; # when Welland data is through
-property <*>.cawld_osm_data_updated_through datetime; # GCS publication time of Welland's staged OSM parquet
+property <*>.aubxg_data_updated_through datetime; # when Bendigo data is through
+property <*>.aubxg_osm_data_updated_through datetime; # GCS publication time of Bendigo's staged OSM parquet
+property <*>.aucbr_data_updated_through datetime; # when Canberra data is through
+property <*>.aucbr_osm_data_updated_through datetime; # GCS publication time of Canberra's staged OSM parquet
+property <*>.auckb_data_updated_through datetime; # when Cockburn data is through
+property <*>.auckb_osm_data_updated_through datetime; # GCS publication time of Cockburn's staged OSM parquet
+property <*>.aucol_data_updated_through datetime; # when Colac Otway data is through
+property <*>.aucol_osm_data_updated_through datetime; # GCS publication time of Colac Otway's staged OSM parquet
+property <*>.aulst_data_updated_through datetime; # when Launceston data is through
+property <*>.aulst_osm_data_updated_through datetime; # GCS publication time of Launceston's staged OSM parquet
+property <*>.aultv_data_updated_through datetime; # when Latrobe City data is through
+property <*>.aultv_osm_data_updated_through datetime; # GCS publication time of Latrobe City's staged OSM parquet
+# property <*>.aumel_data_updated_through datetime; # derived in aumel/melbourne_tree_info.preql from its five council inventories
+property <*>.aumel_osm_data_updated_through datetime; # GCS publication time of Melbourne's staged OSM parquet
+property <*>.aumrs_data_updated_through datetime; # when Macedon Ranges data is through
+property <*>.aumrs_osm_data_updated_through datetime; # GCS publication time of Macedon Ranges's staged OSM parquet
+property <*>.auper_data_updated_through datetime; # when Perth data is through
+property <*>.auper_osm_data_updated_through datetime; # GCS publication time of Perth's staged OSM parquet
+property <*>.ausht_data_updated_through datetime; # when Greater Shepparton data is through
+property <*>.ausht_osm_data_updated_through datetime; # GCS publication time of Greater Shepparton's staged OSM parquet
+property <*>.ausyd_data_updated_through datetime; # when Sydney data is through
+property <*>.ausyd_osm_data_updated_through datetime; # GCS publication time of Sydney's staged OSM parquet
+# property <*>.auwod_data_updated_through datetime; # derived in auwod/wodonga_tree_info.preql from its two council inventories
+property <*>.auwod_osm_data_updated_through datetime; # GCS publication time of Wodonga's staged OSM parquet
+property <*>.beanr_data_updated_through datetime; # when Antwerp data is through
+property <*>.beanr_osm_data_updated_through datetime; # GCS publication time of Antwerp's staged OSM parquet
+property <*>.begnt_data_updated_through datetime; # when Ghent data is through
+property <*>.begnt_osm_data_updated_through datetime; # GCS publication time of Ghent's staged OSM parquet
+property <*>.caajx_data_updated_through datetime; # when Ajax data is through
+property <*>.caajx_osm_data_updated_through datetime; # GCS publication time of Ajax's staged OSM parquet
+property <*>.cabar_data_updated_through datetime; # when Barrie data is through
+property <*>.cabar_osm_data_updated_through datetime; # GCS publication time of Barrie's staged OSM parquet
+property <*>.cabur_data_updated_through datetime; # when Burlington, ON data is through
+property <*>.cabur_osm_data_updated_through datetime; # GCS publication time of Burlington, ON's staged OSM parquet
+property <*>.cacal_data_updated_through datetime; # when Calgary data is through
+property <*>.cacal_osm_data_updated_through datetime; # GCS publication time of Calgary's staged OSM parquet
+# property <*>.caedm_data_updated_through datetime; # derived in caedm/edmonton_tree_info.preql from its two inventories
+property <*>.caedm_osm_data_updated_through datetime; # GCS publication time of Edmonton's staged OSM parquet
+property <*>.cafre_data_updated_through datetime; # when Fredericton data is through
+property <*>.cafre_osm_data_updated_through datetime; # GCS publication time of Fredericton's staged OSM parquet
 property <*>.cafsj_data_updated_through datetime; # when Fort St. John data is through
 property <*>.cafsj_osm_data_updated_through datetime; # GCS publication time of Fort St. John's staged OSM parquet
+property <*>.caglp_data_updated_through datetime; # when Guelph data is through
+property <*>.caglp_osm_data_updated_through datetime; # GCS publication time of Guelph's staged OSM parquet
+property <*>.caham_data_updated_through datetime; # when Hamilton data is through
+property <*>.caham_osm_data_updated_through datetime; # GCS publication time of Hamilton's staged OSM parquet
+property <*>.cahfx_data_updated_through datetime; # when Halifax data is through
+property <*>.cahfx_osm_data_updated_through datetime; # GCS publication time of Halifax's staged OSM parquet
+property <*>.cakel_data_updated_through datetime; # when Kelowna data is through
+property <*>.cakel_osm_data_updated_through datetime; # GCS publication time of Kelowna's staged OSM parquet
+property <*>.cakgn_data_updated_through datetime; # when Kingston data is through
+property <*>.cakgn_osm_data_updated_through datetime; # GCS publication time of Kingston's staged OSM parquet
+property <*>.cakit_data_updated_through datetime; # when Kitchener data is through
+property <*>.cakit_osm_data_updated_through datetime; # GCS publication time of Kitchener's staged OSM parquet
+property <*>.calet_data_updated_through datetime; # when Lethbridge data is through
+property <*>.calet_osm_data_updated_through datetime; # GCS publication time of Lethbridge's staged OSM parquet
+property <*>.calng_data_updated_through datetime; # when Langley Township data is through
+property <*>.calng_osm_data_updated_through datetime; # GCS publication time of Langley Township's staged OSM parquet
+property <*>.calon_data_updated_through datetime; # when Longueuil data is through
+property <*>.calon_osm_data_updated_through datetime; # GCS publication time of Longueuil's staged OSM parquet
+property <*>.camht_data_updated_through datetime; # when Medicine Hat data is through
+property <*>.camht_osm_data_updated_through datetime; # GCS publication time of Medicine Hat's staged OSM parquet
+property <*>.camis_data_updated_through datetime; # when Mississauga data is through
+property <*>.camis_osm_data_updated_through datetime; # GCS publication time of Mississauga's staged OSM parquet
+property <*>.camon_data_updated_through datetime; # when Moncton data is through
+property <*>.camon_osm_data_updated_through datetime; # GCS publication time of Moncton's staged OSM parquet
+property <*>.campr_data_updated_through datetime; # when Maple Ridge data is through
+property <*>.campr_osm_data_updated_through datetime; # GCS publication time of Maple Ridge's staged OSM parquet
+property <*>.camtl_data_updated_through datetime; # when Montreal data is through
+property <*>.camtl_osm_data_updated_through datetime; # GCS publication time of Montreal's staged OSM parquet
+property <*>.canwe_data_updated_through datetime; # when New Westminster data is through
+property <*>.canwe_osm_data_updated_through datetime; # GCS publication time of New Westminster's staged OSM parquet
+property <*>.caoak_data_updated_through datetime; # when Oakville data is through
+property <*>.caoak_osm_data_updated_through datetime; # GCS publication time of Oakville's staged OSM parquet
+property <*>.caott_data_updated_through datetime; # when Ottawa data is through
+property <*>.caott_osm_data_updated_through datetime; # GCS publication time of Ottawa's staged OSM parquet
 property <*>.capen_data_updated_through datetime; # when Penticton data is through
 property <*>.capen_osm_data_updated_through datetime; # GCS publication time of Penticton's staged OSM parquet
 property <*>.caprg_data_updated_through datetime; # when Prince George data is through
 property <*>.caprg_osm_data_updated_through datetime; # GCS publication time of Prince George's staged OSM parquet
-property <*>.campr_data_updated_through datetime; # when Maple Ridge data is through
-property <*>.campr_osm_data_updated_through datetime; # GCS publication time of Maple Ridge's staged OSM parquet
-property <*>.calng_data_updated_through datetime; # when Langley Township data is through
-property <*>.calng_osm_data_updated_through datetime; # GCS publication time of Langley Township's staged OSM parquet
-property <*>.cabar_data_updated_through datetime; # when Barrie data is through
-property <*>.cabar_osm_data_updated_through datetime; # GCS publication time of Barrie's staged OSM parquet
-property <*>.aultv_data_updated_through datetime; # when Latrobe City data is through
-property <*>.aultv_osm_data_updated_through datetime; # GCS publication time of Latrobe City's staged OSM parquet
-property <*>.casry_data_updated_through datetime; # when Surrey data is through
-property <*>.casry_osm_data_updated_through datetime; # GCS publication time of Surrey's staged OSM parquet
-property <*>.usfsd_data_updated_through datetime; # when Sioux Falls data is through
-property <*>.usfsd_osm_data_updated_through datetime; # GCS publication time of Sioux Falls's staged OSM parquet
-property <*>.ausht_data_updated_through datetime; # when Greater Shepparton data is through
-property <*>.ausht_osm_data_updated_through datetime; # GCS publication time of Greater Shepparton's staged OSM parquet
-property <*>.aumrs_data_updated_through datetime; # when Macedon Ranges data is through
-property <*>.aumrs_osm_data_updated_through datetime; # GCS publication time of Macedon Ranges's staged OSM parquet
-property <*>.aulst_data_updated_through datetime; # when Launceston data is through
-property <*>.aulst_osm_data_updated_through datetime; # GCS publication time of Launceston's staged OSM parquet
-property <*>.camht_data_updated_through datetime; # when Medicine Hat data is through
-property <*>.camht_osm_data_updated_through datetime; # GCS publication time of Medicine Hat's staged OSM parquet
-property <*>.cafre_data_updated_through datetime; # when Fredericton data is through
-property <*>.cafre_osm_data_updated_through datetime; # GCS publication time of Fredericton's staged OSM parquet
-property <*>.gbfar_data_updated_through datetime; # when Fareham data is through
-property <*>.gbfar_osm_data_updated_through datetime; # GCS publication time of Fareham's staged OSM parquet
+property <*>.caque_data_updated_through datetime; # when Quebec City data is through
+property <*>.caque_osm_data_updated_through datetime; # GCS publication time of Quebec City's staged OSM parquet
 property <*>.cared_data_updated_through datetime; # when Red Deer data is through
 property <*>.cared_osm_data_updated_through datetime; # GCS publication time of Red Deer's staged OSM parquet
-property <*>.nzhas_data_updated_through datetime; # when Hastings data is through
-property <*>.nzhas_osm_data_updated_through datetime; # GCS publication time of Hastings's staged OSM parquet
-property <*>.gbyrk_data_updated_through datetime; # when York data is through
-property <*>.gbyrk_osm_data_updated_through datetime; # GCS publication time of York's staged OSM parquet
-property <*>.gbbsk_data_updated_through datetime; # when Basingstoke data is through
-property <*>.gbbsk_osm_data_updated_through datetime; # GCS publication time of Basingstoke's staged OSM parquet
-property <*>.aubxg_data_updated_through datetime; # when Bendigo data is through
-property <*>.aubxg_osm_data_updated_through datetime; # GCS publication time of Bendigo's staged OSM parquet
-property <*>.auckb_data_updated_through datetime; # when Cockburn data is through
-property <*>.auckb_osm_data_updated_through datetime; # GCS publication time of Cockburn's staged OSM parquet
-property <*>.uspvd_data_updated_through datetime; # when Providence data is through
-property <*>.uspvd_osm_data_updated_through datetime; # GCS publication time of Providence's staged OSM parquet
-property <*>.caglp_data_updated_through datetime; # when Guelph data is through
-property <*>.caglp_osm_data_updated_through datetime; # GCS publication time of Guelph's staged OSM parquet
-property <*>.gbbfs_data_updated_through datetime; # when Belfast data is through
-property <*>.gbbfs_osm_data_updated_through datetime; # GCS publication time of Belfast's staged OSM parquet
-property <*>.gbedi_data_updated_through datetime; # when Edinburgh data is through
-property <*>.gbedi_osm_data_updated_through datetime; # GCS publication time of Edinburgh's staged OSM parquet
-property <*>.usoak_data_updated_through datetime; # when Oakland data is through
-property <*>.usoak_osm_data_updated_through datetime; # GCS publication time of Oakland's staged OSM parquet
-property <*>.usral_data_updated_through datetime; # when Riverside data is through
-property <*>.usral_osm_data_updated_through datetime; # GCS publication time of Riverside's staged OSM parquet
-property <*>.nlgrq_data_updated_through datetime; # when Groningen data is through
-property <*>.nlgrq_osm_data_updated_through datetime; # GCS publication time of Groningen's staged OSM parquet
-property <*>.frbes_data_updated_through datetime; # when Brest data is through
-property <*>.frbes_osm_data_updated_through datetime; # GCS publication time of Brest's staged OSM parquet
-property <*>.uslas_data_updated_through datetime; # when Las Vegas data is through
-property <*>.uslas_osm_data_updated_through datetime; # GCS publication time of Las Vegas's staged OSM parquet
-property <*>.ussyr_data_updated_through datetime; # when Syracuse data is through
-property <*>.ussyr_osm_data_updated_through datetime; # GCS publication time of Syracuse's staged OSM parquet
-property <*>.usroc_data_updated_through datetime; # when Rochester, NY data is through
-property <*>.usroc_osm_data_updated_through datetime; # GCS publication time of Rochester, NY's staged OSM parquet
-property <*>.caoak_data_updated_through datetime; # when Oakville data is through
-property <*>.caoak_osm_data_updated_through datetime; # GCS publication time of Oakville's staged OSM parquet
-property <*>.ussmo_data_updated_through datetime; # when Santa Monica data is through
-property <*>.ussmo_osm_data_updated_through datetime; # GCS publication time of Santa Monica's staged OSM parquet
-property <*>.frnte_data_updated_through datetime; # when Nantes data is through
-property <*>.frnte_osm_data_updated_through datetime; # GCS publication time of Nantes's staged OSM parquet
+property <*>.casry_data_updated_through datetime; # when Surrey data is through
+property <*>.casry_osm_data_updated_through datetime; # GCS publication time of Surrey's staged OSM parquet
+property <*>.cator_data_updated_through datetime; # when Toronto data is through
+property <*>.cator_osm_data_updated_through datetime; # GCS publication time of Toronto's staged OSM parquet
+property <*>.cavan_data_updated_through datetime; # when Vancouver data is through
+property <*>.cavan_osm_data_updated_through datetime; # GCS publication time of Vancouver's staged OSM parquet
+property <*>.cavic_data_updated_through datetime; # when Victoria data is through
+property <*>.cavic_osm_data_updated_through datetime; # GCS publication time of Victoria's staged OSM parquet
 property <*>.cawat_data_updated_through datetime; # when Waterloo data is through
 property <*>.cawat_osm_data_updated_through datetime; # GCS publication time of Waterloo's staged OSM parquet
-property <*>.usgeg_data_updated_through datetime; # when Spokane data is through
-property <*>.usgeg_osm_data_updated_through datetime; # GCS publication time of Spokane's staged OSM parquet
-property <*>.usric_data_updated_through datetime; # when Richmond data is through
-property <*>.usric_osm_data_updated_through datetime; # GCS publication time of Richmond's staged OSM parquet
-property <*>.usmsn_data_updated_through datetime; # when Madison data is through
-property <*>.usmsn_osm_data_updated_through datetime; # GCS publication time of Madison's staged OSM parquet
-property <*>.ausyd_data_updated_through datetime; # when Sydney data is through
-property <*>.ausyd_osm_data_updated_through datetime; # GCS publication time of Sydney's staged OSM parquet
-property <*>.frgnb_data_updated_through datetime; # when Grenoble data is through
-property <*>.frgnb_osm_data_updated_through datetime; # GCS publication time of Grenoble's staged OSM parquet
-property <*>.frmpl_data_updated_through datetime; # when Montpellier data is through
-property <*>.frmpl_osm_data_updated_through datetime; # GCS publication time of Montpellier's staged OSM parquet
-property <*>.uslou_data_updated_through datetime; # when Louisville data is through
-property <*>.uslou_osm_data_updated_through datetime; # GCS publication time of Louisville's staged OSM parquet
-property <*>.cakit_data_updated_through datetime; # when Kitchener data is through
-property <*>.cakit_osm_data_updated_through datetime; # GCS publication time of Kitchener's staged OSM parquet
-property <*>.ussan_data_updated_through datetime; # when San Diego data is through
-property <*>.ussan_osm_data_updated_through datetime; # GCS publication time of San Diego's staged OSM parquet
-property <*>.beanr_data_updated_through datetime; # when Antwerp data is through
-property <*>.beanr_osm_data_updated_through datetime; # GCS publication time of Antwerp's staged OSM parquet
-property <*>.frrns_data_updated_through datetime; # when Rennes data is through
-property <*>.frrns_osm_data_updated_through datetime; # GCS publication time of Rennes's staged OSM parquet
-property <*>.chbrn_data_updated_through datetime; # when Bern data is through
-property <*>.chbrn_osm_data_updated_through datetime; # GCS publication time of Bern's staged OSM parquet
-property <*>.nlein_data_updated_through datetime; # when Eindhoven data is through
-property <*>.nlein_osm_data_updated_through datetime; # GCS publication time of Eindhoven's staged OSM parquet
-property <*>.frsxb_data_updated_through datetime; # when Strasbourg data is through
-property <*>.frsxb_osm_data_updated_through datetime; # GCS publication time of Strasbourg's staged OSM parquet
-property <*>.frbod_data_updated_through datetime; # when Bordeaux data is through
-property <*>.frbod_osm_data_updated_through datetime; # GCS publication time of Bordeaux's staged OSM parquet
-property <*>.nzwlg_data_updated_through datetime; # when Wellington data is through
-property <*>.nzwlg_osm_data_updated_through datetime; # GCS publication time of Wellington's staged OSM parquet
-property <*>.delej_data_updated_through datetime; # when Leipzig data is through
-property <*>.delej_osm_data_updated_through datetime; # GCS publication time of Leipzig's staged OSM parquet
-property <*>.chgva_data_updated_through datetime; # when Geneva data is through
-property <*>.chgva_osm_data_updated_through datetime; # GCS publication time of Geneva's staged OSM parquet
-property <*>.frtls_data_updated_through datetime; # when Toulouse data is through
-property <*>.frtls_osm_data_updated_through datetime; # GCS publication time of Toulouse's staged OSM parquet
-property <*>.nlutc_data_updated_through datetime; # when Utrecht data is through
-property <*>.nlutc_osm_data_updated_through datetime; # GCS publication time of Utrecht's staged OSM parquet
-property <*>.caham_data_updated_through datetime; # when Hamilton data is through
-property <*>.caham_osm_data_updated_through datetime; # GCS publication time of Hamilton's staged OSM parquet
-property <*>.gbbrs_data_updated_through datetime; # when Bristol data is through
-property <*>.gbbrs_osm_data_updated_through datetime; # GCS publication time of Bristol's staged OSM parquet
-property <*>.begnt_data_updated_through datetime; # when Ghent data is through
-property <*>.begnt_osm_data_updated_through datetime; # GCS publication time of Ghent's staged OSM parquet
-property <*>.ptlis_data_updated_through datetime; # when Lisbon data is through
-property <*>.ptlis_osm_data_updated_through datetime; # GCS publication time of Lisbon's staged OSM parquet
-property <*>.aucbr_data_updated_through datetime; # when Canberra data is through
-property <*>.aucbr_osm_data_updated_through datetime; # GCS publication time of Canberra's staged OSM parquet
-property <*>.iefin_data_updated_through datetime; # when Fingal data is through
-property <*>.iefin_osm_data_updated_through datetime; # GCS publication time of Fingal's staged OSM parquet
-property <*>.nzchc_data_updated_through datetime; # when Christchurch data is through
-property <*>.nzchc_osm_data_updated_through datetime; # GCS publication time of Christchurch's staged OSM parquet
-property <*>.defra_data_updated_through datetime; # when Frankfurt data is through
-property <*>.defra_osm_data_updated_through datetime; # GCS publication time of Frankfurt's staged OSM parquet
-property <*>.decgn_data_updated_through datetime; # when Cologne data is through
-property <*>.decgn_osm_data_updated_through datetime; # GCS publication time of Cologne's staged OSM parquet
-property <*>.usbal_data_updated_through datetime; # when Baltimore data is through
-property <*>.usbal_osm_data_updated_through datetime; # GCS publication time of Baltimore's staged OSM parquet
-property <*>.esmad_data_updated_through datetime; # when Madrid data is through
-property <*>.esmad_osm_data_updated_through datetime; # GCS publication time of Madrid's staged OSM parquet
-property <*>.frlyo_data_updated_through datetime; # when Lyon data is through
-property <*>.frlyo_osm_data_updated_through datetime; # GCS publication time of Lyon's staged OSM parquet
-property <*>.deham_data_updated_through datetime; # when Hamburg data is through
-property <*>.deham_osm_data_updated_through datetime; # GCS publication time of Hamburg's staged OSM parquet
-property <*>.ussac_data_updated_through datetime; # when Sacramento data is through
-property <*>.ussac_osm_data_updated_through datetime; # GCS publication time of Sacramento's staged OSM parquet
-property <*>.ussjc_data_updated_through datetime; # when San Jose data is through
-property <*>.ussjc_osm_data_updated_through datetime; # GCS publication time of San Jose's staged OSM parquet
-property <*>.uspit_data_updated_through datetime; # when Pittsburgh data is through
-property <*>.uspit_osm_data_updated_through datetime; # GCS publication time of Pittsburgh's staged OSM parquet
-property <*>.usphl_data_updated_through datetime; # when Philadelphia data is through
-property <*>.usphl_osm_data_updated_through datetime; # GCS publication time of Philadelphia's staged OSM parquet
-property <*>.uspor_data_updated_through datetime; # when Portland data is through
-property <*>.uspor_osm_data_updated_through datetime; # GCS publication time of Portland's staged OSM parquet
-property <*>.ussea_data_updated_through datetime; # when Seattle data is through
-property <*>.ussea_osm_data_updated_through datetime; # GCS publication time of Seattle's staged OSM parquet
+property <*>.cawhi_data_updated_through datetime; # when Whitby data is through
+property <*>.cawhi_osm_data_updated_through datetime; # GCS publication time of Whitby's staged OSM parquet
+property <*>.cawld_data_updated_through datetime; # when Welland data is through
+property <*>.cawld_osm_data_updated_through datetime; # GCS publication time of Welland's staged OSM parquet
+property <*>.cawpg_data_updated_through datetime; # when Winnipeg data is through
+property <*>.cawpg_osm_data_updated_through datetime; # GCS publication time of Winnipeg's staged OSM parquet
+property <*>.cayrk_data_updated_through datetime; # when York Region data is through
+property <*>.cayrk_osm_data_updated_through datetime; # GCS publication time of York Region's staged OSM parquet
 property <*>.chbas_data_updated_through datetime; # when Basel data is through
 property <*>.chbas_osm_data_updated_through datetime; # GCS publication time of Basel's staged OSM parquet
-property <*>.gbnot_data_updated_through datetime; # when Nottingham data is through
-property <*>.gbnot_osm_data_updated_through datetime; # GCS publication time of Nottingham's staged OSM parquet
+property <*>.chbrn_data_updated_through datetime; # when Bern data is through
+property <*>.chbrn_osm_data_updated_through datetime; # GCS publication time of Bern's staged OSM parquet
+property <*>.chgva_data_updated_through datetime; # when Geneva data is through
+property <*>.chgva_osm_data_updated_through datetime; # GCS publication time of Geneva's staged OSM parquet
 property <*>.chzur_data_updated_through datetime; # when Zürich data is through
 property <*>.chzur_osm_data_updated_through datetime; # GCS publication time of Zürich's staged OSM parquet
-property <*>.useug_data_updated_through datetime; # when Eugene data is through
-property <*>.useug_osm_data_updated_through datetime; # GCS publication time of Eugene's staged OSM parquet
-property <*>.atvie_data_updated_through datetime; # when Vienna data is through
-property <*>.atvie_osm_data_updated_through datetime; # GCS publication time of Vienna's staged OSM parquet
-property <*>.uscol_data_updated_through datetime; # when Columbus data is through
-property <*>.uscol_osm_data_updated_through datetime; # GCS publication time of Columbus's staged OSM parquet
-# property <*>.auwod_data_updated_through datetime; # derived in auwod/wodonga_tree_info.preql from its two council inventories
-property <*>.auwod_osm_data_updated_through datetime; # GCS publication time of Wodonga's staged OSM parquet
-property <*>.aubal_data_updated_through datetime; # when Ballarat data is through
-property <*>.aubal_osm_data_updated_through datetime; # GCS publication time of Ballarat's staged OSM parquet
-property <*>.auper_data_updated_through datetime; # when Perth data is through
-property <*>.auper_osm_data_updated_through datetime; # GCS publication time of Perth's staged OSM parquet
-# property <*>.auadl_data_updated_through datetime; # derived in auadl/adelaide_tree_info.preql from its three council inventories
-property <*>.auadl_osm_data_updated_through datetime; # GCS publication time of Adelaide's staged OSM parquet
-property <*>.usnpv_data_updated_through datetime; # when Naperville data is through
-property <*>.usnpv_osm_data_updated_through datetime; # GCS publication time of Naperville's staged OSM parquet
-property <*>.usbou_data_updated_through datetime; # when Boulder data is through
-property <*>.usbou_osm_data_updated_through datetime; # GCS publication time of Boulder's staged OSM parquet
-property <*>.itmil_data_updated_through datetime; # when Milan data is through
-property <*>.itmil_osm_data_updated_through datetime; # GCS publication time of Milan's staged OSM parquet
-property <*>.usclt_data_updated_through datetime; # when Charlotte data is through
-property <*>.usclt_osm_data_updated_through datetime; # GCS publication time of Charlotte's staged OSM parquet
-property <*>.usnap_data_updated_through datetime; # when Naples data is through
-property <*>.usnap_osm_data_updated_through datetime; # GCS publication time of Naples's staged OSM parquet
-property <*>.usatl_data_updated_through datetime; # when Atlanta data is through
-property <*>.usatl_osm_data_updated_through datetime; # GCS publication time of Atlanta's staged OSM parquet
-property <*>.usnol_data_updated_through datetime; # when New Orleans data is through
-property <*>.usnol_osm_data_updated_through datetime; # GCS publication time of New Orleans's staged OSM parquet
-property <*>.usdur_data_updated_through datetime; # when Durham data is through
-property <*>.usdur_osm_data_updated_through datetime; # GCS publication time of Durham's staged OSM parquet
-property <*>.ushou_data_updated_through datetime; # when Houston data is through
-property <*>.ushou_osm_data_updated_through datetime; # GCS publication time of Houston's staged OSM parquet
-property <*>.usaus_data_updated_through datetime; # when Austin data is through
-property <*>.usaus_osm_data_updated_through datetime; # GCS publication time of Austin's staged OSM parquet
-# property <*>.usnva_data_updated_through datetime; # derived in usnva/nova_tree_info.preql from its two inventories
-property <*>.usnva_osm_data_updated_through datetime; # GCS publication time of Northern Virginia's staged OSM parquet
+property <*>.cobog_data_updated_through datetime; # when Bogotá data is through
+property <*>.cobog_osm_data_updated_through datetime; # GCS publication time of Bogotá's staged OSM parquet
 property <*>.czprg_data_updated_through datetime; # when Prague data is through
 property <*>.czprg_osm_data_updated_through datetime; # GCS publication time of Prague's staged OSM parquet
+property <*>.deber_data_updated_through datetime; # when Berlin data is through
+property <*>.deber_osm_data_updated_through datetime; # GCS publication time of Berlin's staged OSM parquet
+property <*>.decgn_data_updated_through datetime; # when Cologne data is through
+property <*>.decgn_osm_data_updated_through datetime; # GCS publication time of Cologne's staged OSM parquet
+property <*>.defra_data_updated_through datetime; # when Frankfurt data is through
+property <*>.defra_osm_data_updated_through datetime; # GCS publication time of Frankfurt's staged OSM parquet
+property <*>.deham_data_updated_through datetime; # when Hamburg data is through
+property <*>.deham_osm_data_updated_through datetime; # GCS publication time of Hamburg's staged OSM parquet
+property <*>.delej_data_updated_through datetime; # when Leipzig data is through
+property <*>.delej_osm_data_updated_through datetime; # GCS publication time of Leipzig's staged OSM parquet
+property <*>.dkcph_data_updated_through datetime; # when Copenhagen data is through
+property <*>.dkcph_osm_data_updated_through datetime; # GCS publication time of Copenhagen's staged OSM parquet
+property <*>.esbcn_data_updated_through datetime; # when Barcelona data is through
+property <*>.esbcn_osm_data_updated_through datetime; # GCS publication time of Barcelona's staged OSM parquet
+property <*>.esmad_data_updated_through datetime; # when Madrid data is through
+property <*>.esmad_osm_data_updated_through datetime; # GCS publication time of Madrid's staged OSM parquet
+property <*>.fihel_data_updated_through datetime; # when Helsinki data is through
+property <*>.fihel_osm_data_updated_through datetime; # GCS publication time of Helsinki's staged OSM parquet
+property <*>.frbes_data_updated_through datetime; # when Brest data is through
+property <*>.frbes_osm_data_updated_through datetime; # GCS publication time of Brest's staged OSM parquet
+property <*>.frbod_data_updated_through datetime; # when Bordeaux data is through
+property <*>.frbod_osm_data_updated_through datetime; # GCS publication time of Bordeaux's staged OSM parquet
+property <*>.frgnb_data_updated_through datetime; # when Grenoble data is through
+property <*>.frgnb_osm_data_updated_through datetime; # GCS publication time of Grenoble's staged OSM parquet
+property <*>.frlyo_data_updated_through datetime; # when Lyon data is through
+property <*>.frlyo_osm_data_updated_through datetime; # GCS publication time of Lyon's staged OSM parquet
+property <*>.frmpl_data_updated_through datetime; # when Montpellier data is through
+property <*>.frmpl_osm_data_updated_through datetime; # GCS publication time of Montpellier's staged OSM parquet
+property <*>.frnte_data_updated_through datetime; # when Nantes data is through
+property <*>.frnte_osm_data_updated_through datetime; # GCS publication time of Nantes's staged OSM parquet
+property <*>.frpar_data_updated_through datetime; # when Paris data is through
+property <*>.frpar_osm_data_updated_through datetime; # GCS publication time of Paris's staged OSM parquet
+property <*>.frrns_data_updated_through datetime; # when Rennes data is through
+property <*>.frrns_osm_data_updated_through datetime; # GCS publication time of Rennes's staged OSM parquet
+property <*>.frsxb_data_updated_through datetime; # when Strasbourg data is through
+property <*>.frsxb_osm_data_updated_through datetime; # GCS publication time of Strasbourg's staged OSM parquet
+property <*>.frtls_data_updated_through datetime; # when Toulouse data is through
+property <*>.frtls_osm_data_updated_through datetime; # GCS publication time of Toulouse's staged OSM parquet
+property <*>.gbbfs_data_updated_through datetime; # when Belfast data is through
+property <*>.gbbfs_osm_data_updated_through datetime; # GCS publication time of Belfast's staged OSM parquet
+property <*>.gbbrs_data_updated_through datetime; # when Bristol data is through
+property <*>.gbbrs_osm_data_updated_through datetime; # GCS publication time of Bristol's staged OSM parquet
+property <*>.gbbsk_data_updated_through datetime; # when Basingstoke data is through
+property <*>.gbbsk_osm_data_updated_through datetime; # GCS publication time of Basingstoke's staged OSM parquet
+property <*>.gbedi_data_updated_through datetime; # when Edinburgh data is through
+property <*>.gbedi_osm_data_updated_through datetime; # GCS publication time of Edinburgh's staged OSM parquet
+property <*>.gbfar_data_updated_through datetime; # when Fareham data is through
+property <*>.gbfar_osm_data_updated_through datetime; # GCS publication time of Fareham's staged OSM parquet
+property <*>.gblon_data_updated_through datetime; # when London data is through
+property <*>.gblon_osm_data_updated_through datetime; # GCS publication time of London's staged OSM parquet
+property <*>.gbnot_data_updated_through datetime; # when Nottingham data is through
+property <*>.gbnot_osm_data_updated_through datetime; # GCS publication time of Nottingham's staged OSM parquet
+property <*>.gbyrk_data_updated_through datetime; # when York data is through
+property <*>.gbyrk_osm_data_updated_through datetime; # GCS publication time of York's staged OSM parquet
+property <*>.grath_data_updated_through datetime; # when Athens data is through
+property <*>.grath_osm_data_updated_through datetime; # GCS publication time of Athens's staged OSM parquet
+property <*>.grmlo_osm_data_updated_through datetime; # GCS publication time of Milos's staged OSM parquet
+property <*>.grsan_osm_data_updated_through datetime; # GCS publication time of Santorini's staged OSM parquet
+property <*>.iefin_data_updated_through datetime; # when Fingal data is through
+property <*>.iefin_osm_data_updated_through datetime; # GCS publication time of Fingal's staged OSM parquet
+property <*>.itmil_data_updated_through datetime; # when Milan data is through
+property <*>.itmil_osm_data_updated_through datetime; # GCS publication time of Milan's staged OSM parquet
+property <*>.jptyo_data_updated_through datetime; # when Tokyo data is through
+property <*>.jptyo_osm_data_updated_through datetime; # GCS publication time of Tokyo's staged OSM parquet
+property <*>.krsel_data_updated_through datetime; # when Seoul data is through
+property <*>.krsel_osm_data_updated_through datetime; # GCS publication time of Seoul's staged OSM parquet
+property <*>.nlams_data_updated_through datetime; # when Amsterdam data is through
+property <*>.nlams_osm_data_updated_through datetime; # GCS publication time of Amsterdam's staged OSM parquet
+property <*>.nlein_data_updated_through datetime; # when Eindhoven data is through
+property <*>.nlein_osm_data_updated_through datetime; # GCS publication time of Eindhoven's staged OSM parquet
+property <*>.nlgrq_data_updated_through datetime; # when Groningen data is through
+property <*>.nlgrq_osm_data_updated_through datetime; # GCS publication time of Groningen's staged OSM parquet
+property <*>.nlutc_data_updated_through datetime; # when Utrecht data is through
+property <*>.nlutc_osm_data_updated_through datetime; # GCS publication time of Utrecht's staged OSM parquet
+property <*>.nzchc_data_updated_through datetime; # when Christchurch data is through
+property <*>.nzchc_osm_data_updated_through datetime; # GCS publication time of Christchurch's staged OSM parquet
+property <*>.nzhas_data_updated_through datetime; # when Hastings data is through
+property <*>.nzhas_osm_data_updated_through datetime; # GCS publication time of Hastings's staged OSM parquet
+property <*>.nzwlg_data_updated_through datetime; # when Wellington data is through
+property <*>.nzwlg_osm_data_updated_through datetime; # GCS publication time of Wellington's staged OSM parquet
+property <*>.ptlis_data_updated_through datetime; # when Lisbon data is through
+property <*>.ptlis_osm_data_updated_through datetime; # GCS publication time of Lisbon's staged OSM parquet
+property <*>.sgsin_data_updated_through datetime; # when Singapore data is through
+property <*>.sgsin_osm_data_updated_through datetime; # GCS publication time of Singapore's staged OSM parquet
+property <*>.twtpe_data_updated_through datetime; # when Taipei data is through
+property <*>.twtpe_osm_data_updated_through datetime; # GCS publication time of Taipei's staged OSM parquet
+property <*>.usarl_data_updated_through datetime; # when Arlington, MA data is through
+property <*>.usarl_osm_data_updated_through datetime; # GCS publication time of Arlington, MA's staged OSM parquet
+property <*>.usatl_data_updated_through datetime; # when Atlanta data is through
+property <*>.usatl_osm_data_updated_through datetime; # GCS publication time of Atlanta's staged OSM parquet
+property <*>.usaur_osm_data_updated_through datetime; # GCS publication time of Aurora, IL's staged OSM parquet
+property <*>.usaus_data_updated_through datetime; # when Austin data is through
+property <*>.usaus_osm_data_updated_through datetime; # GCS publication time of Austin's staged OSM parquet
+property <*>.usbal_data_updated_through datetime; # when Baltimore data is through
+property <*>.usbal_osm_data_updated_through datetime; # GCS publication time of Baltimore's staged OSM parquet
+property <*>.usbel_data_updated_through datetime; # when Belmont data is through
+property <*>.usbel_osm_data_updated_through datetime; # GCS publication time of Belmont's staged OSM parquet
+property <*>.usbev_osm_data_updated_through datetime; # GCS publication time of Beverly's staged OSM parquet
+property <*>.usbis_data_updated_through datetime; # when Bismarck data is through
+property <*>.usbis_osm_data_updated_through datetime; # GCS publication time of Bismarck's staged OSM parquet
+property <*>.usbkl_data_updated_through datetime; # when Brookline data is through
+property <*>.usbkl_osm_data_updated_through datetime; # GCS publication time of Brookline's staged OSM parquet
+property <*>.usbnd_data_updated_through datetime; # when Bend data is through
+property <*>.usbnd_osm_data_updated_through datetime; # GCS publication time of Bend's staged OSM parquet
+property <*>.usboi_data_updated_through datetime; # when Boise data is through
+property <*>.usboi_osm_data_updated_through datetime; # GCS publication time of Boise's staged OSM parquet
+# defined in boston dataset as it's a erivation
+# property <*>.usbos_data_updated_through datetime; # when Boston data is through
+property <*>.usbos_osm_data_updated_through datetime;
+property <*>.usbou_data_updated_through datetime; # when Boulder data is through
+property <*>.usbou_osm_data_updated_through datetime; # GCS publication time of Boulder's staged OSM parquet
+property <*>.usbtr_data_updated_through datetime; # when Baton Rouge data is through
+property <*>.usbtr_osm_data_updated_through datetime; # GCS publication time of Baton Rouge's staged OSM parquet
+property <*>.usbtv_data_updated_through datetime; # when Burlington VT data is through
+property <*>.usbtv_osm_data_updated_through datetime; # GCS publication time of Burlington's staged OSM parquet
+property <*>.usbvn_data_updated_through datetime; # when Beaverton data is through
+property <*>.usbvn_osm_data_updated_through datetime; # GCS publication time of Beaverton's staged OSM parquet
+property <*>.usbzn_data_updated_through datetime; # when Bozeman data is through
+property <*>.usbzn_osm_data_updated_through datetime; # GCS publication time of Bozeman's staged OSM parquet
+# defined in uscam/cambridge_tree_info.preql as the greatest of the city's and MIT's probes
+# property <*>.uscam_data_updated_through datetime; # when Cambridge data is through
+property <*>.uscam_osm_data_updated_through datetime; # GCS publication time of Cambridge's staged OSM parquet
+property <*>.uscan_osm_data_updated_through datetime; # GCS publication time of Canton's staged OSM parquet
+property <*>.usche_osm_data_updated_through datetime; # GCS publication time of Chelsea's staged OSM parquet
+property <*>.uschh_osm_data_updated_through datetime; # GCS publication time of Chapel Hill's staged OSM parquet
+property <*>.uschv_osm_data_updated_through datetime; # GCS publication time of Chula Vista's staged OSM parquet
+property <*>.usclt_data_updated_through datetime; # when Charlotte data is through
+property <*>.usclt_osm_data_updated_through datetime; # GCS publication time of Charlotte's staged OSM parquet
+property <*>.uscol_data_updated_through datetime; # when Columbus data is through
+property <*>.uscol_osm_data_updated_through datetime; # GCS publication time of Columbus's staged OSM parquet
+property <*>.uscrs_data_updated_through datetime; # when Coral Springs data is through
+property <*>.uscrs_osm_data_updated_through datetime; # GCS publication time of Coral Springs's staged OSM parquet
+property <*>.usdan_osm_data_updated_through datetime; # GCS publication time of Danvers's staged OSM parquet
+property <*>.usded_data_updated_through datetime; # when Dedham data is through
+property <*>.usded_osm_data_updated_through datetime; # GCS publication time of Dedham's staged OSM parquet
+property <*>.usden_data_updated_through datetime; # when Denver data is through
+property <*>.usden_osm_data_updated_through datetime; # GCS publication time of Denver's staged OSM parquet
+property <*>.usdur_data_updated_through datetime; # when Durham data is through
+property <*>.usdur_osm_data_updated_through datetime; # GCS publication time of Durham's staged OSM parquet
+property <*>.usdvn_data_updated_through datetime; # when Davenport data is through
+property <*>.usdvn_osm_data_updated_through datetime; # GCS publication time of Davenport's staged OSM parquet
+property <*>.useln_data_updated_through datetime; # when East Lansing data is through
+property <*>.useln_osm_data_updated_through datetime; # GCS publication time of East Lansing's staged OSM parquet
+property <*>.useug_data_updated_through datetime; # when Eugene data is through
+property <*>.useug_osm_data_updated_through datetime; # GCS publication time of Eugene's staged OSM parquet
+property <*>.useve_osm_data_updated_through datetime; # GCS publication time of Everett's staged OSM parquet
+property <*>.usevn_data_updated_through datetime; # when Evanston data is through
+property <*>.usevn_osm_data_updated_through datetime; # GCS publication time of Evanston's staged OSM parquet
+property <*>.usfsd_data_updated_through datetime; # when Sioux Falls data is through
+property <*>.usfsd_osm_data_updated_through datetime; # GCS publication time of Sioux Falls's staged OSM parquet
+property <*>.usgeg_data_updated_through datetime; # when Spokane data is through
+property <*>.usgeg_osm_data_updated_through datetime; # GCS publication time of Spokane's staged OSM parquet
+property <*>.usgjt_data_updated_through datetime; # when Grand Junction data is through
+property <*>.usgjt_osm_data_updated_through datetime; # GCS publication time of Grand Junction's staged OSM parquet
+property <*>.ushou_data_updated_through datetime; # when Houston data is through
+property <*>.ushou_osm_data_updated_through datetime; # GCS publication time of Houston's staged OSM parquet
+property <*>.uslan_data_updated_through datetime; # when Lansing data is through
+property <*>.uslan_osm_data_updated_through datetime; # GCS publication time of Lansing's staged OSM parquet
+property <*>.uslas_data_updated_through datetime; # when Las Vegas data is through
+property <*>.uslas_osm_data_updated_through datetime; # GCS publication time of Las Vegas's staged OSM parquet
+# property <*>.uslax_data_updated_through datetime; # derived in uslax/losangeles_tree_info.preql from its two inventories
+property <*>.uslax_osm_data_updated_through datetime; # GCS publication time of Los Angeles's staged OSM parquet
+property <*>.uslou_data_updated_through datetime; # when Louisville data is through
+property <*>.uslou_osm_data_updated_through datetime; # GCS publication time of Louisville's staged OSM parquet
+property <*>.uslsv_osm_data_updated_through datetime; # GCS publication time of Louisville, CO's staged OSM parquet
+property <*>.uslvl_data_updated_through datetime; # when Loveland data is through
+property <*>.uslvl_osm_data_updated_through datetime; # GCS publication time of Loveland's staged OSM parquet
+property <*>.uslyf_osm_data_updated_through datetime; # GCS publication time of Lynnfield's staged OSM parquet
+property <*>.uslyn_osm_data_updated_through datetime; # GCS publication time of Lynn's staged OSM parquet
+property <*>.usmbh_osm_data_updated_through datetime; # GCS publication time of Marblehead's staged OSM parquet
+property <*>.usmed_osm_data_updated_through datetime; # GCS publication time of Medford's staged OSM parquet
+property <*>.usmhd_data_updated_through datetime; # when Moorhead data is through
+property <*>.usmhd_osm_data_updated_through datetime; # GCS publication time of Moorhead's staged OSM parquet
+property <*>.usmil_osm_data_updated_through datetime; # GCS publication time of Milton's staged OSM parquet
+property <*>.usmld_osm_data_updated_through datetime; # GCS publication time of Malden's staged OSM parquet
+property <*>.usmrs_osm_data_updated_through datetime; # GCS publication time of Melrose's staged OSM parquet
+property <*>.usmsn_data_updated_through datetime; # when Madison data is through
+property <*>.usmsn_osm_data_updated_through datetime; # GCS publication time of Madison's staged OSM parquet
+property <*>.usmso_data_updated_through datetime; # when Missoula data is through
+property <*>.usmso_osm_data_updated_through datetime; # GCS publication time of Missoula's staged OSM parquet
+property <*>.usnah_osm_data_updated_through datetime; # GCS publication time of Nahant's staged OSM parquet
+property <*>.usnap_data_updated_through datetime; # when Naples data is through
+property <*>.usnap_osm_data_updated_through datetime; # GCS publication time of Naples's staged OSM parquet
+property <*>.usnee_osm_data_updated_through datetime; # GCS publication time of Needham's staged OSM parquet
+property <*>.usnol_data_updated_through datetime; # when New Orleans data is through
+property <*>.usnol_osm_data_updated_through datetime; # GCS publication time of New Orleans's staged OSM parquet
+property <*>.usnpv_data_updated_through datetime; # when Naperville data is through
+property <*>.usnpv_osm_data_updated_through datetime; # GCS publication time of Naperville's staged OSM parquet
+# property <*>.usnva_data_updated_through datetime; # derived in usnva/nova_tree_info.preql from its two inventories
+property <*>.usnva_osm_data_updated_through datetime; # GCS publication time of Northern Virginia's staged OSM parquet
+property <*>.usnwt_osm_data_updated_through datetime; # GCS publication time of Newton's staged OSM parquet
+property <*>.usnyc_data_updated_through datetime; # when NYC data is through
+property <*>.usnyc_osm_data_updated_through datetime; # GCS publication time of New York City's staged OSM parquet
+property <*>.usoak_data_updated_through datetime; # when Oakland data is through
+property <*>.usoak_osm_data_updated_through datetime; # GCS publication time of Oakland's staged OSM parquet
+property <*>.usopk_data_updated_through datetime; # when Orland Park data is through
+property <*>.usopk_osm_data_updated_through datetime; # GCS publication time of Orland Park's staged OSM parquet
+property <*>.usosw_osm_data_updated_through datetime; # GCS publication time of Oswego, IL's staged OSM parquet
+property <*>.usoxr_data_updated_through datetime; # when Oxnard data is through
+property <*>.usoxr_osm_data_updated_through datetime; # GCS publication time of Oxnard's staged OSM parquet
+property <*>.uspea_osm_data_updated_through datetime; # GCS publication time of Peabody's staged OSM parquet
+property <*>.usphl_data_updated_through datetime; # when Philadelphia data is through
+property <*>.usphl_osm_data_updated_through datetime; # GCS publication time of Philadelphia's staged OSM parquet
+property <*>.uspie_data_updated_through datetime; # when Pinellas County data is through
+property <*>.uspie_osm_data_updated_through datetime; # GCS publication time of Pinellas County's staged OSM parquet
+property <*>.uspit_data_updated_through datetime; # when Pittsburgh data is through
+property <*>.uspit_osm_data_updated_through datetime; # GCS publication time of Pittsburgh's staged OSM parquet
+property <*>.usplf_data_updated_through datetime; # when Plainfield, IL data is through
+property <*>.usplf_osm_data_updated_through datetime; # GCS publication time of Plainfield, IL's staged OSM parquet
+property <*>.uspln_data_updated_through datetime; # when Plano data is through
+property <*>.uspln_osm_data_updated_through datetime; # GCS publication time of Plano's staged OSM parquet
+property <*>.uspor_data_updated_through datetime; # when Portland data is through
+property <*>.uspor_osm_data_updated_through datetime; # GCS publication time of Portland's staged OSM parquet
+property <*>.uspsl_data_updated_through datetime; # when Port St. Lucie data is through
+property <*>.uspsl_osm_data_updated_through datetime; # GCS publication time of Port St. Lucie's staged OSM parquet
+property <*>.uspvd_data_updated_through datetime; # when Providence data is through
+property <*>.uspvd_osm_data_updated_through datetime; # GCS publication time of Providence's staged OSM parquet
+property <*>.uspwm_data_updated_through datetime; # when Portland, ME data is through
+property <*>.uspwm_osm_data_updated_through datetime; # GCS publication time of Portland, ME's staged OSM parquet
+property <*>.usqcy_osm_data_updated_through datetime; # GCS publication time of Quincy's staged OSM parquet
+property <*>.usral_data_updated_through datetime; # when Riverside data is through
+property <*>.usral_osm_data_updated_through datetime; # GCS publication time of Riverside's staged OSM parquet
+property <*>.usrdl_data_updated_through datetime; # when Redlands data is through
+property <*>.usrdl_osm_data_updated_through datetime; # GCS publication time of Redlands's staged OSM parquet
+property <*>.usrev_osm_data_updated_through datetime; # GCS publication time of Revere's staged OSM parquet
+property <*>.usric_data_updated_through datetime; # when Richmond data is through
+property <*>.usric_osm_data_updated_through datetime; # GCS publication time of Richmond's staged OSM parquet
+property <*>.usroc_data_updated_through datetime; # when Rochester, NY data is through
+property <*>.usroc_osm_data_updated_through datetime; # GCS publication time of Rochester, NY's staged OSM parquet
+property <*>.ussac_data_updated_through datetime; # when Sacramento data is through
+property <*>.ussac_osm_data_updated_through datetime; # GCS publication time of Sacramento's staged OSM parquet
+property <*>.ussal_data_updated_through datetime; # when Salem data is through
+property <*>.ussal_osm_data_updated_through datetime; # GCS publication time of Salem's staged OSM parquet
+property <*>.ussan_data_updated_through datetime; # when San Diego data is through
+property <*>.ussan_osm_data_updated_through datetime; # GCS publication time of San Diego's staged OSM parquet
+property <*>.ussau_osm_data_updated_through datetime; # GCS publication time of Saugus's staged OSM parquet
+property <*>.ussea_data_updated_through datetime; # when Seattle data is through
+property <*>.ussea_osm_data_updated_through datetime; # GCS publication time of Seattle's staged OSM parquet
+property <*>.ussfo_data_updated_through datetime; # when SF data is through
+property <*>.ussfo_osm_data_updated_through datetime; # GCS publication time of San Francisco's staged OSM parquet # mtime of Boston's committed OSM staging parquet
+property <*>.ussjc_data_updated_through datetime; # when San Jose data is through
+property <*>.ussjc_osm_data_updated_through datetime; # GCS publication time of San Jose's staged OSM parquet
+property <*>.usslm_data_updated_through datetime; # when Salem data is through
+property <*>.usslm_osm_data_updated_through datetime; # GCS publication time of Salem's staged OSM parquet
+property <*>.usslp_data_updated_through datetime; # when St. Louis Park data is through
+property <*>.usslp_osm_data_updated_through datetime; # GCS publication time of St. Louis Park's staged OSM parquet
+property <*>.ussmo_data_updated_through datetime; # when Santa Monica data is through
+property <*>.ussmo_osm_data_updated_through datetime; # GCS publication time of Santa Monica's staged OSM parquet
+property <*>.ussmq_data_updated_through datetime; # when San Mateo data is through
+property <*>.ussmq_osm_data_updated_through datetime; # GCS publication time of San Mateo's staged OSM parquet
+property <*>.ussom_data_updated_through datetime; # when Somerville data is through
+property <*>.ussom_osm_data_updated_through datetime; # GCS publication time of Somerville's staged OSM parquet
+property <*>.usspf_data_updated_through datetime; # when Springfield data is through
+property <*>.usspf_osm_data_updated_through datetime; # GCS publication time of Springfield's staged OSM parquet
+property <*>.ussrq_data_updated_through datetime; # when Sarasota County data is through
+property <*>.ussrq_osm_data_updated_through datetime; # GCS publication time of Sarasota County's staged OSM parquet
 property <*>.ussto_data_updated_through datetime; # when Stoughton, WI data is through
 property <*>.ussto_osm_data_updated_through datetime; # GCS publication time of Stoughton, WI's staged OSM parquet
+property <*>.usswa_osm_data_updated_through datetime; # GCS publication time of Swampscott's staged OSM parquet
+property <*>.ussyr_data_updated_through datetime; # when Syracuse data is through
+property <*>.ussyr_osm_data_updated_through datetime; # GCS publication time of Syracuse's staged OSM parquet
+property <*>.ustem_data_updated_through datetime; # when Tempe data is through
+property <*>.ustem_osm_data_updated_through datetime; # mtime of Tempe's committed OSM staging parquet
+property <*>.uswas_data_updated_through datetime; # when Washington DC data is through
+property <*>.uswas_osm_data_updated_through datetime; # GCS publication time of Washington DC's staged OSM parquet
+property <*>.uswat_data_updated_through datetime; # when Watertown data is through
+property <*>.uswat_osm_data_updated_through datetime; # GCS publication time of Watertown's staged OSM parquet
+property <*>.uswel_osm_data_updated_through datetime; # GCS publication time of Wellesley's staged OSM parquet
+property <*>.uswlt_osm_data_updated_through datetime; # GCS publication time of Waltham's staged OSM parquet
+property <*>.uswnc_osm_data_updated_through datetime; # GCS publication time of Winchester's staged OSM parquet
+property <*>.uswnt_osm_data_updated_through datetime; # GCS publication time of Winthrop's staged OSM parquet
+# <<< sync_cities: city freshness
 property <*>.usbos_predicted_data_updated_through datetime; # GCS publication time of Boston's staged bulk imagery predictions (predicted_update_time.py)
 property <*>.usbel_predicted_data_updated_through datetime; # GCS publication time of the Boston metro run Belmont reads its predictions from (PREDICTED_STAGED_WITH)
 property <*>.usbkl_predicted_data_updated_through datetime; # GCS publication time of the Boston metro run Brookline reads its predictions from (PREDICTED_STAGED_WITH)
@@ -399,69 +463,7 @@ property <*>.usnah_predicted_data_updated_through datetime; # GCS publication ti
 property <*>.usdan_predicted_data_updated_through datetime; # GCS publication time of the Boston metro run Danvers reads its predictions from (PREDICTED_STAGED_WITH)
 property <*>.uswnc_predicted_data_updated_through datetime; # GCS publication time of the Boston metro run Winchester reads its predictions from (PREDICTED_STAGED_WITH)
 property <*>.uscan_predicted_data_updated_through datetime; # GCS publication time of the Boston metro run Canton reads its predictions from (PREDICTED_STAGED_WITH)
-property <*>.uswas_osm_data_updated_through datetime; # GCS publication time of Washington DC's staged OSM parquet
-property <*>.uslax_osm_data_updated_through datetime; # GCS publication time of Los Angeles's staged OSM parquet
-property <*>.arbue_osm_data_updated_through datetime; # GCS publication time of Buenos Aires's staged OSM parquet
-property <*>.aumel_osm_data_updated_through datetime; # GCS publication time of Melbourne's staged OSM parquet
-property <*>.gblon_osm_data_updated_through datetime; # GCS publication time of London's staged OSM parquet
-property <*>.nlams_osm_data_updated_through datetime; # GCS publication time of Amsterdam's staged OSM parquet
-property <*>.deber_osm_data_updated_through datetime; # GCS publication time of Berlin's staged OSM parquet
-property <*>.cavan_osm_data_updated_through datetime; # GCS publication time of Vancouver's staged OSM parquet
-property <*>.usbtv_osm_data_updated_through datetime; # GCS publication time of Burlington's staged OSM parquet
 property <*>.usbtv_overture_data_updated_through datetime; # GCS publication time of Burlington's staged Overture position lookup
-property <*>.frpar_osm_data_updated_through datetime; # GCS publication time of Paris's staged OSM parquet
-property <*>.usnyc_osm_data_updated_through datetime; # GCS publication time of New York City's staged OSM parquet
-property <*>.ussfo_osm_data_updated_through datetime; # GCS publication time of San Francisco's staged OSM parquet # mtime of Boston's committed OSM staging parquet
-property <*>.grath_osm_data_updated_through datetime; # GCS publication time of Athens's staged OSM parquet
-property <*>.grmlo_osm_data_updated_through datetime; # GCS publication time of Milos's staged OSM parquet
-property <*>.grsan_osm_data_updated_through datetime; # GCS publication time of Santorini's staged OSM parquet
-property <*>.usden_osm_data_updated_through datetime; # GCS publication time of Denver's staged OSM parquet
-property <*>.fihel_data_updated_through datetime; # when Helsinki data is through
-property <*>.fihel_osm_data_updated_through datetime; # GCS publication time of Helsinki's staged OSM parquet
-property <*>.dkcph_data_updated_through datetime; # when Copenhagen data is through
-property <*>.dkcph_osm_data_updated_through datetime; # GCS publication time of Copenhagen's staged OSM parquet
-property <*>.twtpe_data_updated_through datetime; # when Taipei data is through
-property <*>.twtpe_osm_data_updated_through datetime; # GCS publication time of Taipei's staged OSM parquet
-property <*>.cobog_data_updated_through datetime; # when Bogotá data is through
-property <*>.cobog_osm_data_updated_through datetime; # GCS publication time of Bogotá's staged OSM parquet
-property <*>.jptyo_data_updated_through datetime; # when Tokyo data is through
-property <*>.jptyo_osm_data_updated_through datetime; # GCS publication time of Tokyo's staged OSM parquet
-property <*>.camon_data_updated_through datetime; # when Moncton data is through
-property <*>.camon_osm_data_updated_through datetime; # GCS publication time of Moncton's staged OSM parquet
-property <*>.caajx_data_updated_through datetime; # when Ajax data is through
-property <*>.caajx_osm_data_updated_through datetime; # GCS publication time of Ajax's staged OSM parquet
-property <*>.cabur_data_updated_through datetime; # when Burlington, ON data is through
-property <*>.cabur_osm_data_updated_through datetime; # GCS publication time of Burlington, ON's staged OSM parquet
-property <*>.caott_data_updated_through datetime; # when Ottawa data is through
-property <*>.caott_osm_data_updated_through datetime; # GCS publication time of Ottawa's staged OSM parquet
-property <*>.camis_data_updated_through datetime; # when Mississauga data is through
-property <*>.camis_osm_data_updated_through datetime; # GCS publication time of Mississauga's staged OSM parquet
-property <*>.canwe_data_updated_through datetime; # when New Westminster data is through
-property <*>.canwe_osm_data_updated_through datetime; # GCS publication time of New Westminster's staged OSM parquet
-property <*>.cakel_data_updated_through datetime; # when Kelowna data is through
-property <*>.cakel_osm_data_updated_through datetime; # GCS publication time of Kelowna's staged OSM parquet
-property <*>.cavic_data_updated_through datetime; # when Victoria data is through
-property <*>.cavic_osm_data_updated_through datetime; # GCS publication time of Victoria's staged OSM parquet
-property <*>.calet_data_updated_through datetime; # when Lethbridge data is through
-property <*>.calet_osm_data_updated_through datetime; # GCS publication time of Lethbridge's staged OSM parquet
-property <*>.cakgn_data_updated_through datetime; # when Kingston data is through
-property <*>.cakgn_osm_data_updated_through datetime; # GCS publication time of Kingston's staged OSM parquet
-property <*>.cahfx_data_updated_through datetime; # when Halifax data is through
-property <*>.cahfx_osm_data_updated_through datetime; # GCS publication time of Halifax's staged OSM parquet
-property <*>.calon_data_updated_through datetime; # when Longueuil data is through
-property <*>.calon_osm_data_updated_through datetime; # GCS publication time of Longueuil's staged OSM parquet
-property <*>.caque_data_updated_through datetime; # when Quebec City data is through
-property <*>.caque_osm_data_updated_through datetime; # GCS publication time of Quebec City's staged OSM parquet
-property <*>.camtl_data_updated_through datetime; # when Montreal data is through
-property <*>.camtl_osm_data_updated_through datetime; # GCS publication time of Montreal's staged OSM parquet
-property <*>.cator_data_updated_through datetime; # when Toronto data is through
-property <*>.cator_osm_data_updated_through datetime; # GCS publication time of Toronto's staged OSM parquet
-property <*>.cawpg_data_updated_through datetime; # when Winnipeg data is through
-property <*>.cawpg_osm_data_updated_through datetime; # GCS publication time of Winnipeg's staged OSM parquet
-# property <*>.caedm_data_updated_through datetime; # derived in caedm/edmonton_tree_info.preql from its two inventories
-property <*>.caedm_osm_data_updated_through datetime; # GCS publication time of Edmonton's staged OSM parquet
-property <*>.cacal_data_updated_through datetime; # when Calgary data is through
-property <*>.cacal_osm_data_updated_through datetime; # GCS publication time of Calgary's staged OSM parquet
 
 
 

@@ -1,0 +1,100 @@
+# Oakville's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "CAOAK"
+name = "Oakville"
+slug = "oakville"
+center = [-79.6877, 43.4675]
+ecoregion = 342
+ecoregion_name = "Southern Great Lakes forests"
+usda_zone = 6
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "nearctic"
+bounds = [43.36, 43.55, -79.815, -79.615]
+territory_note = """
+Oakville: 0.005-degree latitude bands, each the west-east extent of the
+Town's legal boundary (OSM relation 2407500) in that band; Burlington,
+Hamilton and Mississauga are cut around it.  No Burlington or
+Mississauga inventory tree lies inside the boundary; the band rounding
+along the two diagonal borders hands ~700 OSM rows to Oakville.
+"""
+territory = [
+    [43.36, 43.365, -79.715, -79.713],
+    [43.365, 43.37, -79.722, -79.709],
+    [43.37, 43.375, -79.729, -79.705],
+    [43.375, 43.38, -79.736, -79.701],
+    [43.38, 43.385, -79.743, -79.697],
+    [43.385, 43.39, -79.749, -79.693],
+    [43.39, 43.395, -79.757, -79.689],
+    [43.395, 43.4, -79.764, -79.684],
+    [43.4, 43.405, -79.77, -79.68],
+    [43.405, 43.41, -79.777, -79.676],
+    [43.41, 43.415, -79.784, -79.672],
+    [43.415, 43.42, -79.791, -79.668],
+    [43.42, 43.425, -79.798, -79.664],
+    [43.425, 43.43, -79.805, -79.66],
+    [43.43, 43.435, -79.811, -79.656],
+    [43.435, 43.44, -79.811, -79.652],
+    [43.44, 43.445, -79.806, -79.647],
+    [43.445, 43.45, -79.8, -79.643],
+    [43.45, 43.455, -79.803, -79.639],
+    [43.455, 43.46, -79.805, -79.635],
+    [43.46, 43.465, -79.808, -79.631],
+    [43.465, 43.47, -79.809, -79.627],
+    [43.47, 43.475, -79.805, -79.623],
+    [43.475, 43.48, -79.798, -79.619],
+    [43.48, 43.485, -79.794, -79.622],
+    [43.485, 43.49, -79.789, -79.629],
+    [43.49, 43.495, -79.769, -79.636],
+    [43.495, 43.5, -79.763, -79.643],
+    [43.5, 43.505, -79.758, -79.65],
+    [43.505, 43.51, -79.753, -79.657],
+    [43.51, 43.515, -79.747, -79.664],
+    [43.515, 43.52, -79.741, -79.671],
+    [43.52, 43.525, -79.735, -79.677],
+    [43.525, 43.53, -79.729, -79.719],
+]
+municipal_sources = ["OAKVILLE_OPENDATA"]
+dedup_note = """
+osm_dedup_validation 2026-11-20: 4m 179/3 (1.6% false), 6m adds +3/+4.
+"""
+dedup_cell_metres = 4
+data_freshness = "probe"
+
+[labels]
+OAKVILLE_OPENDATA = "Oakville Open Data"
+
+[[tree_sources]]
+label = "Town of Oakville - Trees (Town of Oakville Open Data Licence; contains information licensed under the Open Government Licence - Town of Oakville)"
+url = "https://www.arcgis.com/home/item.html?id=64fabcdb4feb40139ad20d728bfef2d4"
+
+[[landmark_sources]]
+label = "Town of Oakville - Heritage Properties, Municipal Heritage Register (Town of Oakville Open Data Licence)"
+url = "https://www.arcgis.com/home/item.html?id=6a57f4591e314fb5b5c88e067add8872"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city CAOAK`.
+"""
+
+[jobs.osm]
+schedule = "0 15 10 * * MON"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 36 1 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

@@ -1,0 +1,59 @@
+# San Mateo's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "USSMQ"
+name = "San Mateo"
+slug = "sanmateo"
+center = [-122.3255, 37.563]
+ecoregion = 423
+ecoregion_name = "California interior chaparral and woodlands"
+usda_zone = 10
+biome = "Mediterranean Forests, Woodlands & Scrub"
+realm = "nearctic"
+bounds = [37.5, 37.6022, -122.37, -122.26]
+territory = [[37.5125, 37.6022, -122.355, -122.2749]]
+municipal_sources = ["SAN_MATEO_OPENDATA"]
+dedup_note = """
+Calibrated 2026-11-28 (osm_dedup_validation): 8m flags 330, 4.2% false;
+10m adds 6 true for 6 false (5.8% false).
+"""
+dedup_cell_metres = 8
+data_freshness = "probe"
+
+[labels]
+SAN_MATEO_OPENDATA = "San Mateo Open Data"
+
+[[tree_sources]]
+label = "City of San Mateo Public Works - Street Trees (no licence stated; displayed with attribution only, not licensed for reuse)"
+url = "https://www.arcgis.com/home/item.html?id=67c8b57d2d91459c9f951df9de961a06"
+
+[[landmark_sources]]
+label = "National Park Service - National Register of Historic Places"
+url = "https://www.nps.gov/subjects/nationalregister/data-downloads.htm"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city USSMQ`.
+"""
+
+[jobs.osm]
+schedule = "0 0 15 * * FRI"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 45 1 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

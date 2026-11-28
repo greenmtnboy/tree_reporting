@@ -1,0 +1,58 @@
+# Rennes's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "FRRNS"
+name = "Rennes"
+slug = "rennes"
+center = [-1.6778, 48.1173]
+ecoregion = 664
+ecoregion_name = "European Atlantic mixed forests"
+usda_zone = 8
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "palearctic"
+bounds = [47.95, 48.31, -1.96, -1.44]
+territory = [[47.95, 48.31, -1.96, -1.44]]
+municipal_sources = ["RENNES_OPENDATA"]
+dedup_note = """
+Calibrated 2026-11-18: 6m cell: recall 91.4%, 5.0% false; 8m adds +273 true / +687 false.
+"""
+dedup_cell_metres = 6
+data_freshness = "probe"
+
+[labels]
+RENNES_OPENDATA = "Rennes Open Data"
+
+[[tree_sources]]
+label = "Rennes Métropole - Arbres (ODbL 1.0)"
+url = "https://data.rennesmetropole.fr/explore/dataset/arbre/"
+
+[[landmark_sources]]
+label = "Ministère de la Culture - Immeubles protégés au titre des Monuments Historiques (Licence Ouverte)"
+url = "https://www.data.gouv.fr/datasets/immeubles-proteges-au-titre-des-monuments-historiques-2"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city FRRNS`.
+"""
+
+[jobs.osm]
+schedule = "0 45 8 * * FRI"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 8 1 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

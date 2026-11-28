@@ -1,0 +1,61 @@
+# Stoughton, WI's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "USSTO"
+name = "Stoughton, WI"
+slug = "stoughton"
+center = [-89.2179, 42.9169]
+ecoregion = 387
+ecoregion_name = "Central US forest-grasslands transition"
+usda_zone = 5
+biome = "Temperate Grasslands, Savannas & Shrublands"
+realm = "nearctic"
+bounds = [42.85, 42.97, -89.3, -89.11]
+territory = [[42.9034, 42.9481, -89.2622, -89.1807]]
+municipal_sources = ["STOUGHTON_OPENDATA"]
+dedup_note = """
+Uncalibratable for now, so the default: OSM had no tree node in
+Stoughton when it was wired (OSM_UNMAPPED_CITIES), and the cell only
+decides which OSM or community rows fold into an inventory tree.
+Measure with osm_dedup_validation.py once the extract stages rows.
+"""
+dedup_cell_metres = 10
+data_freshness = "probe"
+
+[labels]
+STOUGHTON_OPENDATA = "Stoughton, WI Open Data"
+
+[[tree_sources]]
+label = "City of Stoughton - Public Tree Inventory (ArcGIS)"
+url = "https://experience.arcgis.com/experience/f9b95eddac104c708619ccaf4c2c9de0"
+
+[[landmark_sources]]
+label = "City of Stoughton - Historical Landmarks (Stoughton Landmarks Commission)"
+url = "https://stoughtonwi.maps.arcgis.com/home/item.html?id=0ac41bae1fac4f4abdb873deed6f8d75"
+
+[jobs.city]
+schedule = "0 20 23 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city USSTO`.
+"""
+
+[jobs.osm]
+schedule = "0 30 4 * * SAT"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 22 4 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

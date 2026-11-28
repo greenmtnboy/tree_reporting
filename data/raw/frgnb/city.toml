@@ -1,0 +1,59 @@
+# Grenoble's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "FRGNB"
+name = "Grenoble"
+slug = "grenoble"
+center = [5.7245, 45.1885]
+ecoregion = 686
+ecoregion_name = "Western European broadleaf forests"
+usda_zone = 8
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "palearctic"
+bounds = [44.95, 45.3, 5.6, 5.9]
+territory = [[44.95, 45.3, 5.6, 5.9]]
+municipal_sources = ["GRENOBLE_OPENDATA"]
+dedup_note = """
+Calibrated 2026-11-18: OSM mirrors the inventory closely (92% within 2 m);
+4 m keeps 4.2 true per false, 6 m falls to 0.70.
+"""
+dedup_cell_metres = 4
+data_freshness = "probe"
+
+[labels]
+GRENOBLE_OPENDATA = "Grenoble Open Data"
+
+[[tree_sources]]
+label = "Ville de Grenoble and Grenoble-Alpes Métropole - Arbres and Patrimoine arboré du territoire métropolitain (ODbL 1.0)"
+url = "https://data.metropolegrenoble.fr/visualisation/information/?id=arbres-grenoble"
+
+[[landmark_sources]]
+label = "Ministère de la Culture - Immeubles protégés au titre des Monuments Historiques (Licence Ouverte)"
+url = "https://www.data.gouv.fr/datasets/immeubles-proteges-au-titre-des-monuments-historiques-2"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city FRGNB`.
+"""
+
+[jobs.osm]
+schedule = "0 15 9 * * SAT"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 20 1 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

@@ -1,0 +1,46 @@
+# Tempe's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "USTEM"
+name = "Tempe"
+slug = "tempe"
+center = [-111.94, 33.4255]
+ecoregion = 435
+ecoregion_name = "Sonoran desert"
+usda_zone = 10
+biome = "Deserts & Xeric Shrublands"
+realm = "nearctic"
+bounds = [33.3, 33.48, -112.05, -111.8]
+territory = [[33.32, 33.4647, -111.9786, -111.8772]]
+municipal_sources = ["TEMPE_OPENDATA"]
+dedup_note = """
+Tempe is the reference calibration: mutual-NN >=88% below 5 m (99.7%
+under 2 m), collapsing to 25% in the 5-10 m band.
+"""
+dedup_cell_metres = 10
+data_freshness = "probe"
+osm_freshness_comment = "mtime of Tempe's committed OSM staging parquet"
+
+[labels]
+TEMPE_OPENDATA = "City of Tempe"
+
+[[tree_sources]]
+label = "City of Tempe Tree Inventory"
+url = "https://data.tempe.gov/datasets/tempegov::tree-inventory"
+
+[[landmark_sources]]
+label = "No landmark dataset in production yet (empty placeholder parquet)"
+
+[jobs.city]
+schedule = "0 0 15 * * SAT,TUE"
+timeout_seconds = 1200
+memory_mb = 1024
+
+[jobs.osm]
+schedule = "0 0 3 * * FRI"
+timeout_seconds = 1800
+memory_mb = 1024
+
+[jobs.landmarks]
+schedule = "0 18 4 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048

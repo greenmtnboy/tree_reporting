@@ -1,0 +1,63 @@
+# Eugene's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "USEUG"
+name = "Eugene"
+slug = "eugene"
+center = [-123.0868, 44.0521]
+ecoregion = 403
+ecoregion_name = "Willamette Valley oak savanna"
+usda_zone = 8
+biome = "Temperate Grasslands, Savannas & Shrublands"
+realm = "nearctic"
+bounds = [43.97, 44.14, -123.21, -122.98]
+territory = [[43.97, 44.14, -123.21, -122.98]]
+municipal_sources = ["EUGENE_OPENDATA"]
+dedup_note = """
+Calibrated 2026-11-16 before the first build (tools/osm_dedup_validation.py
+--inventory-parquet on a local ingest run).
+4,054 staged OSM nodes against 89,207 anchors.  Mutual-NN 93.7% in
+2-5 m, 46.1% in 5-10 m (n=141): a 5 m guarantee caps it at 10.
+Marginal table: 6->8 removes 49 duplicates for 24 hidden trees (2.04),
+8->10 removes 18 for 29 (0.62), so 8 m.
+"""
+dedup_cell_metres = 8
+data_freshness = "probe"
+
+[labels]
+EUGENE_OPENDATA = "Eugene Open Data"
+
+[[tree_sources]]
+label = "City of Eugene, Parks and Open Space - Public Trees (ArcGIS)"
+url = "https://www.arcgis.com/home/item.html?id=defd8da338a443818b6a6f8b65b8076b"
+
+[[landmark_sources]]
+label = "City of Eugene Planning Division - Historic Sites (City Landmarks and National Register)"
+url = "https://www.arcgis.com/home/item.html?id=e012d77a3a624a1e9f1ce01c8bb0ae8d"
+
+[jobs.city]
+schedule = "0 50 18 * * THU,SUN"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city USEUG`.
+"""
+
+[jobs.osm]
+schedule = "0 0 6 * * WED"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 2 2 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

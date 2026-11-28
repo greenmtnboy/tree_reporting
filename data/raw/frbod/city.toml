@@ -1,0 +1,59 @@
+# Bordeaux's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "FRBOD"
+name = "Bordeaux"
+slug = "bordeaux"
+center = [-0.5792, 44.8378]
+ecoregion = 648
+ecoregion_name = "Cantabrian mixed forests"
+usda_zone = 9
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "palearctic"
+bounds = [44.7, 45.03, -0.85, -0.37]
+territory = [[44.7, 45.03, -0.85, -0.37]]
+municipal_sources = ["BORDEAUX_OPENDATA"]
+dedup_note = """
+Calibrated 2026-11-18 (osm_dedup_validation.py, local inventory parquet):
+4m cell: recall 96.3%, 3.6% false; 6m adds +314 true / +589 false.
+"""
+dedup_cell_metres = 4
+data_freshness = "probe"
+
+[labels]
+BORDEAUX_OPENDATA = "Bordeaux Open Data"
+
+[[tree_sources]]
+label = "Bordeaux Métropole - Patrimoine arboré (Licence Ouverte)"
+url = "https://opendata.bordeaux-metropole.fr/explore/dataset/ec_arbre_p/"
+
+[[landmark_sources]]
+label = "Ministère de la Culture - Immeubles protégés au titre des Monuments Historiques (Licence Ouverte)"
+url = "https://www.data.gouv.fr/datasets/immeubles-proteges-au-titre-des-monuments-historiques-2"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city FRBOD`.
+"""
+
+[jobs.osm]
+schedule = "0 45 8 * * MON"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 0 1 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

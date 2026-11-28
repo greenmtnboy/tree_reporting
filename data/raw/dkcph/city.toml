@@ -1,0 +1,59 @@
+# Copenhagen's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "DKCPH"
+name = "Copenhagen"
+slug = "copenhagen"
+center = [12.5683, 55.6761]
+ecoregion = 647
+ecoregion_name = "Baltic mixed forests"
+usda_zone = 8
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "palearctic"
+bounds = [55.58, 55.76, 12.4, 12.7]
+territory = [[55.58, 55.76, 12.4, 12.7]]
+municipal_sources = ["COPENHAGEN_OPENDATA"]
+dedup_note = """
+Calibrated 2026-09-11 against the staged extract (28,764 OSM nodes) and
+the ingest's 68,462 rows.  5-10 m band 28.2% mutual-NN over n=447:
+neighbour-dominated, band rule says a 10 m cell.  Marginal table:
+4->6 removes 318 duplicates for 130 hidden trees (2.45), 6->8 removes
+81 for 131 (0.62), 8->10 removes 41 for 105 (0.39).  Same shape as
+Tokyo and Helsinki, same answer: 8 m.
+"""
+dedup_cell_metres = 8
+data_freshness = "probe"
+
+[labels]
+COPENHAGEN_OPENDATA = "Copenhagen Open Data"
+
+[[tree_sources]]
+label = "City of Copenhagen Open Data - Tree Register (trae_basis, CC BY 4.0)"
+url = "https://www.opendata.dk/city-of-copenhagen/trae_basis"
+
+[[landmark_sources]]
+label = "City of Copenhagen WFS - Monuments (monumenter, CC BY 4.0)"
+url = "https://wfs-kbhkort.kk.dk/k101/ows?service=WFS&request=GetCapabilities"
+
+[jobs.city]
+schedule = "0 40 22 * * FRI,MON"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city DKCPH`.
+"""
+
+[jobs.osm]
+schedule = "0 30 4 * * THU"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 46 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048

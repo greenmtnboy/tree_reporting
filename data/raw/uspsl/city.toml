@@ -1,0 +1,59 @@
+# Port St. Lucie's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "USPSL"
+name = "Port St. Lucie"
+slug = "portstlucie"
+center = [-80.3582, 27.273]
+ecoregion = 399
+ecoregion_name = "Southeast US conifer savannas"
+usda_zone = 10
+biome = "Temperate Grasslands, Savannas & Shrublands"
+realm = "nearctic"
+bounds = [27.19, 27.39, -80.5407, -80.24]
+territory = [[27.2055, 27.3746, -80.5407, -80.2442]]
+municipal_sources = ["PORT_ST_LUCIE_OPENDATA"]
+dedup_note = """
+osm_dedup_validation (2026-11-23): 6 m flags 41, 0 false, recall 55%;
+8 m adds 7 true for 2 false. OSM is sparse here (775 trees).
+"""
+dedup_cell_metres = 6
+data_freshness = "probe"
+
+[labels]
+PORT_ST_LUCIE_OPENDATA = "Port St. Lucie Open Data"
+
+[[tree_sources]]
+label = "City of Port St. Lucie - PSL Trees (no licence stated; displayed with attribution only, not licensed for reuse)"
+url = "https://www.arcgis.com/home/item.html?id=767ea62a6ae34d898185ec5050319c0d"
+
+[[landmark_sources]]
+label = "City of Port St. Lucie - Parks (no licence stated; displayed with attribution only, not licensed for reuse)"
+url = "https://www.arcgis.com/home/item.html?id=65f2da9f968e463c8cf240ca452177f7"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city USPSL`.
+"""
+
+[jobs.osm]
+schedule = "0 45 12 * * TUE"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 7 0 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

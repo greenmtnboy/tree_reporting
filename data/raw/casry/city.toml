@@ -1,0 +1,77 @@
+# Surrey's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "CASRY"
+name = "Surrey"
+slug = "surrey"
+center = [-122.849, 49.1913]
+ecoregion = 364
+ecoregion_name = "Puget lowland forests"
+usda_zone = 8
+biome = "Temperate Conifer Forests"
+realm = "nearctic"
+bounds = [49.0, 49.22, -122.93, -122.675]
+territory_note = """
+Surrey south of the Fraser, east edge stepped along 196 St (see CALNG).
+North of 49.16 the boxes follow the river: in each longitude band they
+stop between Surrey's northernmost tree and New Westminster's
+southernmost (tightest margin ~60 m near -122.865); CANWE is cut to match.
+"""
+territory = [
+    [49.0, 49.01, -122.93, -122.6801],
+    [49.01, 49.1, -122.93, -122.681],
+    [49.1, 49.128, -122.93, -122.68],
+    [49.128, 49.13, -122.93, -122.6797],
+    [49.13, 49.14, -122.93, -122.67955],
+    [49.14, 49.16, -122.93, -122.6793],
+    [49.16, 49.19, -122.915, -122.905],
+    [49.16, 49.203, -122.905, -122.895],
+    [49.16, 49.213, -122.895, -122.85],
+    [49.16, 49.17, -122.85, -122.6793],
+    [49.17, 49.215, -122.85, -122.68],
+]
+municipal_sources = ["SURREY_OPENDATA"]
+dedup_note = """
+osm_dedup_validation (2026-11-22): 6 m flags 5,653, 1.1% false, 94.3% recall;
+8 m adds 279 for 231 more false (dense boulevard planting).
+"""
+dedup_cell_metres = 6
+data_freshness = "probe"
+
+[labels]
+SURREY_OPENDATA = "Surrey Open Data"
+
+[[tree_sources]]
+label = "City of Surrey - Park Specimen Trees (Open Government License - City of Surrey; contains information licensed under the Open Government License - City of Surrey)"
+url = "https://opendata-surrey.hub.arcgis.com/datasets/626b2212e0594eadb8a86ccf0b9640c2"
+
+[[landmark_sources]]
+label = "City of Surrey Heritage Register - Heritage Sites (Open Government License - City of Surrey)"
+url = "https://opendata-surrey.hub.arcgis.com/datasets/b65ea74c6e4743928ae25392935ca08f"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city CASRY`.
+"""
+
+[jobs.osm]
+schedule = "0 45 11 * * TUE"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 26 0 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

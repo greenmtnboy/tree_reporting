@@ -1,0 +1,63 @@
+# Perth's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "AUPER"
+name = "Perth"
+slug = "perth"
+center = [115.8605, -31.9505]
+ecoregion = 206
+ecoregion_name = "Southwest Australia woodlands"
+usda_zone = 10
+biome = "Mediterranean Forests, Woodlands & Scrub"
+realm = "australasia"
+bounds = [-32.0, -31.92, 115.8, 115.9]
+territory = [[-32.0, -31.92, 115.8, 115.9]]
+municipal_sources = ["PERTH_OPENDATA"]
+dedup_note = """
+Calibrated 2026-11-16 before the first build (tools/osm_dedup_validation.py
+--inventory-parquet on a local ingest run).
+8,926 staged OSM nodes against 17,115 anchors.  Mutual-NN 93.7% in
+2-5 m, 57.5% in 5-10 m (n=219, a coin flip): a 5 m guarantee, a 10 m
+cell.  Marginal table agrees: 8->10 removes 48 for 32 (1.50), 10->14
+removes 35 for 51 (0.69).
+"""
+dedup_cell_metres = 10
+data_freshness = "probe"
+
+[labels]
+PERTH_OPENDATA = "Perth Open Data"
+
+[[tree_sources]]
+label = "City of Perth (Trees in the City)"
+url = "https://www.arcgis.com/home/item.html?id=c5ce51d9789a4e9a8510acb8c8f3ecf4"
+
+[[landmark_sources]]
+label = "City of Perth Heritage List (CPS2)"
+url = "https://www.arcgis.com/home/item.html?id=550909775e984aa19d5b4fadcce4b3e6"
+
+[jobs.city]
+schedule = "0 50 15 * * SAT,TUE"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city AUPER`.
+"""
+
+[jobs.osm]
+schedule = "0 30 5 * * FRI"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 50 4 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

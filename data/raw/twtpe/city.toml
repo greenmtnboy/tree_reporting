@@ -1,0 +1,61 @@
+# Taipei's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "TWTPE"
+name = "Taipei"
+slug = "taipei"
+center = [121.5654, 25.033]
+ecoregion = 283
+ecoregion_name = "Taiwan subtropical evergreen forests"
+usda_zone = 11
+biome = "Tropical & Subtropical Moist Broadleaf Forests"
+realm = "indo_malay"
+bounds = [24.95, 25.22, 121.45, 121.68]
+territory = [[24.95, 25.22, 121.45, 121.68]]
+municipal_sources = ["TAIPEI_OPENDATA"]
+dedup_note = """
+Calibrated 2026-09-11 against the staged extract (3,642 OSM nodes, a
+thin overlay on 162,987 inventory trees) and the ingest.  5-10 m band
+58.9% mutual-NN over n=180: a coin flip, which the script reports as
+such, and the rule for a coin flip is to leave the rows visible -- a
+5 m guarantee, a 10 m cell.  The marginal table keeps paying past 10
+(10->14 removes 44 for 39, 1.13) but on n=180 that is noise; the
+inventory plants at a 4.2 m median, second only to Tokyo, so the
+asymmetry argues for not widening on an ambiguous reading.
+"""
+dedup_cell_metres = 10
+data_freshness = "probe"
+
+[labels]
+TAIPEI_OPENDATA = "Taipei Open Data"
+
+[[tree_sources]]
+label = "Taipei City Open Data - Parks and Street Lights Office, Street and Park Trees (OGDL-Taiwan-1.0)"
+url = "https://data.gov.tw/dataset/128274"
+
+[[landmark_sources]]
+label = "Bureau of Cultural Heritage, Ministry of Culture - Monuments and Historic Buildings (OGDL-Taiwan-1.0)"
+url = "https://data.gov.tw/dataset/6246"
+
+[jobs.city]
+schedule = "0 20 22 * * THU,SUN"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city TWTPE`.
+"""
+
+[jobs.osm]
+schedule = "0 30 4 * * WED"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 4 4 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048

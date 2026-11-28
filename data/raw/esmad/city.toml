@@ -1,0 +1,61 @@
+# Madrid's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "ESMAD"
+name = "Madrid"
+slug = "madrid"
+center = [-3.7038, 40.4168]
+ecoregion = 793
+ecoregion_name = "Iberian sclerophyllous and semi-deciduous forests"
+usda_zone = 9
+biome = "Mediterranean Forests, Woodlands & Scrub"
+realm = "palearctic"
+bounds = [40.31, 40.65, -3.89, -3.52]
+territory = [[40.31, 40.65, -3.89, -3.52]]
+municipal_sources = ["MADRID_OPENDATA"]
+dedup_note = """
+Madrid: osm_dedup_validation.py --inventory-parquet: mutual-NN 79.9% in
+2-5 m, 31.2% in 5-10 m (n=3,360): a 5 m guarantee caps it at 10.
+Marginal table: 4->6 removes 2,485 duplicates for 1,358 hidden trees (1.83),
+6->8 removes 758 for 1,096 (0.69), so 6 m.
+"""
+dedup_cell_metres = 6
+data_freshness = "probe"
+
+[labels]
+MADRID_OPENDATA = "Madrid Open Data"
+
+[[tree_sources]]
+label = "Ayuntamiento de Madrid - Arbolado en parques y zonas verdes (detalle), datos.madrid.es (CC BY 4.0)"
+url = "https://datos.madrid.es/dataset/300761-0-arbolado-especies"
+
+[[landmark_sources]]
+label = "Ayuntamiento de Madrid / Comunidad de Madrid - Bienes de Interés Cultural y Patrimonial (CC BY 4.0)"
+url = "https://datos.madrid.es/dataset/300717-0-cultural-bien-mapas"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city ESMAD`.
+"""
+
+[jobs.osm]
+schedule = "0 0 7 * * WED"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 26 2 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

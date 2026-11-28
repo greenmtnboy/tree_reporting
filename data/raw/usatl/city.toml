@@ -1,0 +1,66 @@
+# Atlanta's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "USATL"
+name = "Atlanta"
+slug = "atlanta"
+center = [-84.388, 33.749]
+ecoregion = 330
+ecoregion_name = "Appalachian Piedmont forests"
+usda_zone = 8
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "nearctic"
+bounds = [33.5, 34.1, -84.75, -84.05]
+territory_note = """
+Trees Atlanta plants across the metro (Sandy Springs, Dunwoody, Clarkston,
+South Fulton, Tucker), not only inside the city limits.
+"""
+territory = [[33.5, 34.1, -84.75, -84.05]]
+municipal_sources = ["TREES_ATLANTA"]
+dedup_note = """
+Calibrated 2026-11-12 on the first build (tools/osm_dedup_validation.py).
+10,878 staged OSM nodes against 98,921 Trees Atlanta plantings.  Mutual-NN
+85.3% in 2-5 m, 57.1% in 5-10 m (n=163, a coin flip): a 5 m guarantee,
+a 10 m cell.  Marginal table agrees: 8->10 removes 31 for 25 (1.24),
+10->14 removes 48 for 78 (0.62).
+"""
+dedup_cell_metres = 10
+data_freshness = "probe"
+
+[labels]
+TREES_ATLANTA = "Trees Atlanta"
+
+[[tree_sources]]
+label = "Trees Atlanta - Plant Inventory (ArcGIS)"
+url = "https://www.arcgis.com/home/item.html?id=9a8404b7b48d499ab76b36c237434542"
+
+[[landmark_sources]]
+label = "City of Atlanta - Landmark and Historic Building/Sites (Urban Design Commission)"
+url = "https://gis.atlantaga.gov/dpcd/rest/services/OpenDataService1/FeatureServer/16"
+
+[jobs.city]
+schedule = "0 20 8 * * MON,THU"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city USATL`.
+"""
+
+[jobs.osm]
+schedule = "0 0 5 * * SUN"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 36 4 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

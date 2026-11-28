@@ -1,0 +1,58 @@
+# Kingston's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "CAKGN"
+name = "Kingston"
+slug = "kingston"
+center = [-76.486, 44.2312]
+ecoregion = 334
+ecoregion_name = "Eastern Great Lakes lowland forests"
+usda_zone = 5
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "nearctic"
+bounds = [44.15, 44.52, -76.75, -76.17]
+territory = [[44.15, 44.52, -76.75, -76.17]]
+municipal_sources = ["KINGSTON_OPENDATA"]
+dedup_note = """
+5-10 m band 50.0% mutual-NN, but over n=8: Kingston has 310 OSM nodes in
+total, the thinnest overlap in the batch, so the bands say almost
+nothing and the marginal table decides.  4->6 removes 9 duplicates and
+hides none, 6->8 removes 3 for 3 (1.00, break-even), and 8->10 flags
+fewer rows than 8 at all.  6 m is where the paying stops.
+"""
+dedup_cell_metres = 6
+data_freshness = "probe"
+
+[labels]
+KINGSTON_OPENDATA = "Kingston Open Data"
+
+[[tree_sources]]
+label = "City of Kingston Open Data - City Owned Trees"
+url = "https://opendatakingston.cityofkingston.ca/explore/dataset/city-owned-trees/"
+
+[[landmark_sources]]
+label = "City of Kingston Open Data - Designated Heritage Site"
+url = "https://opendatakingston.cityofkingston.ca/explore/dataset/designated-heritage-site/"
+
+[jobs.city]
+schedule = "0 40 18 * * SAT,TUE"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city CAKGN`.
+"""
+
+[jobs.osm]
+schedule = "0 30 3 * * FRI"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 16 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048

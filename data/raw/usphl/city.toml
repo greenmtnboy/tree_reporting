@@ -1,0 +1,63 @@
+# Philadelphia's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "USPHL"
+name = "Philadelphia"
+slug = "philadelphia"
+center = [-75.1652, 39.9526]
+ecoregion = 393
+ecoregion_name = "Mid-Atlantic US coastal savannas"
+usda_zone = 7
+biome = "Temperate Grasslands, Savannas & Shrublands"
+realm = "nearctic"
+bounds = [39.86, 40.14, -75.29, -74.95]
+territory = [[39.8674, 40.138, -75.2803, -74.9557]]
+municipal_sources = ["PHILADELPHIA_OPENDATA"]
+dedup_note = """
+Calibrated 2026-11-16 before the first build (tools/osm_dedup_validation.py
+--inventory-parquet on a local ingest run).
+11,429 staged OSM nodes against 151,922 anchors.  The 5-10 m band is
+neighbour-dominated: a 5 m guarantee caps it at 10.
+Marginal table: 6->8 removes 143 duplicates for 93 hidden trees (1.54),
+8->10 removes 69 for 91 (0.76), so 8 m.
+"""
+dedup_cell_metres = 8
+data_freshness = "probe"
+
+[labels]
+PHILADELPHIA_OPENDATA = "Philadelphia Open Data"
+
+[[tree_sources]]
+label = "Philadelphia Parks & Recreation - Tree Inventory, newest yearly layer (OpenDataPhilly, City of Philadelphia terms of use)"
+url = "https://opendataphilly.org/datasets/philadelphia-tree-inventory/"
+
+[[landmark_sources]]
+label = "National Park Service - National Register of Historic Places, marked where the Philadelphia Register of Historic Places also designates them"
+url = "https://opendataphilly.org/datasets/philadelphia-registered-historic-properties/"
+
+[jobs.city]
+schedule = "0 50 22 * * WED,SAT"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city USPHL`.
+"""
+
+[jobs.osm]
+schedule = "0 30 6 * * TUE"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 14 2 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

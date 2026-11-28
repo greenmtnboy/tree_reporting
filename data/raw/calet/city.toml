@@ -1,0 +1,57 @@
+# Lethbridge's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "CALET"
+name = "Lethbridge"
+slug = "lethbridge"
+center = [-112.8451, 49.6956]
+ecoregion = 396
+ecoregion_name = "Northern Shortgrass prairie"
+usda_zone = 4
+biome = "Temperate Grasslands, Savannas & Shrublands"
+realm = "nearctic"
+bounds = [49.6, 49.8, -113.0, -112.68]
+territory = [[49.6, 49.8, -113.0, -112.68]]
+municipal_sources = ["LETHBRIDGE_OPENDATA"]
+dedup_note = """
+5-10 m band 35.0% over n=103: neighbour-dominated, and Lethbridge's
+inventory is the tightest-planted of the six (median 6.0 m to the
+nearest other tree, a quarter within 4.1 m).  4->6 removes 50 duplicates
+for 27 hidden trees (1.85), 6->8 removes 20 for 22 (0.91).
+"""
+dedup_cell_metres = 6
+data_freshness = "probe"
+
+[labels]
+LETHBRIDGE_OPENDATA = "Lethbridge Open Data"
+
+[[tree_sources]]
+label = "City of Lethbridge Open Data - Trees"
+url = "https://opendata.lethbridge.ca/datasets/trees"
+
+[[landmark_sources]]
+label = "City of Lethbridge Open Data - Historic Places"
+url = "https://opendata.lethbridge.ca/datasets/historic-places"
+
+[jobs.city]
+schedule = "0 0 19 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city CALET`.
+"""
+
+[jobs.osm]
+schedule = "0 30 3 * * SAT"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 18 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048

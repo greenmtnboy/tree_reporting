@@ -3,7 +3,7 @@
 # requires-python = ">=3.13"
 # dependencies = ["pyarrow", "pytrilogy", "requests"]
 # ///
-"""Scaffold a new city: every registry edit and every boilerplate file.
+"""Scaffold a new city: its manifest and every boilerplate file.
 
     cd data/raw && uv run tools/new_city.py \\
         --code USDEN --name Denver --slug denver \\
@@ -12,16 +12,18 @@
         --source-label DENVER_OPENDATA \\
         --ecoregion 402 --usda-zone 6
 
-Adding a city touches roughly twenty files across Python, preql, TOML and
-TypeScript, and the city code appears in them about forty times.  Almost none
-of those edits fail loudly when they are missed -- that is the whole subject of
-EXTENDING.md -- so the mechanical half is worth automating and the judgement
-half is not.
+A city's entries in the shared registries -- the city enum, bounds and
+territory, data sources and labels, dedup cell, ecoregion and dashboard
+context, freshness properties, rollup file lists, cloud jobs, city config and
+attribution rows -- are generated from its manifest, `raw/{code}/city.toml`,
+by `tools/sync_cities.py` (tools/city_manifest.py describes the keys).  So a
+city addition adds files and edits no shared one by hand, and two branches
+that each add a city meet only in generated files, where rerunning the sync
+(`sync_cities.py --resolve`) is the merge.
 
-**What this writes** is the mechanical half: the registry entries, the
-freshness properties, the cross-city imports and merges, the OSM staging model,
-the cloud jobs, and the frontend config.  It also drops a *stub* tree model and
-a *stub* ingest script into `data/raw/{code}/`.
+**What this writes** is the mechanical half: the manifest, the OSM staging
+model, and a *stub* tree model, ingest script, freshness probe and landmark
+model in `data/raw/{code}/`; then it runs the sync.
 
 **What it deliberately leaves to you** is everything that needs a measurement
 or a look at the portal:
@@ -36,15 +38,14 @@ Run `pytest tests/` afterwards: `test_city_wiring.py` walks the same list and
 names anything still missing, so a half-scaffolded city is a red test rather
 than a quiet hole in the map.
 
-Idempotent: an edit already present is skipped, so re-running after filling in
-a stub is safe.  Nothing is written until every edit has been located, so a
-failure leaves the tree untouched rather than half-patched.
+Idempotent: a file that already exists is skipped, so re-running after filling
+in a stub is safe.  To change a city's registry facts later, edit its manifest
+and rerun `tools/sync_cities.py`.
 """
 
 from __future__ import annotations
 
 import argparse
-import json
 import re
 import subprocess
 import sys
@@ -57,6 +58,8 @@ SRC = REPO / "src" / "src"
 sys.path.insert(0, str(RAW))
 
 from shared.ingest import territory_where  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from city_manifest import dumps  # noqa: E402
 
 RESOLVE_QUERY_URL = (
     "https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/"
@@ -96,7 +99,7 @@ def resolve_ecoregion(eco_id: int) -> dict:
 
 
 class Edits:
-    """A batch of file edits, applied only once all of them are resolved.
+    """A batch of new files, written only once all of them are rendered.
 
     A scaffolder that dies half way through is worse than one that does
     nothing: the tree is left in a state no test describes and no `git
@@ -107,73 +110,6 @@ class Edits:
         self._pending: dict[Path, str] = {}
         self.applied: list[str] = []
         self.skipped: list[str] = []
-
-    def _text(self, path: Path) -> str:
-        if path not in self._pending:
-            self._pending[path] = path.read_text(encoding="utf-8")
-        return self._pending[path]
-
-    def insert_after(self, path: Path, anchor: str, addition: str, *, what: str) -> None:
-        """Insert *addition* directly after *anchor*, unless it is already there."""
-        text = self._text(path)
-        if addition.strip() and addition.strip() in text:
-            self.skipped.append(f"{path.relative_to(REPO)}: {what} (already present)")
-            return
-        if text.count(anchor) != 1:
-            raise SystemExit(
-                f"{path.relative_to(REPO)}: could not place {what} -- the anchor\n"
-                f"  {anchor.strip()[:100]}\n"
-                f"matched {text.count(anchor)} times, expected 1. The file has "
-                f"changed shape; add this by hand:\n{addition}"
-            )
-        self._pending[path] = text.replace(anchor, anchor + addition)
-        self.applied.append(f"{path.relative_to(REPO)}: {what}")
-
-    def sub_once(
-        self,
-        path: Path,
-        pattern: str,
-        repl: str,
-        *,
-        what: str,
-        marker: str,
-        scope: str | None = None,
-    ) -> None:
-        """Regex-substitute one occurrence, unless *marker* is already present.
-
-        *scope* narrows where the marker is looked for, to the text from the
-        first match of that regex to the end of the enclosing `[...]` or
-        `(...)`.  A file with two lists of the same shape needs it: the
-        attribution catalog holds `{ city: 'Calgary', ... }` in both
-        TREE_INVENTORY_SOURCES and LANDMARK_SOURCES, so a whole-file marker
-        cannot say which list this city is already in -- it either skips the
-        second edit or, if the marker is written narrowly enough to avoid
-        that, stops matching once a person replaces the placeholder text and
-        re-adds the row.  Calgary, Edmonton and Winnipeg each ended up in both
-        lists twice that way, and the Info page rendered them twice.
-        """
-        text = self._text(path)
-        haystack = text
-        if scope is not None:
-            found = re.search(scope, text)
-            if found is None:
-                raise SystemExit(
-                    f"{path.relative_to(REPO)}: could not scope {what} -- "
-                    f"{scope!r} matched nothing"
-                )
-            end = text.find("\n]", found.end())
-            haystack = text[found.start() : end if end != -1 else len(text)]
-        if marker in haystack:
-            self.skipped.append(f"{path.relative_to(REPO)}: {what} (already present)")
-            return
-        new, n = re.subn(pattern, repl, text, count=1)
-        if n != 1:
-            raise SystemExit(
-                f"{path.relative_to(REPO)}: could not apply {what} -- pattern "
-                f"{pattern!r} matched {n} times, expected 1"
-            )
-        self._pending[path] = new
-        self.applied.append(f"{path.relative_to(REPO)}: {what}")
 
     def write_file(self, path: Path, content: str, *, what: str) -> None:
         if path.exists():
@@ -557,254 +493,70 @@ def build(args) -> Edits:
         OSM_STAGING_MODEL.format(**fields), what="OSM staging model",
     )
 
-    # --- shared/ingest.py ------------------------------------------------
-    shared = RAW / "shared" / "ingest.py"
-    e.sub_once(
-        shared,
-        r"(MUNICIPAL_DATA_SOURCES: dict\[str, tuple\[str, \.\.\.\]\] = \{\n)",
-        rf'\1    "{code}": ("{source}",),\n',
-        what="MUNICIPAL_DATA_SOURCES", marker=f'"{code}": ("{source}",)',
-    )
-    e.sub_once(
-        shared,
-        r"(OSM_DATA_SOURCES: dict\[str, str\] = \{\n)",
-        rf'\1    "{code}": "OSM_{code}",\n',
-        what="OSM_DATA_SOURCES", marker=f'"{code}": "OSM_{code}"',
-    )
-    lo_lat, hi_lat, lo_lon, hi_lon = args.bounds
-    e.sub_once(
-        shared,
-        r"(CITY_BOUNDS: dict\[str, tuple\[float, float, float, float\]\] = \{\n)",
-        rf'\1    "{code}": ({lo_lat}, {hi_lat}, {lo_lon}, {hi_lon}),\n',
-        what="CITY_BOUNDS", marker=f'"{code}": ({lo_lat}, {hi_lat}',
-    )
-    # The territory starts as the envelope.  A city with a neighbour has to
-    # carve both by hand -- test_city_territory.py fails on the overlap.
-    e.sub_once(
-        shared,
-        r"(CITY_TERRITORY: dict\[str, tuple\[Box, \.\.\.\]\] = \{\n)",
-        rf"\1    '{code}': (({lo_lat}, {hi_lat}, {lo_lon}, {hi_lon}),),\n",
-        what="CITY_TERRITORY", marker=f"'{code}': (({lo_lat}, {hi_lat}",
-    )
-    # The dedup grid cell starts at the common 10 m and is a placeholder until
-    # measured: `uv run tools/osm_dedup_validation.py --city {code}` after the first
-    # build, then move it to 20 m only if the 5-10 m band is clearly
-    # duplicate-dominated.  tree_dedup.preql reads it through dedup_cells.py.
-    e.sub_once(
-        shared,
-        r"(DEDUP_CELL_METRES: dict\[str, int\] = \{\n)",
-        rf'\1    # NOT YET CALIBRATED: default; measure after the first build.\n    "{code}": 10,\n',
-        # Any value, not the placeholder 10: calibrating the city is the whole
-        # point of the placeholder, and a marker that only recognises the
-        # uncalibrated form makes a re-run insert a second, duplicate key.
-        what="DEDUP_CELL_METRES", marker=f'"{code}":',
-        scope=r"DEDUP_CELL_METRES: dict\[str, int\] = \{",
-    )
-
-    # --- shared/osm.py ---------------------------------------------------
-    e.sub_once(
-        RAW / "shared" / "osm.py",
-        r"(OSM_CITY_NAMES: dict\[str, str\] = \{\n)",
-        rf'\1    "{code}": "{name}",\n',
-        what="OSM_CITY_NAMES", marker=f'"{code}": "{name}"',
-    )
-
-    # --- core.preql -------------------------------------------------------
-    core = RAW / "core.preql"
-    e.sub_once(
-        core, r"(key city enum<string>\[[^\]]*)\]",
-        rf"\1, '{code}']",
-        what="city enum", marker=f"'{code}'",
-    )
-
-    # --- city_ecoregion.preql ---------------------------------------------
-    e.sub_once(
-        RAW / "city_ecoregion.preql", r"(\))(\n\) as t\(city, ecoregion_id\))",
-        rf"\1,\n    ('{code}', {args.ecoregion})\2",
-        what="city ecoregion row", marker=f"('{code}', ",
-    )
-
-    # --- freshness properties --------------------------------------------
-    e.insert_after(
-        RAW / "tree_common.preql",
-        "property <*>.tree_id.submission_photo_url string;"
-        if False else "\n\n",  # placed by anchor below instead
-        "", what="(noop)",
-    ) if False else None
-    e.sub_once(
-        RAW / "tree_common.preql",
-        r"(\nproperty <\*>\.\w+_osm_data_updated_through datetime;[^\n]*\n)(?!property <\*>\.\w+_osm_data)",
-        rf"\1property <*>.{lc}_data_updated_through datetime; # when {name} data is through\n"
-        rf"property <*>.{lc}_osm_data_updated_through datetime; # GCS publication time of {name}'s staged OSM parquet\n",
-        what="tree_common freshness properties",
-        marker=f"property <*>.{lc}_osm_data_updated_through",
-    )
-    e.sub_once(
-        RAW / "community_tree_info.preql",
-        r"(\nproperty <\*>\.\w+_community_data_updated_through datetime;[^\n]*\n)(?!property)",
-        rf"\1property <*>.{lc}_community_data_updated_through datetime; # when approved community submissions for {code} are through\n",
-        what="community freshness property",
-        marker=f"property <*>.{lc}_community_data_updated_through",
-    )
-
-    # --- landmark_common.preql -------------------------------------------
-    landmark_common = RAW / "landmark_common.preql"
-    e.sub_once(
-        landmark_common,
-        r"(\nproperty <\*>\.\w+_landmark_data_updated_through datetime;\n)(auto latest_landmark_update_through)",
-        rf"\1property <*>.{lc}_landmark_data_updated_through datetime;\n\2",
-        what="landmark freshness property",
-        marker=f"property <*>.{lc}_landmark_data_updated_through",
-    )
-    # The marker must NOT carry the closing paren.  A term is appended last,
-    # so `{lc}_..._through)` matches only while this city is still the last
-    # term -- add another city and the check stops recognising this one, and
-    # a re-run appends it again.  That is not hypothetical: CACAL, CAEDM and
-    # CAWPG each appear four times in the greatest() this scaffolder wrote,
-    # here and in tree_info.preql.  Harmless arithmetic (greatest(a, b, b) is
-    # greatest(a, b)) and unbounded growth, so it is fixed rather than left.
-    # `, {lc}_..._through` is unambiguous wherever the term sits, and the
-    # leading comma keeps it from matching the `property <*>.` declaration.
-    e.sub_once(
-        landmark_common,
-        r"(auto latest_landmark_update_through <- greatest\([^)]*)\)",
-        rf"\1, {lc}_landmark_data_updated_through)",
-        what="latest_landmark_update_through",
-        marker=f", {lc}_landmark_data_updated_through",
-    )
-
-    # --- cross-city models ------------------------------------------------
-    # The app's tree model (tree_info.preql) is written by
-    # tools/sync_app_models.py after the commit, from the city model this
-    # scaffolds; the app's landmark model reads the union and names no city.
-    e.sub_once(
-        RAW / "full_tree_publish.preql",
-        r"(trees/\w+_tree_info_v\{data_version\}\.parquet`)(\n\];)",
-        rf"\1,\n    f`https://storage.googleapis.com/trilogy_public_models/duckdb/"
-        rf"trees/{lc}_tree_info_v{{data_version}}.parquet`\2",
-        what="rollup file list", marker=f"trees/{lc}_tree_info_v",
-    )
-    e.sub_once(
-        RAW / "full_landmark_publish.preql",
-        r"(landmarks/\w+_landmark_info_v\{data_version\}\.parquet`)(\n\];)",
-        rf"\1,\n    f`https://storage.googleapis.com/trilogy_public_models/duckdb/"
-        rf"landmarks/{lc}_landmark_info_v{{data_version}}.parquet`\2",
-        what="landmark rollup file list", marker=f"landmarks/{lc}_landmark_info_v",
-    )
-    # --- trilogy.toml -----------------------------------------------------
-    jobs = f'''
-[[cloud.job]]
-key = "city-{lc}"
-name = "urban-tree-city-{lc}"
-entrypoint = "raw/{lc}/{slug}_tree_info.preql"
-operation = "refresh"
-# Starts in the twice-weekly tier, placed the day after this city's OSM
-# extract. Measure before moving it: `portal_cadence.py --record --city {code}`.
-schedule = "{args.city_cron}"
-timeout_seconds = 1800
-memory_mb = 2048
-
-[[cloud.job]]
-key = "osm-{lc}"
-name = "urban-tree-osm-{lc}"
-entrypoint = "osm_staging/{lc}_osm_staging.preql"
-operation = "refresh"
-# Overpass allows two slots per client IP and answers an over-budget request
-# with HTTP 200 carrying an error remark, so a collision looks like a city with
-# no trees in OSM. This minute must be used by no other extract job.
-schedule = "{args.osm_cron}"
-timeout_seconds = 1800
-memory_mb = 1024
-
-[[cloud.job]]
-key = "refresh-landmarks-{lc}"
-name = "urban-tree-landmarks-refresh-{lc}"
-entrypoint = "raw/{lc}/{slug}_landmarks.preql"
-operation = "refresh"
-# The next free two-minute Sunday slot; every one must land before the 05:00
-# union (tests/test_cloud_jobs.py).
-schedule = "{next_landmark_slot((DATA / "trilogy.toml").read_text(encoding="utf-8"))}"
-timeout_seconds = 900
-memory_mb = 2048
-'''
-    e.sub_once(
-        DATA / "trilogy.toml",
-        r"(\n# =+\n# Ad-hoc landmark staging publish)",
-        jobs.replace("\\", "\\\\") + r"\1",
-        what="cloud jobs", marker=f'key = "city-{lc}"',
-    )
-
-    # --- frontend ---------------------------------------------------------
-    config_path = SRC / "cityConfig.json"
-    original = config_path.read_text(encoding="utf-8")
-    config = json.loads(original)
-    if code not in config:
-        # Appended textually, one line per city, because that is how the file
-        # is written by hand.  Re-serialising it with `json.dumps(indent=2)`
-        # instead puts every `center` coordinate on its own line and drops
-        # trailing zeros (13.4050 -> 13.405), so adding one city arrived as a
-        # 147-line diff that buried the three lines that mattered.
-        entry = (
-            f'  "{code}": {{ "name": {json.dumps(name, ensure_ascii=False)}, '
-            f'"center": [{lon}, {lat}] }}'
-        )
-        head = original.rstrip().removesuffix("}").rstrip()
-        e._pending[config_path] = f"{head},\n{entry}\n}}\n"
-        e.applied.append(f"{config_path.relative_to(REPO)}: city config")
-        # The homepage feed's copy: the cloud bundle holds only data/, so the
-        # publisher reads this mirror, and test_city_wiring.py fails while the
-        # two differ.
-        mirror = DATA / "website" / "city_config.json"
-        e._pending[mirror] = e._pending[config_path]
-        e.applied.append(f"{mirror.relative_to(REPO)}: homepage city registry")
-    else:
-        e.skipped.append(f"{config_path.relative_to(REPO)}: city config (already present)")
-
-    e.sub_once(
-        SRC / "data" / "dataSources.ts",
-        r"(export const DATA_SOURCE_LABELS: Record<string, string> = \{\n)",
-        rf"\1  {source}: '{name} Open Data',\n",
-        what="data source label", marker=f"{source}:",
-    )
-    e.sub_once(
-        SRC / "data" / "sourceCatalog.ts",
-        r"(export const TREE_INVENTORY_SOURCES: CitySourceLink\[\] = \[\n)",
-        rf"\1  {{ city: '{name}', label: 'TODO: {name} tree inventory source', url: 'TODO' }},\n",
-        what="tree source attribution", marker=f"city: '{name}',",
-        # Scoped, so filling in the placeholder does not make a re-run add a
-        # second row -- see Edits.sub_once.
-        scope=r"export const TREE_INVENTORY_SOURCES: CitySourceLink\[\] = \[",
-    )
-    e.sub_once(
-        SRC / "data" / "sourceCatalog.ts",
-        r"(export const LANDMARK_SOURCES: CitySourceLink\[\] = \[\n)",
-        rf"\1  {{ city: '{name}', label: 'TODO: {name} landmark source' }},\n",
-        what="landmark source attribution", marker=f"city: '{name}',",
-        scope=r"export const LANDMARK_SOURCES: CitySourceLink\[\] = \[",
-    )
-    # The chat and dashboards' ecoregion, zone, biome and realm parameters,
-    # and the biome the city's artwork is drawn from
-    # (dashboardContextSource.test.ts, biomeSketch.test.ts).
-    context_path = SRC / "composables" / "dashboardContextSource.ts"
-    if f"\n  {code}: {{" in context_path.read_text(encoding="utf-8"):
-        e.skipped.append(f"{context_path.relative_to(REPO)}: dashboard context (already present)")
-    else:
-        eco = resolve_ecoregion(args.ecoregion)
-        realm = REALM_KEYS.get(eco["REALM"])
-        if realm is None:
-            raise SystemExit(f"no realm key for RESOLVE realm {eco['REALM']!r}; add it to REALM_KEYS")
-        e.sub_once(
-            context_path,
-            r"(\n  \},\n)(\}\n)",
-            rf"""\1  {code}: {{
-    ecoregionId: {args.ecoregion}, // {eco["ECO_NAME"]}
-    usdaZone: {args.usda_zone},
-    biome: '{eco["BIOME_NAME"]}',
-    realm: '{realm}',
-  }},
-\2""",
-            what="dashboard context", marker=f"\n  {code}: {{",
-        )
+    # --- the manifest --------------------------------------------------------
+    # Everything the shared registries hold for a city; tools/sync_cities.py
+    # writes them from it.  See tools/city_manifest.py for the keys.
+    eco = resolve_ecoregion(args.ecoregion)
+    realm = REALM_KEYS.get(eco["REALM"])
+    if realm is None:
+        raise SystemExit(f"no realm key for RESOLVE realm {eco['REALM']!r}; add it to REALM_KEYS")
+    toml_text = (DATA / "trilogy.toml").read_text(encoding="utf-8")
+    manifest = {
+        "code": code,
+        "name": name,
+        "slug": slug,
+        "center": [lon, lat],
+        "ecoregion": args.ecoregion,
+        "ecoregion_name": eco["ECO_NAME"],
+        "usda_zone": args.usda_zone,
+        "biome": eco["BIOME_NAME"],
+        "realm": realm,
+        "bounds": list(args.bounds),
+        # The territory starts as the envelope.  A city with a neighbour has
+        # to carve both -- test_city_territory.py fails on the overlap.
+        "territory": [list(args.bounds)],
+        "municipal_sources": [source],
+        # A placeholder until measured: `uv run tools/osm_dedup_validation.py
+        # --city {code}` after the first build, then move it to 20 m only if
+        # the 5-10 m band is clearly duplicate-dominated.
+        "dedup_note": "NOT YET CALIBRATED: default; measure after the first build.\n",
+        "dedup_cell_metres": 10,
+        "data_freshness": "probe",
+        "labels": {source: f"{name} Open Data"},
+        "tree_sources": [{"label": f"TODO: {name} tree inventory source", "url": "TODO"}],
+        "landmark_sources": [{"label": f"TODO: {name} landmark source"}],
+        "jobs": {
+            "city": {
+                "schedule": args.city_cron,
+                "timeout_seconds": 1800,
+                "memory_mb": 2048,
+                "schedule_note": (
+                    "Starts in the twice-weekly tier, placed the day after this city's OSM\n"
+                    f"extract. Measure before moving it: `portal_cadence.py --record --city {code}`.\n"
+                ),
+            },
+            "osm": {
+                "schedule": args.osm_cron,
+                "timeout_seconds": 1800,
+                "memory_mb": 1024,
+                "schedule_note": (
+                    "Overpass allows two slots per client IP and answers an over-budget request\n"
+                    "with HTTP 200 carrying an error remark, so a collision looks like a city with\n"
+                    "no trees in OSM. This minute must be used by no other extract job.\n"
+                ),
+            },
+            "landmarks": {
+                "schedule": next_landmark_slot(toml_text),
+                "timeout_seconds": 900,
+                "memory_mb": 2048,
+                "schedule_note": (
+                    "The next free two-minute Sunday slot; every one must land before the 05:00\n"
+                    "union (tests/test_cloud_jobs.py).\n"
+                ),
+            },
+        },
+    }
+    e.write_file(city / "city.toml", dumps(manifest), what="city manifest")
     return e
 
 
@@ -883,24 +635,10 @@ def main() -> None:
         print("\ndry run -- nothing written")
         return
     edits.commit()
-    # The dedup grid in tree_dedup.preql is generated from DEDUP_CELL_METRES,
-    # which the commit just edited; `test_dedup_cells.py` fails until it is
-    # regenerated, so regenerate it here rather than leave a red test.
+    # Every shared registry, then the generators that read them (the dedup
+    # grid, the derived jobs, the app's tree model): tools/sync_cities.py.
     subprocess.run(
-        [sys.executable, str(Path(__file__).with_name("dedup_cells.py")), "--write"],
-        check=True,
-    )
-    # The city's predictions and browser projection (city_derived.preql): its
-    # derived model, probe, job and [dependencies] entry, written from the
-    # city job the commit just added.
-    subprocess.run(
-        [sys.executable, str(Path(__file__).with_name("sync_city_derived.py"))],
-        check=True,
-    )
-    # The app's tree model: one datasource over each city's published parquet,
-    # this one's included (tools/sync_app_models.py).
-    subprocess.run(
-        [sys.executable, str(Path(__file__).with_name("sync_app_models.py"))],
+        [sys.executable, str(Path(__file__).with_name("sync_cities.py"))],
         check=True,
     )
     print(f"""
@@ -914,9 +652,11 @@ def main() -> None:
        cd data/raw && uv run {args.code.lower()}/{args.slug}_osm_extract.py
   4. CALIBRATE the dedup cell size -- do not ship the placeholder:
        uv run tools/osm_dedup_validation.py --city {args.code}
-     then set DEDUP_CELL_METRES and run `uv run tools/dedup_cells.py --write`.
-  5. Fill in the two TODO attribution lines in src/src/data/sourceCatalog.ts
-     and the README source tables.
+     then set dedup_cell_metres (and dedup_note) in raw/{args.code.lower()}/city.toml.
+  5. Fill in the TODO attribution rows (tree_sources, landmark_sources) and
+     the source label in raw/{args.code.lower()}/city.toml, and the README
+     source tables.
+  6. Rerun `uv run tools/sync_cities.py` after any manifest edit.
 
 Then check the wiring:
 

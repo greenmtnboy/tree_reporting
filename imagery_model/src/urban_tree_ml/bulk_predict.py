@@ -421,13 +421,9 @@ def absorbed_flags(
 def cell_degrees(city: str, ingest_path: Path = INGEST_PATH) -> tuple[float, float]:
     """(lat, lon) degrees of the city's merge cell, as shared/ingest.py's
     cell_degrees computes them; the literals are read, not imported."""
-    import ast
+    from urban_tree_ml.point_predict import module_literals
 
-    found: dict[str, Any] = {}
-    for node in ast.parse(ingest_path.read_text(encoding="utf-8")).body:
-        target = getattr(node, "target", None) or (getattr(node, "targets", None) or [None])[0]
-        if getattr(target, "id", None) in ("DEDUP_CELL_METRES", "CITY_BOUNDS") and node.value is not None:
-            found[target.id] = ast.literal_eval(node.value)
+    found = module_literals(("DEDUP_CELL_METRES", "CITY_BOUNDS"), ingest_path)
     metres = found["DEDUP_CELL_METRES"][city]
     lat_min, lat_max, _, _ = found["CITY_BOUNDS"][city]
     lat = math.radians((lat_min + lat_max) / 2)
