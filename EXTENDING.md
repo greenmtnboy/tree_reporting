@@ -407,10 +407,12 @@ conflicts in them, run
 cd data/raw && uv run tools/sync_cities.py --resolve
 ```
 
-which takes the current side of every conflict in a generated file and then
-rewrites it from the manifests, which hold both branches' cities. A conflict
-anywhere else (a manifest both branches changed, or prose outside the
-regions) is a real one.
+which takes the current side of every conflict inside a generated region
+(merge or diff3 style) and then rewrites the regions from the manifests,
+which hold both branches' cities. A conflict anywhere else (a manifest both
+branches changed, a hand-edited schedule or prose outside the regions, a
+hunk across a region's markers) is a real one: `--resolve` lists it and
+writes nothing until it is merged by hand.
 
 ## Splitting a metro into its towns
 

@@ -33,8 +33,11 @@ file up to date.
 
 **A merge conflict in a generated file is resolved by regenerating it.**
 Two branches that each add a city conflict only here; `--resolve` takes the
-current side of every conflict in the generated files, then rewrites them
-from the manifests, which hold both branches' cities.
+current side of every conflict inside a generated region (merge or diff3
+style), then rewrites the regions from the manifests, which hold both
+branches' cities.  A conflict outside a region, or across a region's
+markers, is a hand-written change on both sides: `--resolve` then names it
+and writes nothing.
 tests/test_sync_cities.py fails while anything is stale.
 """
 
@@ -317,20 +320,72 @@ def planned(cities: list[City]) -> dict[Path, str]:
     return files
 
 
-CONFLICT = re.compile(r"^<<<<<<< [^\n]*\n(.*?)^=======\n.*?^>>>>>>> [^\n]*\n", re.S | re.M)
-GENERATED_ELSEWHERE = (
-    RAW / "tree_info.preql", RAW / "tree_dedup.preql", RAW / "tree_predictions_source.preql",
+# One conflict hunk, merge or diff3 style: the current side, an optional
+# `|||||||` base section, then the incoming side.
+CONFLICT = re.compile(
+    r"^<<<<<<< [^\n]*\n(?P<ours>.*?)(?:^\|\|\|\|\|\|\| [^\n]*\n.*?)?^=======\n.*?^>>>>>>> [^\n]*\n",
+    re.S | re.M,
 )
+# Every generated region a conflict may sit in: this sync's, and the other
+# generators' it runs (the derived jobs block, the dedup grid).
+REGION_START = re.compile(r"^.*(?:>>> sync_cities: |>>> sync_city_derived: |# BEGIN dedup_cells).*\n", re.M)
+REGION_END = re.compile(r"^.*(?:<<< sync_cities: |<<< sync_city_derived: |# END dedup_cells).*\n", re.M)
+# Files some generator writes whole, beyond WHOLE.
+GENERATED_WHOLE = (RAW / "tree_info.preql", RAW / "tree_predictions_source.preql")
+GENERATED_REGIONS = (RAW / "tree_dedup.preql",)
+
+
+def generated_spans(text: str) -> list[tuple[int, int]] | None:
+    """(start, end) of each region's body, or None when the markers do not pair up."""
+    starts, ends = list(REGION_START.finditer(text)), list(REGION_END.finditer(text))
+    if len(starts) != len(ends):
+        return None
+    spans = [(s.end(), e.start()) for s, e in zip(starts, ends)]
+    if any(a > b for a, b in spans) or any(spans[i][1] > spans[i + 1][0] for i in range(len(spans) - 1)):
+        return None
+    return spans
+
+
+def resolve_text(text: str, whole: bool) -> tuple[str, list[int]]:
+    """The text with every conflict's current side taken, and the line of each
+    conflict that is not wholly inside a generated region (those must not be
+    resolved here: the incoming side there is somebody's hand-written change)."""
+    spans = [(0, len(text))] if whole else generated_spans(text)
+    outside = []
+    for m in CONFLICT.finditer(text):
+        if spans is None or not any(a <= m.start() and m.end() <= b for a, b in spans):
+            outside.append(text.count("\n", 0, m.start()) + 1)
+    resolved = CONFLICT.sub(lambda m: m.group("ours"), text)
+    if "<<<<<<< " in resolved or "\n>>>>>>> " in resolved:
+        outside.append(0)  # a hunk this did not recognise
+    return resolved, outside
 
 
 def resolve() -> None:
-    """Take the current side of every conflict in a generated file; the
-    regeneration that follows rewrites the generated parts from the manifests."""
-    for path in (*REGIONS, *WHOLE, *GENERATED_ELSEWHERE):
+    """Take the current side of every conflict inside a generated region; the
+    regeneration that follows rewrites those regions from the manifests.
+    Refuses, writing nothing, if any conflict sits outside a region or crosses
+    a marker: that one is a real merge, for a person."""
+    planned_writes: dict[Path, str] = {}
+    problems: list[str] = []
+    candidates = [(p, True) for p in (*WHOLE, *GENERATED_WHOLE)] + [(p, False) for p in (*REGIONS, *GENERATED_REGIONS)]
+    for path, whole in candidates:
         text = read(path)
-        if "<<<<<<< " in text:
-            path.write_text(CONFLICT.sub(r"\1", text), encoding="utf-8", newline="\n")
-            print(f"took the current side of {path.relative_to(REPO)}")
+        if "<<<<<<< " not in text:
+            continue
+        resolved, outside = resolve_text(text, whole)
+        rel = path.relative_to(REPO)
+        problems += [f"{rel}:{line}" if line else f"{rel}: an unrecognised conflict hunk" for line in outside]
+        planned_writes[path] = resolved
+    if problems:
+        raise SystemExit(
+            "not resolving: these conflicts are outside a generated region (or cross one's\n"
+            "markers), so the incoming side is a hand-written change -- merge them by hand,\n"
+            "then rerun --resolve:\n  " + "\n  ".join(problems)
+        )
+    for path, text in planned_writes.items():
+        path.write_text(text, encoding="utf-8", newline="\n")
+        print(f"took the current side of the generated conflicts in {path.relative_to(REPO)}")
 
 
 def main(argv: list[str]) -> int:
