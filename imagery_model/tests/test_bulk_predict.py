@@ -499,6 +499,31 @@ def test_assemble_patches_onto_a_base_file(tmp_path):
     assert json.loads((out / "patch.json").read_text())["replaced"] == 1
 
 
+def test_a_city_trained_on_named_flights_takes_its_own_cohort_and_config(tmp_path):
+    """DC's cohorts are named by flight (validation-uswas-naip-2025); a suffix
+    match missed them and predicted with the run's first cohort, Boston's."""
+    from urban_tree_ml.point_predict import city_cohort
+
+    names = ["train-usbos-naip-2021-review-4d8f", "train-uswas-naip-2025-review-ff66",
+             "validation-usbos", "validation-usbos-naip-2025", "validation-uswas-naip-2023",
+             "validation-uswas-naip-2023-review-d03c", "validation-uswas-naip-2025"]
+    cohorts = [tmp_path / name / "evaluation-metadata.json" for name in names]
+    assert city_cohort(cohorts, "USWAS").parent.name == "validation-uswas-naip-2025"
+    assert city_cohort(cohorts, "USBOS").parent.name == "validation-usbos"
+    assert city_cohort(cohorts, "USNYC") is None
+    assert city_cohort(cohorts, None) is None
+
+    run = tmp_path / "runs" / "r"
+    run.mkdir(parents=True)
+    for year, pixels in ((2023, 256), (2025, 512)):
+        (run / f"config-uswas-naip-{year}.json").write_text(json.dumps(
+            {"imagery": {"chip_pixels": pixels, "resolution_m": 0.3}, "evaluation": {"confidence_threshold": 0.13}}))
+    assert bulk_predict.run_config_path(tmp_path, "r", "USWAS").name == "config-uswas-naip-2025.json"
+    assert bulk_predict.run_chip_pixels(tmp_path, "r", "USWAS") == 512
+    with pytest.raises(SystemExit):
+        bulk_predict.run_config_path(tmp_path, "r", "USNYC")
+
+
 def test_a_fine_tune_predicts_with_its_own_checkpoint_not_its_parents(tmp_path):
     """v19 evaluates its parent too (parent-validation-usbos names v17's
     checkpoint) and that cohort sorts first; neither predict nor the run bundle
