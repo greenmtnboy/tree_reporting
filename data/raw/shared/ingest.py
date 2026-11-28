@@ -5315,7 +5315,11 @@ CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
     'USWAS': ((38.7916, 38.9959, -77.1198, -76.9093),),
     'USTEM': ((33.32, 33.4647, -111.9786, -111.8772),),
     'GRATH': ((37.85, 38.1, 23.6, 23.9),),
-    'USDEN': ((39.45, 39.95, -105.65, -104.55),),
+    # Denver's own line (boundaries/usden.json), not the metro box: the box
+    # published ~155k OSM trees in Lakewood, Aurora and the other suburbs as
+    # Denver's, and its inventory's Mountain Parks trees (~16 km west) are
+    # outside the city.
+    'USDEN': ((39.6143, 39.9142, -105.11, -104.5995),),
     'GRMLO': ((36.55, 36.9, 24.15, 24.65),),
     'GRSAN': ((36.3, 36.5, 25.3, 25.55),),
 }

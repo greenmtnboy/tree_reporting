@@ -176,11 +176,19 @@ def test_a_place_cut_from_a_city_is_a_city_beside_it():
     assert territory_city("USNPV", 41.7606, -88.3201) == "USAUR"  # Aurora
     assert territory_city("USLAN", 42.7370, -84.4839) == "USELN"  # East Lansing
     assert territory_city("USSAN", 32.6401, -117.0842) == "USCHV"  # Chula Vista
-    # Louisville's line reaches into Denver's rectangle, so it is carved out
-    # of it: Denver's OSM extract no longer publishes Louisville's trees.
-    assert carved_out_of("USDEN") == ("USLSV",)
     assert in_city_territory("USLSV", 39.9778, -105.1319)
-    assert not in_city_territory("USDEN", 39.9420, -105.1300)
+    assert not in_city_territory("USDEN", 39.9778, -105.1319)
+
+
+def test_denver_is_its_own_line():
+    """Denver's old metro box published Lakewood's and Aurora's OSM trees as
+    its own; its polygon keeps the city, airport included, and nothing else."""
+    assert carved_out_of("USDEN") == ()
+    assert in_city_territory("USDEN", 39.7392, -104.9903)  # Civic Center
+    assert in_city_territory("USDEN", 39.8561, -104.6737)  # the airport
+    assert not in_city_territory("USDEN", 39.7047, -105.0814)  # Lakewood
+    assert not in_city_territory("USDEN", 39.7294, -104.8319)  # Aurora, CO
+    assert not in_city_territory("USDEN", 39.6330, -105.3300)  # Mountain Parks
 
 
 def test_a_polygon_inside_a_rectangle_city_is_carved_out_of_it():

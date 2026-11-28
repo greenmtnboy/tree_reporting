@@ -60,7 +60,7 @@ root partial datasource usden_osm_tree_info extends tree_partition (
 )
 complete where city = 'USDEN' and usden_source = 'OSM_USDEN'
 file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/usden_osm_staging.parquet`
-where (raw_latitude >= 39.45 and raw_latitude < 39.95 and raw_longitude >= -105.65 and raw_longitude < -104.55);
+where (raw_latitude >= 39.6143 and raw_latitude < 39.9142 and raw_longitude >= -105.11 and raw_longitude < -104.5995);
 
 
 # --- Cross-source dedup and attribute merge --------------------------------
