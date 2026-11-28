@@ -9,11 +9,15 @@ keys); everything below is generated from all of them, so a city addition
 adds files and edits none by hand:
 
   shared/city_registry.py         MUNICIPAL_DATA_SOURCES, OSM_DATA_SOURCES, CITY_BOUNDS,
-                                  CITY_TERRITORY, DEDUP_CELL_METRES, OSM_CITY_NAMES
+                                  CITY_TERRITORY, DEDUP_CELL_METRES, OSM_CITY_NAMES,
+                                  SATELLITE_DATA_SOURCES, PREDICTED_DATA_SOURCES,
+                                  PREDICTED_STAGED_WITH
                                   (shared/ingest.py and shared/osm.py re-export them)
   core.preql                      the city enum
   city_ecoregion.preql            each city's home ecoregion
-  tree_common.preql               {lc}_data_updated_through, {lc}_osm_data_updated_through
+  tree_common.preql               {lc}_data_updated_through, {lc}_osm_data_updated_through,
+                                  {lc}_predicted_data_updated_through
+  satellite_tree_info.preql       {lc}_satellite_data_updated_through
   community_tree_info.preql       {lc}_community_data_updated_through
   landmark_common.preql           {lc}_landmark_data_updated_through and their greatest()
   full_tree_publish.preql         the rollup's file list
@@ -150,7 +154,18 @@ Box = tuple[float, float, float, float]
               comment(c.get("dedup_note"), "    ") + f"    {py_str(c.code)}: {c['dedup_cell_metres']},\n"),
         block("OSM_CITY_NAMES", "dict[str, str]", lambda c:
               comment(c.get("osm_name_note"), "    ") + f"    {py_str(c.code)}: {py_str(c.osm_name)},\n"),
+        imagery_block("SATELLITE_DATA_SOURCES", [c for c in cities if c.satellite],
+                      lambda c: f'"SATELLITE_{c.code}"'),
+        imagery_block("PREDICTED_DATA_SOURCES", [c for c in cities if c.predicted],
+                      lambda c: f'"PREDICTED_{c.code}"'),
+        imagery_block("PREDICTED_STAGED_WITH", [c for c in cities if c.predicted_staged_with],
+                      lambda c: py_str(c.predicted_staged_with)),
     ])
+
+
+def imagery_block(name: str, cities: list[City], value) -> str:
+    """An opt-in registry: only the cities whose manifest sets the flag."""
+    return f"{name}: dict[str, str] = {{\n" + "".join(f"    {py_str(c.code)}: {value(c)},\n" for c in cities) + "}\n"
 
 
 # ---------------------------------------------------------------------------
@@ -180,7 +195,24 @@ def tree_common(text: str, cities: list[City]) -> str:
             out.append(f"# property <*>.{c.lc}_data_updated_through datetime; # {c['data_freshness_comment']}\n")
         osm = c.get("osm_freshness_comment", f"GCS publication time of {c.name}'s staged OSM parquet")
         out.append(f"property <*>.{c.lc}_osm_data_updated_through datetime;{f' # {osm}' if osm else ''}\n")
-    return put(text, "city freshness", "#", "".join(out))
+    text = put(text, "city freshness", "#", "".join(out))
+    by_code = {c.code: c for c in cities}
+    predicted = []
+    for c in cities:
+        if not c.predicted:
+            continue
+        host = c.predicted_staged_with
+        note = (f"GCS publication time of the {by_code[host].name} run {c.name} reads its predictions from "
+                "(PREDICTED_STAGED_WITH)" if host else
+                f"GCS publication time of {c.name}'s staged bulk imagery predictions (predicted_update_time.py)")
+        predicted.append(f"property <*>.{c.lc}_predicted_data_updated_through datetime; # {note}\n")
+    return put(text, "predicted freshness", "#", "".join(predicted))
+
+
+def satellite(text: str, cities: list[City]) -> str:
+    return put(text, "satellite freshness", "#", "".join(
+        f"property <*>.{c.lc}_satellite_data_updated_through datetime; "
+        f"# when published satellite trees for {c.code} are through\n" for c in cities if c.satellite))
 
 
 def community(text: str, cities: list[City]) -> str:
@@ -291,6 +323,7 @@ REGIONS = {
     RAW / "city_ecoregion.preql": city_ecoregion,
     RAW / "tree_common.preql": tree_common,
     RAW / "community_tree_info.preql": community,
+    RAW / "satellite_tree_info.preql": satellite,
     RAW / "landmark_common.preql": landmark_common,
     RAW / "full_tree_publish.preql": rollup("trees", "tree_info"),
     RAW / "full_landmark_publish.preql": rollup("landmarks", "landmark_info"),

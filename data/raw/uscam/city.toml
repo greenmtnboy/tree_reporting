@@ -18,6 +18,9 @@ defined in uscam/cambridge_tree_info.preql as the greatest of the city's and MIT
 """
 data_freshness = "model"
 data_freshness_comment = "when Cambridge data is through"
+satellite = true
+predicted = true
+predicted_staged_with = "USBOS"
 
 [labels]
 CAMBRIDGE = "City of Cambridge"

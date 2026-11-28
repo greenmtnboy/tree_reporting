@@ -385,9 +385,12 @@ writes, from all of them:
 
 - `shared/city_registry.py`, which `shared/ingest.py` and `shared/osm.py`
   re-export (`MUNICIPAL_DATA_SOURCES`, `OSM_DATA_SOURCES`, `CITY_BOUNDS`,
-  `CITY_TERRITORY`, `DEDUP_CELL_METRES`, `OSM_CITY_NAMES`);
+  `CITY_TERRITORY`, `DEDUP_CELL_METRES`, `OSM_CITY_NAMES`, and the opt-in
+  imagery registries `SATELLITE_DATA_SOURCES`, `PREDICTED_DATA_SOURCES`,
+  `PREDICTED_STAGED_WITH`);
 - the regions between `>>> sync_cities:` and `<<< sync_cities:` markers in
   `core.preql`, `city_ecoregion.preql`, `tree_common.preql`,
+  `satellite_tree_info.preql`,
   `community_tree_info.preql`, `landmark_common.preql`, the two rollups,
   `trilogy.toml`, `dataSources.ts`, `sourceCatalog.ts` and
   `dashboardContextSource.ts`, plus both city configs whole;
@@ -435,10 +438,11 @@ Brookline, Belmont, Watertown) is the worked example; per town:
 4. **Carry over every class of row the metro published there.** Rows with no
    municipal attribution were recorded under the metro's code, and the shared
    ingests re-home them within a carved family (`territory_city`), but only
-   into a city that has the partition: add the town to
-   `SATELLITE_DATA_SOURCES` and `PREDICTED_DATA_SOURCES` if the metro is in
-   them, to `PREDICTED_STAGED_WITH` (it reads the metro run's staged file)
-   and, where the metro's LIDAR table covers it, `CANOPY_STAGED_WITH`.
+   into a city that has the partition: in the town's manifest set
+   `satellite = true` and `predicted = true` if the metro has them, and
+   `predicted_staged_with` to the metro's code (it reads the metro run's
+   staged file); where the metro's LIDAR table covers it, add it to
+   `CANOPY_STAGED_WITH`.
    `tests/test_split_towns.py` holds Boston's towns to this.
 5. **Take the town out of the metro's model**: its partition, probe, enum
    value, `@source_kept` line, and any border-dedup block (the clip replaces
@@ -500,6 +504,44 @@ city with a register of its own adds `national_register(...)` beside it
 ```bash
 cd data && trilogy refresh raw/{code}/{slug}_landmarks.preql -f {slug}_landmark_info
 ```
+
+## Imagery partitions (optional)
+
+A city gets two partitions once the tree-detection model is pointed at it:
+`SATELLITE_{code}`, detections a person accepted in the reviewer, and
+`PREDICTED_{code}`, a bulk run's detections published unreviewed (the
+weakest source: any other source's tree absorbs one). Wire both before the
+first run, so a confirmation in the reviewer has somewhere to publish; until
+a run is staged the predicted partition reads no file and is empty.
+
+1. **Manifest**: `satellite = true` and `predicted = true`. A town carved from
+   a metro whose run covers it also sets `predicted_staged_with` (above).
+2. **Model**, copying `uswas/washingtondc_tree_info.preql`: `import
+   ..satellite_tree_info;`, the two enum values, the
+   `{lc}_satellite_update_time` and `{lc}_predicted_update_time` probes, both
+   terms in the published watermark's `greatest()` (or an uploaded run never
+   rebuilds the parquet), and the two partitions with their
+   `where city = '{code}'`. No `@source_kept` guard on the predicted one.
+3. `tools/sync_cities.py`, then the tests: `test_satellite_wiring.py` and
+   `test_predicted_wiring.py` name whatever half is missing, and a city that
+   is not flagged must declare neither partition.
+
+The run itself (`imagery_model`, `urban_tree_ml.bulk_predict`):
+
+4. **Plan** over the city's real ground, not its territory box:
+   `plan --city {code} --boundary boundaries/{lc}.json --fill`, then drop the
+   tiles that do not touch land (the Boston towns run clipped 32% away to
+   water). The plan records the run and checkpoint, so plan with the model
+   you will predict with.
+5. **Pin the NAIP year** the model was tuned on (`--year`); without it a tile
+   not yet cached takes the newest year, and a model can be much worse on an
+   imagery cohort it never saw (v25 on Boston's 2025 flight).
+6. **Predict** in time-boxed batches on one machine (`--device dml` on the AMD
+   GPU), retry the errors, then **assemble at that checkpoint's best-F2
+   threshold for the city** from its evaluation, never the last run's cutoff.
+7. **Upload** the staged file (freeze the reviewer first), then force the
+   city's `city-` job (the probe moves, but force it; `docs/DATA_PIPELINE.md`),
+   its `derived-` job, and the world blocks.
 
 ## Notable registers (optional)
 

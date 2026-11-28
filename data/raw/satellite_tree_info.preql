@@ -8,41 +8,46 @@ import tree_common;
 # own model as a `complete where city = 'X' and {code}_source =
 # 'SATELLITE_X'` partition reading ../satellite_tree_info.py, never here.
 #
-# A city is added by listing it in SATELLITE_DATA_SOURCES (shared/ingest.py),
-# declaring its column below, and wiring its model:
+# A city is added by setting `satellite = true` in its manifest (city.toml;
+# tools/sync_cities.py then writes SATELLITE_DATA_SOURCES and its column
+# below) and wiring its model:
 # `test_satellite_city_is_fully_wired` names whatever is missing.
-property <*>.ussfo_satellite_data_updated_through datetime; # when published satellite trees for USSFO are through
-property <*>.usbos_satellite_data_updated_through datetime; # when published satellite trees for USBOS are through
-property <*>.usbel_satellite_data_updated_through datetime; # when published satellite trees for USBEL are through
-property <*>.usbkl_satellite_data_updated_through datetime; # when published satellite trees for USBKL are through
-property <*>.uscam_satellite_data_updated_through datetime; # when published satellite trees for USCAM are through
-property <*>.ussom_satellite_data_updated_through datetime; # when published satellite trees for USSOM are through
-property <*>.uswat_satellite_data_updated_through datetime; # when published satellite trees for USWAT are through
-property <*>.usnyc_satellite_data_updated_through datetime; # when published satellite trees for USNYC are through
-property <*>.usnwt_satellite_data_updated_through datetime; # when published satellite trees for USNWT are through
-property <*>.usmil_satellite_data_updated_through datetime; # when published satellite trees for USMIL are through
-property <*>.uspea_satellite_data_updated_through datetime; # when published satellite trees for USPEA are through
-property <*>.uslyn_satellite_data_updated_through datetime; # when published satellite trees for USLYN are through
-property <*>.ussal_satellite_data_updated_through datetime; # when published satellite trees for USSAL are through
-property <*>.usmed_satellite_data_updated_through datetime; # when published satellite trees for USMED are through
-property <*>.usded_satellite_data_updated_through datetime; # when published satellite trees for USDED are through
-property <*>.usqcy_satellite_data_updated_through datetime; # when published satellite trees for USQCY are through
-property <*>.ussau_satellite_data_updated_through datetime; # when published satellite trees for USSAU are through
-property <*>.usnee_satellite_data_updated_through datetime; # when published satellite trees for USNEE are through
-property <*>.usswa_satellite_data_updated_through datetime; # when published satellite trees for USSWA are through
-property <*>.uswlt_satellite_data_updated_through datetime; # when published satellite trees for USWLT are through
+# >>> sync_cities: satellite freshness
 property <*>.usarl_satellite_data_updated_through datetime; # when published satellite trees for USARL are through
-property <*>.usmbh_satellite_data_updated_through datetime; # when published satellite trees for USMBH are through
-property <*>.usrev_satellite_data_updated_through datetime; # when published satellite trees for USREV are through
-property <*>.usmld_satellite_data_updated_through datetime; # when published satellite trees for USMLD are through
-property <*>.useve_satellite_data_updated_through datetime; # when published satellite trees for USEVE are through
-property <*>.usche_satellite_data_updated_through datetime; # when published satellite trees for USCHE are through
-property <*>.uswnt_satellite_data_updated_through datetime; # when published satellite trees for USWNT are through
+property <*>.usbel_satellite_data_updated_through datetime; # when published satellite trees for USBEL are through
 property <*>.usbev_satellite_data_updated_through datetime; # when published satellite trees for USBEV are through
-property <*>.uslyf_satellite_data_updated_through datetime; # when published satellite trees for USLYF are through
-property <*>.usmrs_satellite_data_updated_through datetime; # when published satellite trees for USMRS are through
-property <*>.uswel_satellite_data_updated_through datetime; # when published satellite trees for USWEL are through
-property <*>.usnah_satellite_data_updated_through datetime; # when published satellite trees for USNAH are through
-property <*>.usdan_satellite_data_updated_through datetime; # when published satellite trees for USDAN are through
-property <*>.uswnc_satellite_data_updated_through datetime; # when published satellite trees for USWNC are through
+property <*>.usbkl_satellite_data_updated_through datetime; # when published satellite trees for USBKL are through
+property <*>.usbos_satellite_data_updated_through datetime; # when published satellite trees for USBOS are through
+property <*>.uscam_satellite_data_updated_through datetime; # when published satellite trees for USCAM are through
 property <*>.uscan_satellite_data_updated_through datetime; # when published satellite trees for USCAN are through
+property <*>.usche_satellite_data_updated_through datetime; # when published satellite trees for USCHE are through
+property <*>.usdan_satellite_data_updated_through datetime; # when published satellite trees for USDAN are through
+property <*>.usded_satellite_data_updated_through datetime; # when published satellite trees for USDED are through
+property <*>.useve_satellite_data_updated_through datetime; # when published satellite trees for USEVE are through
+property <*>.uslax_satellite_data_updated_through datetime; # when published satellite trees for USLAX are through
+property <*>.uslyf_satellite_data_updated_through datetime; # when published satellite trees for USLYF are through
+property <*>.uslyn_satellite_data_updated_through datetime; # when published satellite trees for USLYN are through
+property <*>.usmbh_satellite_data_updated_through datetime; # when published satellite trees for USMBH are through
+property <*>.usmed_satellite_data_updated_through datetime; # when published satellite trees for USMED are through
+property <*>.usmil_satellite_data_updated_through datetime; # when published satellite trees for USMIL are through
+property <*>.usmld_satellite_data_updated_through datetime; # when published satellite trees for USMLD are through
+property <*>.usmrs_satellite_data_updated_through datetime; # when published satellite trees for USMRS are through
+property <*>.usnah_satellite_data_updated_through datetime; # when published satellite trees for USNAH are through
+property <*>.usnee_satellite_data_updated_through datetime; # when published satellite trees for USNEE are through
+property <*>.usnwt_satellite_data_updated_through datetime; # when published satellite trees for USNWT are through
+property <*>.usnyc_satellite_data_updated_through datetime; # when published satellite trees for USNYC are through
+property <*>.uspea_satellite_data_updated_through datetime; # when published satellite trees for USPEA are through
+property <*>.usqcy_satellite_data_updated_through datetime; # when published satellite trees for USQCY are through
+property <*>.usrev_satellite_data_updated_through datetime; # when published satellite trees for USREV are through
+property <*>.ussal_satellite_data_updated_through datetime; # when published satellite trees for USSAL are through
+property <*>.ussau_satellite_data_updated_through datetime; # when published satellite trees for USSAU are through
+property <*>.ussfo_satellite_data_updated_through datetime; # when published satellite trees for USSFO are through
+property <*>.ussom_satellite_data_updated_through datetime; # when published satellite trees for USSOM are through
+property <*>.usswa_satellite_data_updated_through datetime; # when published satellite trees for USSWA are through
+property <*>.uswas_satellite_data_updated_through datetime; # when published satellite trees for USWAS are through
+property <*>.uswat_satellite_data_updated_through datetime; # when published satellite trees for USWAT are through
+property <*>.uswel_satellite_data_updated_through datetime; # when published satellite trees for USWEL are through
+property <*>.uswlt_satellite_data_updated_through datetime; # when published satellite trees for USWLT are through
+property <*>.uswnc_satellite_data_updated_through datetime; # when published satellite trees for USWNC are through
+property <*>.uswnt_satellite_data_updated_through datetime; # when published satellite trees for USWNT are through
+# <<< sync_cities: satellite freshness

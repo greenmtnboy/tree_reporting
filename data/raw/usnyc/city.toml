@@ -18,6 +18,7 @@ dedup_note = """
 dedup_cell_metres = 10
 data_freshness = "probe"
 data_freshness_comment = "when NYC data is through"
+satellite = true
 
 [labels]
 NYC_OPENDATA = "NYC Open Data"

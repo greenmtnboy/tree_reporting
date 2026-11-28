@@ -30,6 +30,10 @@ Schema (every key is required unless marked optional):
     municipal_sources = ["DENVER_OPENDATA"]             # may be empty
     dedup_cell_metres = 10
     data_freshness = "probe" | "model" | "none"         # tree_common's {lc}_data_updated_through
+    satellite = true                  # optional; a SATELLITE_{code} partition (reviewed imagery)
+    predicted = true                  # optional; a PREDICTED_{code} partition (bulk imagery)
+    predicted_staged_with = "USBOS"   # optional; read predictions from that city's staged
+                                      # run file (PREDICTED_STAGED_WITH); needs predicted
     *_note = '''...'''                # optional; written as comments above the entry
                                       # (bounds_note, territory_note,
                                       # municipal_sources_note, dedup_note,
@@ -88,6 +92,18 @@ class City:
     def osm_name(self) -> str:
         return self.data.get("osm_name", self.name)
 
+    @property
+    def satellite(self) -> bool:
+        return bool(self.data.get("satellite", False))
+
+    @property
+    def predicted(self) -> bool:
+        return bool(self.data.get("predicted", False))
+
+    @property
+    def predicted_staged_with(self) -> str | None:
+        return self.data.get("predicted_staged_with")
+
     def job(self, kind: str) -> dict[str, Any]:
         return self.data["jobs"][kind]
 
@@ -113,6 +129,12 @@ def validate(city: City) -> None:
         job = city["jobs"].get(kind)
         if not job or not {"schedule", "timeout_seconds", "memory_mb"} <= set(job):
             raise ValueError(f"{city.path}: [jobs.{kind}] needs schedule, timeout_seconds, memory_mb")
+    for flag in ("satellite", "predicted"):
+        if not isinstance(city.data.get(flag, False), bool):
+            raise ValueError(f"{city.path}: {flag} is true or false")
+    host = city.predicted_staged_with
+    if host is not None and (not city.predicted or not re.fullmatch(r"[A-Z]{5}", host) or host == city.code):
+        raise ValueError(f"{city.path}: predicted_staged_with names another city and needs predicted = true")
     for box in city["territory"]:
         if not isinstance(box, str) and len(box) != 4:
             raise ValueError(f"{city.path}: territory box {box!r} is not four numbers")
@@ -132,6 +154,14 @@ def load_all(raw: Path = RAW) -> list[City]:
         if c.code in seen:
             raise ValueError(f"{c.code} declared by {seen[c.code]} and {c.path}")
         seen[c.code] = c.path
+    by_code = {c.code: c for c in cities}
+    for c in cities:
+        if c.predicted_staged_with is None:
+            continue
+        host = by_code.get(c.predicted_staged_with)
+        if host is None or not host.predicted or host.predicted_staged_with:
+            raise ValueError(f"{c.path}: predicted_staged_with {c.predicted_staged_with} is not a city "
+                             "that stages its own predictions")
     return cities
 
 

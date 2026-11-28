@@ -263,7 +263,9 @@ Every tree row carries `data_source`. The value list is `DATA_SOURCES` in
   `circumference` without a unit above 10 is read as centimetres. A
   city-unique column goes in `OSM_EXTRA_NULL_COLUMNS` and the city's own
   staging model.
-- **Satellite** (`SATELLITE_{CODE}`, `SATELLITE_DATA_SOURCES`): reviewed
+- **Satellite** (`SATELLITE_{CODE}`, `SATELLITE_DATA_SOURCES`, opt-in by
+  `satellite = true` in the city's manifest, as `PREDICTED_{CODE}` is by
+  `predicted = true`; EXTENDING.md "Imagery partitions"): reviewed
   aerial-imagery detections published by the reviewer's `/satellite` page to
   `satellite/published_trees.ndjson`, read by `raw/satellite_tree_info.py`
   with one freshness column per city. The model's DBH estimate is never

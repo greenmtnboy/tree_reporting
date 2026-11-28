@@ -22,6 +22,9 @@ flags at 64.9% recall.  Default kept, as Salem's and Dedham's.
 """
 dedup_cell_metres = 10
 data_freshness = "probe"
+satellite = true
+predicted = true
+predicted_staged_with = "USBOS"
 
 [labels]
 ARLINGTON_MA = "Town of Arlington, MA"

@@ -2410,52 +2410,16 @@ def satellite_source_for(city_code: str) -> str:
 # (reviewer/satellite.ts) and that the reviewer published to
 # `satellite/published_trees.ndjson` in the public bucket, which
 # `satellite_tree_info.py` reads the way `community_tree_info.py` reads the
-# community export.  Opt-in per city, like OSM was while only two cities were
-# wired: a city belongs here once imagery has been run over it and its tree
-# model declares the `SATELLITE_{code}` enum value, the partition, and the
+# community export.  Opt-in per city (`satellite = true` in its manifest;
+# generated into shared/city_registry.py): a city belongs here once imagery
+# has been run over it and its tree model declares the `SATELLITE_{code}` enum value, the partition, and the
 # freshness column -- `test_satellite_city_is_fully_wired` checks each half,
 # because a half-wired city publishes zero satellite rows rather than an
 # error.  The rows overlap every other partition by construction (the model
 # sees the trees the inventory already has), so the shared cluster merge
 # classes them as a fourth source below municipal and community and above
 # OSM; see tree_dedup.preql.
-SATELLITE_DATA_SOURCES: dict[str, str] = {
-    "USSFO": satellite_source_for("USSFO"),
-    "USBOS": satellite_source_for("USBOS"),
-    "USBEL": satellite_source_for("USBEL"),
-    "USBKL": satellite_source_for("USBKL"),
-    "USCAM": satellite_source_for("USCAM"),
-    "USSOM": satellite_source_for("USSOM"),
-    "USWAT": satellite_source_for("USWAT"),
-    "USNYC": satellite_source_for("USNYC"),
-    "USNWT": satellite_source_for("USNWT"),
-    "USMIL": satellite_source_for("USMIL"),
-    "USPEA": satellite_source_for("USPEA"),
-    "USLYN": satellite_source_for("USLYN"),
-    "USSAL": satellite_source_for("USSAL"),
-    "USMED": satellite_source_for("USMED"),
-    "USDED": satellite_source_for("USDED"),
-    "USQCY": satellite_source_for("USQCY"),
-    "USSAU": satellite_source_for("USSAU"),
-    "USNEE": satellite_source_for("USNEE"),
-    "USSWA": satellite_source_for("USSWA"),
-    "USWLT": satellite_source_for("USWLT"),
-    "USARL": satellite_source_for("USARL"),
-    "USMBH": satellite_source_for("USMBH"),
-    "USREV": satellite_source_for("USREV"),
-    "USMLD": satellite_source_for("USMLD"),
-    "USEVE": satellite_source_for("USEVE"),
-    "USCHE": satellite_source_for("USCHE"),
-    "USWNT": satellite_source_for("USWNT"),
-    "USBEV": satellite_source_for("USBEV"),
-    "USLYF": satellite_source_for("USLYF"),
-    "USMRS": satellite_source_for("USMRS"),
-    "USWEL": satellite_source_for("USWEL"),
-    "USNAH": satellite_source_for("USNAH"),
-    "USDAN": satellite_source_for("USDAN"),
-    "USWNC": satellite_source_for("USWNC"),
-    "USCAN": satellite_source_for("USCAN"),
-}
+SATELLITE_DATA_SOURCES: dict[str, str] = city_registry.SATELLITE_DATA_SOURCES
 
 def predicted_source_for(city_code: str) -> str:
     """The `data_source` label for unreviewed bulk imagery predictions in *city_code*."""
@@ -2470,82 +2434,16 @@ def predicted_source_for(city_code: str) -> str:
 # another predicted row, and gives the cluster nothing -- its values publish
 # only when it is alone (see tree_dedup.preql).  A person confirming one in the
 # reviewer publishes a `SATELLITE_{code}` row, which then owns the cluster.
-PREDICTED_DATA_SOURCES: dict[str, str] = {
-    "USSFO": predicted_source_for("USSFO"),
-    "USBOS": predicted_source_for("USBOS"),
-    "USBEL": predicted_source_for("USBEL"),
-    "USBKL": predicted_source_for("USBKL"),
-    "USCAM": predicted_source_for("USCAM"),
-    "USSOM": predicted_source_for("USSOM"),
-    "USWAT": predicted_source_for("USWAT"),
-    "USNWT": predicted_source_for("USNWT"),
-    "USMIL": predicted_source_for("USMIL"),
-    "USPEA": predicted_source_for("USPEA"),
-    "USLYN": predicted_source_for("USLYN"),
-    "USSAL": predicted_source_for("USSAL"),
-    "USMED": predicted_source_for("USMED"),
-    "USDED": predicted_source_for("USDED"),
-    "USQCY": predicted_source_for("USQCY"),
-    "USSAU": predicted_source_for("USSAU"),
-    "USNEE": predicted_source_for("USNEE"),
-    "USSWA": predicted_source_for("USSWA"),
-    "USWLT": predicted_source_for("USWLT"),
-    "USARL": predicted_source_for("USARL"),
-    "USMBH": predicted_source_for("USMBH"),
-    "USREV": predicted_source_for("USREV"),
-    "USMLD": predicted_source_for("USMLD"),
-    "USEVE": predicted_source_for("USEVE"),
-    "USCHE": predicted_source_for("USCHE"),
-    "USWNT": predicted_source_for("USWNT"),
-    "USBEV": predicted_source_for("USBEV"),
-    "USLYF": predicted_source_for("USLYF"),
-    "USMRS": predicted_source_for("USMRS"),
-    "USWEL": predicted_source_for("USWEL"),
-    "USNAH": predicted_source_for("USNAH"),
-    "USDAN": predicted_source_for("USDAN"),
-    "USWNC": predicted_source_for("USWNC"),
-    "USCAN": predicted_source_for("USCAN"),
-}
+# Opt-in per city: `predicted = true` in its manifest.
+PREDICTED_DATA_SOURCES: dict[str, str] = city_registry.PREDICTED_DATA_SOURCES
 
 # A prediction run covers the ground it was pointed at, not a city: Boston's
 # is a circle over the whole metro, staged as one file under USBOS.  A town
 # carved out of that ground reads the same file and keeps the rows inside its
 # own territory (predicted_tree_info.py), so the imagery side stages one file
-# per run and never needs to know where a town line is.
-PREDICTED_STAGED_WITH: dict[str, str] = {
-    "USBEL": "USBOS",
-    "USBKL": "USBOS",
-    "USCAM": "USBOS",
-    "USSOM": "USBOS",
-    "USWAT": "USBOS",
-    "USNWT": "USBOS",
-    "USMIL": "USBOS",
-    "USPEA": "USBOS",
-    "USLYN": "USBOS",
-    "USSAL": "USBOS",
-    "USMED": "USBOS",
-    "USDED": "USBOS",
-    "USQCY": "USBOS",
-    "USSAU": "USBOS",
-    "USNEE": "USBOS",
-    "USSWA": "USBOS",
-    "USWLT": "USBOS",
-    "USARL": "USBOS",
-    "USMBH": "USBOS",
-    "USREV": "USBOS",
-    "USMLD": "USBOS",
-    "USEVE": "USBOS",
-    "USCHE": "USBOS",
-    "USWNT": "USBOS",
-    "USBEV": "USBOS",
-    "USLYF": "USBOS",
-    "USMRS": "USBOS",
-    "USWEL": "USBOS",
-    "USNAH": "USBOS",
-    "USDAN": "USBOS",
-    "USWNC": "USBOS",
-    "USCAN": "USBOS",
-}
+# per run and never needs to know where a town line is.  The town's manifest
+# names the host: `predicted_staged_with = "USBOS"`.
+PREDICTED_STAGED_WITH: dict[str, str] = city_registry.PREDICTED_STAGED_WITH
 
 
 def notable_source_for(city_code: str) -> str:
