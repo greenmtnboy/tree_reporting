@@ -11,11 +11,13 @@ biome = "Mediterranean Forests, Woodlands & Scrub"
 realm = "nearctic"
 bounds = [33.7, 34.35, -118.7, -118.1]
 territory_note = """
-Santa Monica's polygon is carved out of the box (carved_out_of).  The
-model also publishes West Hollywood's inventory, so Los Angeles stays a
-rectangle until that union is its own city.
+Los Angeles's own line plus West Hollywood's, whose inventory this model
+also publishes (boundaries/uslax.json, one MultiPolygon: fetch_boundary.py
+--at LA --also-at WeHo).  Was the whole basin box until 2026-11; the
+line drops 0.1% of the LA inventory (553/588k, at its edges) and ~59% of
+OSM (Inglewood, Pasadena, Palos Verdes and the other cities in the box).
 """
-territory = [[33.7, 34.35, -118.7, -118.1]]
+territory = [[33.7036, 34.3374, -118.6682, -118.1552]]
 municipal_sources = ["LOSANGELES_OPENDATA", "WEST_HOLLYWOOD"]
 dedup_note = """
 Recalibrated on the Bureau of Street Services layer (2026-11): 99.4%

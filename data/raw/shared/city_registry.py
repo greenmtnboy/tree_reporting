@@ -1252,10 +1252,12 @@ CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
     "USHOU": ((29.5162, 30.156, -95.9098, -95.0126),),
     "USLAN": ((42.6474, 42.7949, -84.7013, -84.4176),),
     "USLAS": ((36.1295, 36.4015, -115.4066, -115.0621),),
-    # Santa Monica's polygon is carved out of the box (carved_out_of).  The
-    # model also publishes West Hollywood's inventory, so Los Angeles stays a
-    # rectangle until that union is its own city.
-    "USLAX": ((33.7, 34.35, -118.7, -118.1),),
+    # Los Angeles's own line plus West Hollywood's, whose inventory this model
+    # also publishes (boundaries/uslax.json, one MultiPolygon: fetch_boundary.py
+    # --at LA --also-at WeHo).  Was the whole basin box until 2026-11; the
+    # line drops 0.1% of the LA inventory (553/588k, at its edges) and ~59% of
+    # OSM (Inglewood, Pasadena, Palos Verdes and the other cities in the box).
+    "USLAX": ((33.7036, 34.3374, -118.6682, -118.1552),),
     "USLOU": ((37.9972, 38.3803, -85.9472, -85.4048),),
     "USLSV": ((39.9396, 39.9982, -105.1893, -105.1073),),
     "USLVL": ((40.35, 40.48, -105.29, -104.96),),
