@@ -1,0 +1,59 @@
+# Richmond's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "USRIC"
+name = "Richmond"
+slug = "richmond"
+center = [-77.436, 37.5407]
+ecoregion = 399
+ecoregion_name = "Southeast US conifer savannas"
+usda_zone = 7
+biome = "Temperate Grasslands, Savannas & Shrublands"
+realm = "nearctic"
+bounds = [37.44, 37.61, -77.61, -77.38]
+territory = [[37.4465, 37.6029, -77.6012, -77.3855]]
+municipal_sources = ["RICHMOND_OPENDATA"]
+dedup_note = """
+Calibrated 2026-11-20: 8 m keeps 2.6 true per false at the margin; 10 m
+is barely above 1 (1.14) at 7.8% false, so stop at 8.
+"""
+dedup_cell_metres = 8
+data_freshness = "probe"
+
+[labels]
+RICHMOND_OPENDATA = "Richmond Open Data"
+
+[[tree_sources]]
+label = "City of Richmond Public Works, Urban Forestry - Tree Inventory, public view (no licence stated; displayed with attribution only, not licensed for reuse)"
+url = "https://www.arcgis.com/home/item.html?id=902a0284181e4500aa220a6037d06d3d"
+
+[[landmark_sources]]
+label = "City of Richmond - Old and Historic Sites (no licence stated; displayed with attribution only, not licensed for reuse); National Park Service - National Register of Historic Places"
+url = "https://services1.arcgis.com/k3vhq11XkBNeeOfM/arcgis/rest/services/City_Old_and_Historic_Sites/FeatureServer/0"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city USRIC`.
+"""
+
+[jobs.osm]
+schedule = "0 45 9 * * TUE"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 26 1 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

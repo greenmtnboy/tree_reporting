@@ -1,0 +1,59 @@
+# Fredericton's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "CAFRE"
+name = "Fredericton"
+slug = "fredericton"
+center = [-66.65, 45.96]
+ecoregion = 335
+ecoregion_name = "Gulf of St. Lawrence lowland forests"
+usda_zone = 5
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "nearctic"
+bounds = [45.88, 46.03, -66.79, -66.56]
+territory = [[45.88, 46.03, -66.79, -66.56]]
+municipal_sources = ["FREDERICTON_OPENDATA"]
+dedup_note = """
+osm_dedup_validation (2026-11-21): 4 m flags 1,088, 3.0% false, 51.5% recall;
+6 m is 6.9% false; mutual-NN 39% in the 5-10 m band.
+"""
+dedup_cell_metres = 4
+data_freshness = "probe"
+
+[labels]
+FREDERICTON_OPENDATA = "Fredericton Open Data"
+
+[[tree_sources]]
+label = "City of Fredericton - Tree Inventory (Open Government License - City of Fredericton)"
+url = "https://data-fredericton.opendata.arcgis.com/datasets/1778707bb5a44f72b40aebcb297da092_37"
+
+[[landmark_sources]]
+label = "City of Fredericton - Heritage Preservation Areas (no licence stated; displayed with attribution only, not licensed for reuse)"
+url = "https://www.arcgis.com/home/item.html?id=7a92b67c2593433196e35dc1f3e6e763"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city CAFRE`.
+"""
+
+[jobs.osm]
+schedule = "0 30 11 * * THU"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 14 0 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

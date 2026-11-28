@@ -1,0 +1,58 @@
+# Kelowna's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "CAKEL"
+name = "Kelowna"
+slug = "kelowna"
+center = [-119.496, 49.888]
+ecoregion = 362
+ecoregion_name = "Okanogan dry forests"
+usda_zone = 7
+biome = "Temperate Conifer Forests"
+realm = "nearctic"
+bounds = [49.75, 50.0, -119.6, -119.3]
+territory = [[49.75, 50.0, -119.6, -119.3]]
+municipal_sources = ["KELOWNA_OPENDATA"]
+dedup_note = """
+Kelowna's OSM overlaps its inventory more heavily than any other city in
+this batch -- 785 of 2,180 nodes within 2 m of an inventory tree at
+99.2% mutual-NN -- and the marginal table keeps paying further out than
+its neighbours: 6->8 removes 72 duplicates for 34 hidden trees (2.12),
+8->10 removes 34 for 19 (1.79), 10->14 removes 18 for 56 (0.32).
+"""
+dedup_cell_metres = 10
+data_freshness = "probe"
+
+[labels]
+KELOWNA_OPENDATA = "Kelowna Open Data"
+
+[[tree_sources]]
+label = "City of Kelowna Open Data - Tree Inventory"
+url = "https://opendata.kelowna.ca/datasets/tree-inventory"
+
+[[landmark_sources]]
+label = "City of Kelowna Open Data - Heritage Registry"
+url = "https://opendata.kelowna.ca/datasets/heritage-registry"
+
+[jobs.city]
+schedule = "0 40 19 * * WED,SAT"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city CAKEL`.
+"""
+
+[jobs.osm]
+schedule = "0 0 4 * * TUE"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 14 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048

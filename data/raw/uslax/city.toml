@@ -1,0 +1,58 @@
+# Los Angeles's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "USLAX"
+name = "Los Angeles"
+slug = "losangeles"
+center = [-118.2437, 34.0522]
+ecoregion = 422
+ecoregion_name = "California coastal sage and chaparral"
+usda_zone = 10
+biome = "Mediterranean Forests, Woodlands & Scrub"
+realm = "nearctic"
+bounds = [33.7, 34.35, -118.7, -118.1]
+territory_note = """
+Santa Monica's polygon is carved out of the box (carved_out_of).  The
+model also publishes West Hollywood's inventory, so Los Angeles stays a
+rectangle until that union is its own city.
+"""
+territory = [[33.7, 34.35, -118.7, -118.1]]
+municipal_sources = ["LOSANGELES_OPENDATA", "WEST_HOLLYWOOD"]
+dedup_note = """
+Recalibrated on the Bureau of Street Services layer (2026-11): 99.4%
+mutual-NN under 2 m, 86.8% at 2-5 m, 41.8% at 5-10 m (n=880) -- a clean
+5 m break.  The old 20 m cell (67.2% over n=296) was measured against the
+1990s Socrata inventory, whose coordinates were truncated to ~90 m.
+"""
+dedup_cell_metres = 10
+data_freshness = "model"
+data_freshness_comment = "derived in uslax/losangeles_tree_info.preql from its two inventories"
+
+[labels]
+LOSANGELES_OPENDATA = "LA Bureau of Street Services"
+WEST_HOLLYWOOD = "West Hollywood Open Data"
+
+[[tree_sources]]
+label = "LA GeoHub (Trees, Bureau of Street Services)"
+url = "https://www.arcgis.com/home/item.html?id=266c6255b1fc4ae8b8f100d8696e1fa4"
+
+[[tree_sources]]
+label = "City of West Hollywood - City Tree Inventory (2015, CC0 1.0)"
+url = "https://data.weho.org/Infrastructure/City-Tree-Inventory/qqwt-wx9z"
+
+[[landmark_sources]]
+label = "No landmark dataset in production yet (empty placeholder parquet)"
+
+[jobs.city]
+schedule = "0 40 14 * * SAT,TUE"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[jobs.osm]
+schedule = "0 0 2 * * FRI"
+timeout_seconds = 2400
+memory_mb = 2048
+
+[jobs.landmarks]
+schedule = "0 12 4 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048

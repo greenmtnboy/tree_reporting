@@ -1,0 +1,62 @@
+# Groningen's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "NLGRQ"
+name = "Groningen"
+slug = "groningen"
+center = [6.5665, 53.2194]
+ecoregion = 664
+ecoregion_name = "European Atlantic mixed forests"
+usda_zone = 8
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "palearctic"
+bounds = [53.1, 53.32, 6.45, 6.8]
+territory = [[53.1, 53.32, 6.45, 6.8]]
+municipal_sources = ["GRONINGEN_OPENDATA"]
+dedup_note = """
+osm_dedup_validation 2026-11-20: 6m 3170/46 (1.4%), marginal 5.0; 8m 1.6.
+"""
+dedup_cell_metres = 6
+data_freshness = "probe"
+
+[labels]
+GRONINGEN_OPENDATA = "Groningen Open Data"
+
+[[tree_sources]]
+label = "Gemeente Groningen - Bomen (CC BY 4.0)"
+url = "https://data.groningen.nl/dataset/bomen/04da3775-07f0-4388-bc12-7cd7536b04cd"
+
+[[landmark_sources]]
+label = "Gemeente Groningen - Monumenten (CC BY 4.0)"
+url = "https://data.overheid.nl/dataset/groningen-monumenten-gemeente-groningen"
+
+[[landmark_sources]]
+label = "Rijksdienst voor het Cultureel Erfgoed - Rijksmonumenten via PDOK (CC BY 4.0)"
+url = "https://service.pdok.nl/rce/ps-ch/wfs/v1_0?request=GetCapabilities&service=WFS"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city NLGRQ`.
+"""
+
+[jobs.osm]
+schedule = "0 15 10 * * SAT"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 46 1 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

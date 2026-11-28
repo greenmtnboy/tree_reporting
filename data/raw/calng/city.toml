@@ -1,0 +1,77 @@
+# Langley Township's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "CALNG"
+name = "Langley Township"
+slug = "langley"
+center = [-122.58, 49.1044]
+ecoregion = 364
+ecoregion_name = "Puget lowland forests"
+usda_zone = 8
+biome = "Temperate Conifer Forests"
+realm = "nearctic"
+bounds = [49.0, 49.21, -122.681, -122.4]
+territory_note = """
+West edge follows 196 St, the Surrey border, in steps: the two
+inventories come within metres of each other along it, so each band's
+edge sits between Surrey's easternmost and Langley's westernmost tree.
+North edge steps along the Fraser under Maple Ridge (CAMPR), which is cut
+to match; the -122.64..-122.62 band reaches the Greenway at Craigentinney.
+"""
+territory = [
+    [49.0, 49.01, -122.6801, -122.64],
+    [49.01, 49.1, -122.681, -122.64],
+    [49.1, 49.128, -122.68, -122.64],
+    [49.128, 49.13, -122.6797, -122.64],
+    [49.13, 49.14, -122.67955, -122.64],
+    [49.14, 49.17, -122.6793, -122.64],
+    [49.17, 49.195, -122.68, -122.64],
+    [49.0, 49.208, -122.64, -122.62],
+    [49.0, 49.179, -122.62, -122.53],
+    [49.0, 49.17, -122.53, -122.4],
+]
+municipal_sources = ["LANGLEY_OPENDATA"]
+dedup_note = """
+osm_dedup_validation (2026-11-22): 4 m flags 1,186, 0.8% false, 77.4% recall;
+6 m adds 131 for 36 more false.
+"""
+dedup_cell_metres = 4
+data_freshness = "probe"
+
+[labels]
+LANGLEY_OPENDATA = "Langley Township Open Data"
+
+[[tree_sources]]
+label = "Township of Langley - Tree Inventory (Open Government License - Township of Langley; contains information licensed under the Open Government License - Township of Langley)"
+url = "https://www.arcgis.com/home/item.html?id=07ed48e3e633476aba03b1a800d616af"
+
+[[landmark_sources]]
+label = "Township of Langley - Langley's Historic Places inventory (no licence stated; displayed with attribution only, not licensed for reuse); Province of British Columbia - Heritage Conservation Areas of BC (Open Government Licence - British Columbia)"
+url = "https://www.arcgis.com/home/item.html?id=838d297431b747128230a452f038b503"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city CALNG`.
+"""
+
+[jobs.osm]
+schedule = "0 45 11 * * FRI"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 32 0 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

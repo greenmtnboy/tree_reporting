@@ -1,0 +1,63 @@
+# Salem's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "USSLM"
+name = "Salem"
+slug = "salem"
+center = [-123.0351, 44.9429]
+ecoregion = 403
+ecoregion_name = "Willamette Valley oak savanna"
+usda_zone = 8
+biome = "Temperate Grasslands, Savannas & Shrublands"
+realm = "nearctic"
+bounds = [44.83, 45.03, -123.14, -122.92]
+territory = [[44.8507, 45.0166, -123.123, -122.9352]]
+municipal_sources = ["SALEM_OPENDATA"]
+dedup_note = """
+osm_dedup_validation 2026-11-23: 8m is the last cell whose added
+flags are mostly real (+13 true / +6 false); 10m adds as many false as true.
+"""
+dedup_cell_metres = 8
+data_freshness = "probe"
+
+[labels]
+SALEM_OPENDATA = "Salem Open Data"
+
+[[tree_sources]]
+label = "City of Salem - City Trees (resale prohibited by the City; displayed with attribution only, not licensed for reuse)"
+url = "https://www.arcgis.com/home/item.html?id=e5397978d59f46ec96f72a1dfc660919"
+
+[[landmark_sources]]
+label = "City of Salem - Historic Buildings (resale prohibited by the City; displayed with attribution only, not licensed for reuse)"
+url = "https://www.arcgis.com/home/item.html?id=a49aaabfe16945ad90053f340b2c96bf"
+
+[[landmark_sources]]
+label = "National Park Service - National Register of Historic Places"
+url = "https://www.nps.gov/subjects/nationalregister/data-downloads.htm"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city USSLM`.
+"""
+
+[jobs.osm]
+schedule = "0 45 12 * * SAT"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 15 0 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

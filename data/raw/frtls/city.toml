@@ -1,0 +1,62 @@
+# Toulouse's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "FRTLS"
+name = "Toulouse"
+slug = "toulouse"
+center = [1.4442, 43.6047]
+ecoregion = 686
+ecoregion_name = "Western European broadleaf forests"
+usda_zone = 9
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "palearctic"
+bounds = [43.47, 43.75, 1.2, 1.6]
+territory = [[43.47, 43.75, 1.2, 1.6]]
+municipal_sources = ["TOULOUSE_OPENDATA"]
+dedup_note = """
+Calibrated 2026-11-17 (osm_dedup_validation.py, local inventory parquet)
+against the staged extract. OSM is largely an import of the inventory
+(118k pairs within 2 m, median d1/d2 0.00). Mutual-NN 67.7% in 2-5 m, 8.1%
+in 5-10 m (n=307). Marginal table: 4->6 removes 152 duplicates for 144
+hidden trees (1.06), 6->8 removes 24 for 112 (0.21), so 6 m.
+"""
+dedup_cell_metres = 6
+data_freshness = "probe"
+
+[labels]
+TOULOUSE_OPENDATA = "Toulouse Open Data"
+
+[[tree_sources]]
+label = "Toulouse Métropole - Arbres urbains (Licence Ouverte v2.0)"
+url = "https://data.toulouse-metropole.fr/explore/dataset/arbres-urbains/"
+
+[[landmark_sources]]
+label = "Ministère de la Culture - Immeubles protégés au titre des Monuments Historiques (Licence Ouverte)"
+url = "https://www.data.gouv.fr/datasets/immeubles-proteges-au-titre-des-monuments-historiques-2"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city FRTLS`.
+"""
+
+[jobs.osm]
+schedule = "0 15 8 * * WED"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 52 2 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

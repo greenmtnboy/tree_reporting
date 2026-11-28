@@ -1,0 +1,65 @@
+# Montreal's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "CAMTL"
+name = "Montreal"
+slug = "montreal"
+center = [-73.5673, 45.5017]
+ecoregion = 334
+ecoregion_name = "Eastern Great Lakes lowland forests"
+usda_zone = 5
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "nearctic"
+bounds = [45.38, 45.72, -74.0, -73.42]
+territory = [
+    [45.38, 45.54, -74.0, -73.53],
+    [45.54, 45.56, -74.0, -73.52],
+    [45.56, 45.58, -74.0, -73.5],
+    [45.58, 45.6, -74.0, -73.498],
+    [45.6, 45.72, -74.0, -73.42],
+]
+municipal_sources = ["MONTREAL_OPENDATA"]
+dedup_note = """
+Montreal's OSM is largely an import of the municipal inventory: 317,570
+of its 372,727 nodes sit within 2 m of an inventory tree at 99.9%
+mutual-NN, and 5-10 m collapses to 0.9% over n=2,969 -- the cleanest
+separation of any city here.  4->6 removes 1,222 duplicates for 967
+hidden trees (1.26); 6->8 removes 223 for 1,019 (0.22), and past 8 m
+there is nothing left to find (recall is already 100%).
+"""
+dedup_cell_metres = 6
+data_freshness = "probe"
+
+[labels]
+MONTREAL_OPENDATA = "Montreal Open Data"
+
+[[tree_sources]]
+label = "Donnees Montreal - Arbres publics sur le territoire de la Ville (CC-BY 4.0)"
+url = "https://donnees.montreal.ca/dataset/arbres"
+
+[[landmark_sources]]
+label = "Repertoire du patrimoine culturel du Quebec - immeubles classes et cites (CC-BY 4.0)"
+url = "https://www.donneesquebec.ca/recherche/dataset/immeubles-patrimoniaux-classes-par-le-ministre-de-la-culture-et-des-communications"
+
+[jobs.city]
+schedule = "0 20 17 * * MON,THU"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city CAMTL`.
+"""
+
+[jobs.osm]
+schedule = "0 30 3 * * SUN"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 26 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048

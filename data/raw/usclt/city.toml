@@ -1,0 +1,62 @@
+# Charlotte's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "USCLT"
+name = "Charlotte"
+slug = "charlotte"
+center = [-80.8431, 35.2271]
+ecoregion = 330
+ecoregion_name = "Appalachian Piedmont forests"
+usda_zone = 8
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "nearctic"
+bounds = [35.0, 35.45, -81.05, -80.6]
+territory = [[35.0104, 35.4003, -81.0117, -80.6347]]
+municipal_sources = ["CHARLOTTE_OPENDATA"]
+dedup_note = """
+Calibrated 2026-11-12 on the first build (tools/osm_dedup_validation.py).
+23,187 staged OSM nodes against 191,412 inventory anchors.  Mutual-NN
+95.8% in 2-5 m, 42.5% in 5-10 m (n=1,002): a 5 m guarantee caps it at 10.
+Marginal table: 6->8 removes 243 duplicates for 137 hidden trees (1.77),
+8->10 removes 122 for 230 (0.53), so 8 m is where the paying stops.
+"""
+dedup_cell_metres = 8
+data_freshness = "probe"
+
+[labels]
+CHARLOTTE_OPENDATA = "Charlotte Open Data"
+
+[[tree_sources]]
+label = "City of Charlotte - Landscape Management Trees (ArcGIS)"
+url = "https://gis.charlottenc.gov/arcgis/rest/services/ENG/LSM_Trees/MapServer/0"
+
+[[landmark_sources]]
+label = "Charlotte-Mecklenburg Historic Landmarks Commission - designated properties (Mecklenburg County GIS)"
+url = "https://meckgis.mecklenburgcountync.gov/server/rest/services/LocalHistoricProperty/FeatureServer/0"
+
+[jobs.city]
+schedule = "0 0 9 * * THU,SUN"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city USCLT`.
+"""
+
+[jobs.osm]
+schedule = "0 30 5 * * WED"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 40 4 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

@@ -1,0 +1,59 @@
+# Bassendean's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "AUBSD"
+name = "Bassendean"
+slug = "bassendean"
+center = [115.9466, -31.9097]
+ecoregion = 206
+ecoregion_name = "Southwest Australia woodlands"
+usda_zone = 10
+biome = "Mediterranean Forests, Woodlands & Scrub"
+realm = "australasia"
+bounds = [-31.94, -31.88, 115.92, 115.98]
+territory = [[-31.94, -31.88, 115.92, 115.98]]
+municipal_sources = ["BASSENDEAN_OPENDATA"]
+dedup_note = """
+osm_dedup_validation (2026-11-22): only 251 OSM trees, positions offset;
+10 m flags 13, none false; 14 m adds 4 for 1 false.
+"""
+dedup_cell_metres = 10
+data_freshness = "probe"
+
+[labels]
+BASSENDEAN_OPENDATA = "Bassendean Open Data"
+
+[[tree_sources]]
+label = "Town of Bassendean - All Trees (street, park and private-land trees) (no licence stated; displayed with attribution only, not licensed for reuse)"
+url = "https://www.arcgis.com/home/item.html?id=5973d2d7b04648a4bb000fe13cc4db74"
+
+[[landmark_sources]]
+label = "Town of Bassendean - Heritage List, adopted 26 July 2022 (no licence stated; displayed with attribution only, not licensed for reuse)"
+url = "https://www.arcgis.com/home/item.html?id=225a54f515224e1996e6d5f6c6613f36"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city AUBSD`.
+"""
+
+[jobs.osm]
+schedule = "0 15 12 * * FRI"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 44 0 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

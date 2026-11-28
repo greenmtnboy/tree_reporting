@@ -1,0 +1,86 @@
+# Whitby's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "CAWHI"
+name = "Whitby"
+slug = "whitby"
+center = [-78.9429, 43.8975]
+ecoregion = 334
+ecoregion_name = "Eastern Great Lakes lowland forests"
+usda_zone = 6
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "nearctic"
+bounds = [43.81, 44.03, -79.05, -78.87]
+territory_note = """
+Whitby west of Ajax: latitude bands cut at the Town's western boundary
+(Lakeridge Rd, then the Pickering line); see CAAJX.
+"""
+territory = [
+    [43.81, 43.82, -78.966, -78.948],
+    [43.82, 43.83, -78.969, -78.887],
+    [43.83, 43.84, -78.974, -78.874],
+    [43.84, 43.85, -78.978, -78.877],
+    [43.85, 43.86, -78.982, -78.88],
+    [43.86, 43.87, -78.986, -78.884],
+    [43.87, 43.88, -78.991, -78.889],
+    [43.88, 43.89, -78.995, -78.893],
+    [43.89, 43.9, -78.999, -78.898],
+    [43.9, 43.91, -79.003, -78.902],
+    [43.91, 43.92, -79.007, -78.906],
+    [43.92, 43.93, -79.012, -78.911],
+    [43.93, 43.94, -79.017, -78.915],
+    [43.94, 43.95, -79.021, -78.919],
+    [43.95, 43.96, -79.026, -78.924],
+    [43.96, 43.97, -79.03, -78.928],
+    [43.97, 43.98, -79.035, -78.932],
+    [43.98, 43.99, -79.039, -78.937],
+    [43.99, 44.0, -79.043, -78.941],
+    [44.0, 44.01, -79.047, -78.945],
+    [44.01, 44.02, -79.044, -78.95],
+    [44.02, 44.03, -78.999, -78.954],
+]
+municipal_sources = ["WHITBY_OPENDATA"]
+dedup_note = """
+osm_dedup_validation 2026-11-23: 6 m flags 111, 6 false (5.4%);
+8 m adds 2 true for 4 false.
+"""
+dedup_cell_metres = 6
+data_freshness = "probe"
+
+[labels]
+WHITBY_OPENDATA = "Whitby Open Data"
+
+[[tree_sources]]
+label = "Town of Whitby - Trees (Open Government Licence - The Corporation of the Town of Whitby)"
+url = "https://www.arcgis.com/home/item.html?id=5be6efcf4f264639874bf07009f155d2"
+
+[[landmark_sources]]
+label = "Town of Whitby - Parks and Open Spaces; Town Facilities (Open Government Licence - The Corporation of the Town of Whitby)"
+url = "https://geohub-whitby.hub.arcgis.com/"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city CAWHI`.
+"""
+
+[jobs.osm]
+schedule = "0 45 12 * * FRI"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 13 0 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

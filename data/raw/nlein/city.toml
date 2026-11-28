@@ -1,0 +1,62 @@
+# Eindhoven's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "NLEIN"
+name = "Eindhoven"
+slug = "eindhoven"
+center = [5.4697, 51.4416]
+ecoregion = 664
+ecoregion_name = "European Atlantic mixed forests"
+usda_zone = 8
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "palearctic"
+bounds = [51.37, 51.51, 5.35, 5.58]
+territory = [[51.37, 51.51, 5.35, 5.58]]
+municipal_sources = ["EINDHOVEN_OPENDATA"]
+dedup_note = """
+Calibrated 2026-11-18: 8m cell: recall 97.0%, 2.4% false; 10m adds +44 true / +142 false.
+"""
+dedup_cell_metres = 8
+data_freshness = "probe"
+
+[labels]
+EINDHOVEN_OPENDATA = "Eindhoven Open Data"
+
+[[tree_sources]]
+label = "Gemeente Eindhoven - Bomen (public domain)"
+url = "https://data.eindhoven.nl/explore/dataset/bomen/"
+
+[[landmark_sources]]
+label = "Gemeente Eindhoven - Monumenten, gemeentelijke monumenten (public domain)"
+url = "https://data.eindhoven.nl/explore/dataset/monumenten/"
+
+[[landmark_sources]]
+label = "Rijksdienst voor het Cultureel Erfgoed - Rijksmonumenten via PDOK (CC BY 4.0)"
+url = "https://service.pdok.nl/rce/ps-ch/wfs/v1_0?request=GetCapabilities&service=WFS"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city NLEIN`.
+"""
+
+[jobs.osm]
+schedule = "0 45 8 * * WED"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 4 1 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

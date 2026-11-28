@@ -1,0 +1,58 @@
+# Medicine Hat's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "CAMHT"
+name = "Medicine Hat"
+slug = "medicinehat"
+center = [-110.68, 50.04]
+ecoregion = 396
+ecoregion_name = "Northern Shortgrass prairie"
+usda_zone = 4
+biome = "Temperate Grasslands, Savannas & Shrublands"
+realm = "nearctic"
+bounds = [49.98, 50.08, -110.8, -110.61]
+territory = [[49.98, 50.08, -110.8, -110.61]]
+municipal_sources = ["MEDICINEHAT_OPENDATA"]
+dedup_note = """
+osm_dedup_validation (2026-11-21): 6 m flags 181, 0.6% false, 96.3% recall.
+"""
+dedup_cell_metres = 6
+data_freshness = "probe"
+
+[labels]
+MEDICINEHAT_OPENDATA = "Medicine Hat Open Data"
+
+[[tree_sources]]
+label = "City of Medicine Hat - Park Tree Inventory (City of Medicine Hat Open Data Licence)"
+url = "https://www.arcgis.com/home/item.html?id=af05aa132ad24367a7d32d46af50bb38"
+
+[[landmark_sources]]
+label = "City of Medicine Hat - Historic Resources (no licence stated; displayed with attribution only, not licensed for reuse)"
+url = "https://services3.arcgis.com/2gQ2Dv4Fb016qFVU/arcgis/rest/services/Historic_Map_Tour_layer/FeatureServer/0"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city CAMHT`.
+"""
+
+[jobs.osm]
+schedule = "0 30 11 * * FRI"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 16 0 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

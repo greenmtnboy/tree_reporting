@@ -1,0 +1,46 @@
+# Santorini's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "GRSAN"
+name = "Santorini"
+slug = "santorini"
+center = [25.4315, 36.4072]
+ecoregion = 785
+ecoregion_name = "Aegean and Western Turkey sclerophyllous and mixed forests"
+usda_zone = 10
+biome = "Mediterranean Forests, Woodlands & Scrub"
+realm = "palearctic"
+bounds_note = """
+The whole Santorini caldera group: Thira, Thirasia, Aspronisi and the
+two Kameni islets.
+"""
+bounds = [36.3, 36.5, 25.3, 25.55]
+territory = [[36.3, 36.5, 25.3, 25.55]]
+municipal_sources_note = """
+Santorini, same story as Milos and checked against the same portals: the
+Cyclades publish no municipal tree inventory, so its rows are approved
+community submissions plus the supplemental OSM extract.
+"""
+municipal_sources = []
+dedup_cell_metres = 10
+data_freshness = "none"
+
+[[tree_sources]]
+label = "Community submissions (no municipal inventory)"
+
+[[landmark_sources]]
+label = "Curated landmark list geocoded via Nominatim"
+
+[jobs.city]
+schedule = "0 40 12 * * TUE,FRI"
+timeout_seconds = 900
+memory_mb = 1024
+
+[jobs.osm]
+schedule = "0 0 3 * * MON"
+timeout_seconds = 1800
+memory_mb = 1024
+
+[jobs.landmarks]
+schedule = "0 58 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048

@@ -1,0 +1,80 @@
+# Waterloo's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "CAWAT"
+name = "Waterloo"
+slug = "waterloo"
+center = [-80.5204, 43.4643]
+ecoregion = 334
+ecoregion_name = "Eastern Great Lakes lowland forests"
+usda_zone = 5
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "nearctic"
+bounds = [43.43, 43.54, -80.63, -80.47]
+territory_note = """
+Waterloo and Kitchener share a border running NW-SE: a 0.005-degree longitude staircase cut where each city's own inventory trees fall (413 of ~100k trees land on the wrong side).
+"""
+territory = [
+    [43.43, 43.54, -80.63, -80.56],
+    [43.438, 43.54, -80.56, -80.555],
+    [43.44, 43.54, -80.555, -80.545],
+    [43.443, 43.54, -80.545, -80.54],
+    [43.447, 43.54, -80.54, -80.535],
+    [43.451, 43.54, -80.535, -80.53],
+    [43.452, 43.54, -80.53, -80.525],
+    [43.455, 43.54, -80.525, -80.52],
+    [43.457, 43.54, -80.52, -80.515],
+    [43.459, 43.54, -80.515, -80.51],
+    [43.461, 43.54, -80.51, -80.505],
+    [43.463, 43.54, -80.505, -80.5],
+    [43.47, 43.54, -80.5, -80.495],
+    [43.479, 43.54, -80.495, -80.49],
+    [43.48, 43.54, -80.49, -80.485],
+    [43.486, 43.54, -80.485, -80.48],
+    [43.505, 43.54, -80.48, -80.47],
+]
+municipal_sources = ["WATERLOO_OPENDATA"]
+dedup_note = """
+Calibrated 2026-11-20: OSM sits on a dense inventory; 4 m keeps 16.9 true
+per false, 6 m falls to 1.3 with 9.8% of flagged rows false.
+"""
+dedup_cell_metres = 4
+data_freshness = "probe"
+
+[labels]
+WATERLOO_OPENDATA = "Waterloo Open Data"
+
+[[tree_sources]]
+label = "City of Waterloo - Street Tree Inventory (Waterloo Open Data User Licence)"
+url = "https://data.waterloo.ca/datasets/2447415303e74bb9acdf0f43c2236b72"
+
+[[landmark_sources]]
+label = "City of Waterloo - Heritage Buildings, Municipal Heritage Register (Waterloo Open Data User Licence)"
+url = "https://data.waterloo.ca/datasets/3822d7856d034f07a14e67e25c6ced4b"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city CAWAT`.
+"""
+
+[jobs.osm]
+schedule = "0 45 9 * * THU"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 30 1 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

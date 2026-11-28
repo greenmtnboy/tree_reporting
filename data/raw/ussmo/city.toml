@@ -1,0 +1,62 @@
+# Santa Monica's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "USSMO"
+name = "Santa Monica"
+slug = "santa_monica"
+center = [-118.4912, 34.0195]
+ecoregion = 422
+ecoregion_name = "California coastal sage and chaparral"
+usda_zone = 10
+biome = "Mediterranean Forests, Woodlands & Scrub"
+realm = "nearctic"
+bounds = [33.9668, 34.0506, -118.5632, -118.44]
+territory_note = """
+Santa Monica sits inside Los Angeles' box and is carved out of it.
+"""
+territory = [[33.9668, 34.0506, -118.5632, -118.4435]]
+municipal_sources = ["SANTA_MONICA_OPENDATA"]
+dedup_note = """
+Calibrated 2026-11-20: 8 m keeps 4.3 true per false at the margin;
+10 m drops below 1 (0.80).
+"""
+dedup_cell_metres = 8
+data_freshness = "probe"
+
+[labels]
+SANTA_MONICA_OPENDATA = "Santa Monica Open Data"
+
+[[tree_sources]]
+label = "City of Santa Monica, Public Landscape Division - Trees (ODC-By 1.0)"
+url = "https://www.arcgis.com/home/item.html?id=64f5db2cbb224f6d87387999a300b962"
+
+[[landmark_sources]]
+label = "City of Santa Monica - Historic Landmarks and Structures of Merit (ODC-By 1.0); National Park Service - National Register of Historic Places"
+url = "https://www.arcgis.com/home/item.html?id=abe20ceaf96d4f8bbb5774d6aa230563"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city USSMO`.
+"""
+
+[jobs.osm]
+schedule = "0 45 9 * * SAT"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 34 1 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

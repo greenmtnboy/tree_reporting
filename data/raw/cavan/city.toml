@@ -1,0 +1,45 @@
+# Vancouver's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "CAVAN"
+name = "Vancouver"
+slug = "vancouver"
+center = [-123.1207, 49.2827]
+ecoregion = 364
+ecoregion_name = "Puget lowland forests"
+usda_zone = 8
+biome = "Temperate Conifer Forests"
+realm = "nearctic"
+bounds = [49.1, 49.4, -123.3, -122.95]
+territory = [[49.1, 49.4, -123.3, -122.99]]
+municipal_sources = ["VANCOUVER_OPENDATA"]
+dedup_note = """
+26.7% over n=2,883.
+"""
+dedup_cell_metres = 10
+data_freshness = "probe"
+
+[labels]
+VANCOUVER_OPENDATA = "Vancouver Open Data"
+
+[[tree_sources]]
+label = "Vancouver Open Data (public-trees)"
+url = "https://opendata.vancouver.ca/explore/dataset/public-trees/information/"
+
+[[landmark_sources]]
+label = "Vancouver Open Data (Heritage Sites)"
+url = "https://opendata.vancouver.ca/explore/dataset/heritage-sites/information/"
+
+[jobs.city]
+schedule = "0 20 15 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[jobs.osm]
+schedule = "0 0 2 * * SAT"
+timeout_seconds = 1800
+memory_mb = 1024
+
+[jobs.landmarks]
+schedule = "0 36 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048

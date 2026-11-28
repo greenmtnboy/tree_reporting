@@ -1,0 +1,68 @@
+# Prague's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "CZPRG"
+name = "Prague"
+slug = "prague"
+center = [14.4378, 50.0755]
+ecoregion = 654
+ecoregion_name = "Central European mixed forests"
+usda_zone = 7
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "palearctic"
+bounds = [49.93, 50.19, 14.21, 14.72]
+territory = [[49.93, 50.19, 14.21, 14.72]]
+municipal_sources = ["PRAGUE_OPENDATA"]
+dedup_note = """
+Calibrated 2026-11-04 against a local Overpass extract (19,501 OSM nodes)
+and the ingest's 142,097 rows, before the first build.  5-10 m band 56.7%
+mutual-NN over n=2,283: a coin flip, so the band rule says a 5 m guarantee
+and a 10 m cell.  The marginal table agrees for once: 8->10 removes 482
+duplicates for 371 hidden trees (1.30), 10->14 removes 431 for 543 (0.79).
+Prague plants at a 5.0 m median and OSM's tracing error reaches past it.
+"""
+dedup_cell_metres = 10
+data_freshness = "probe"
+
+[labels]
+PRAGUE_OPENDATA = "Prague Open Data"
+
+[[tree_sources]]
+label = "Geoportál Praha / IPR Praha - Sdílená data o zeleni, vegetační prvky (CC BY, datový podklad © IPR Praha)"
+url = "https://opendata-iprpraha.hub.arcgis.com/datasets/iprpraha::sdílená-data-o-zeleni-vegetační-prvky-body-1"
+
+[[landmark_sources]]
+label = "Národní památkový ústav (NPÚ) - Kulturní památky, Ústřední seznam kulturních památek (CC BY 4.0)"
+url = "https://geoportal.npu.cz/arcgis/rest/services/Tematicke/CP_UAP_PVO/MapServer/1"
+
+[jobs.city]
+schedule = "0 40 23 * * FRI,MON"
+timeout_seconds = 2700
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city CZPRG`.
+"""
+timeout_seconds_note = """
+The ingest walks the city's MapServer with ~700 identify calls (see
+raw/czprg/prague_tree_info.py), about ten minutes four at a time; the
+budget leaves room for a slow portal day.
+"""
+
+[jobs.osm]
+schedule = "0 0 5 * * THU"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 24 4 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

@@ -1,0 +1,59 @@
+# Greater Shepparton's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "AUSHT"
+name = "Greater Shepparton"
+slug = "shepparton"
+center = [145.4, -36.38]
+ecoregion = 192
+ecoregion_name = "Southeast Australia temperate savanna"
+usda_zone = 9
+biome = "Temperate Grasslands, Savannas & Shrublands"
+realm = "australasia"
+bounds = [-36.71, -36.03, 145.03, 145.81]
+territory = [[-36.71, -36.03, 145.03, 145.81]]
+municipal_sources = ["SHEPPARTON_OPENDATA"]
+dedup_note = """
+osm_dedup_validation (2026-11-21): 8 m flags 184, 2.2% false, 70.3% recall;
+10 m adds 27 for 3 more false; stop at 8 like Bendigo.
+"""
+dedup_cell_metres = 8
+data_freshness = "probe"
+
+[labels]
+SHEPPARTON_OPENDATA = "Greater Shepparton Open Data"
+
+[[tree_sources]]
+label = "Greater Shepparton City Council - Street and Park Trees on data.gov.au (CC BY 4.0)"
+url = "https://data.gov.au/data/dataset/greater-shepparton-city-council-street-and-park-trees"
+
+[[landmark_sources]]
+label = "Department of Transport and Planning - Victorian Heritage Register via Vicmap (CC BY 4.0)"
+url = "https://discover.data.vic.gov.au/dataset/victorian-heritage-register"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city AUSHT`.
+"""
+
+[jobs.osm]
+schedule = "0 30 11 * * SUN"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 24 0 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

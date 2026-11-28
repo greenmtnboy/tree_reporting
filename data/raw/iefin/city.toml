@@ -1,0 +1,81 @@
+# Fingal's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "IEFIN"
+name = "Fingal"
+slug = "fingal"
+center = [-6.22, 53.46]
+ecoregion = 651
+ecoregion_name = "Celtic broadleaf forests"
+usda_zone = 9
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "palearctic"
+bounds = [53.35, 53.64, -6.48, -5.99]
+territory_note = """
+Fingal: one rectangle per longitude column, each column's south edge the
+lowest Fingal land or inventory point in it (OSM relation 1114164).
+Diagonal stretches of the border leave ~8.5 km2 of Dublin City's fringe
+inside (Ballymun, Santry, Finglas edges); carve it when Dublin City is added.
+"""
+territory = [
+    [53.3553, 53.64, -6.475, -6.4],
+    [53.3602, 53.64, -6.4, -6.37],
+    [53.3531, 53.64, -6.37, -6.355],
+    [53.353, 53.64, -6.355, -6.345],
+    [53.3697, 53.64, -6.345, -6.33],
+    [53.3785, 53.64, -6.33, -6.315],
+    [53.3988, 53.64, -6.315, -6.3],
+    [53.3974, 53.64, -6.3, -6.26],
+    [53.3968, 53.64, -6.26, -6.22],
+    [53.4058, 53.64, -6.22, -6.18],
+    [53.4059, 53.64, -6.18, -6.16],
+    [53.3875, 53.64, -6.16, -6.15],
+    [53.3843, 53.64, -6.15, -6.13],
+    [53.3747, 53.64, -6.13, -6.1],
+    [53.3597, 53.64, -6.1, -5.995],
+]
+municipal_sources = ["FINGAL_OPENDATA"]
+dedup_note = """
+Calibrated 2026-11-17 against 115,908 OSM trees: marginal true/false
+1.06 at 8 m, 0.68 at 10 m; inventory spacing p50 9.1 m.
+"""
+dedup_cell_metres = 8
+data_freshness = "probe"
+
+[labels]
+FINGAL_OPENDATA = "Fingal Open Data"
+
+[[tree_sources]]
+label = "Fingal County Council Open Data - Trees_FCC (CC BY 4.0; locations approximate)"
+url = "https://data.fingal.ie/datasets/FingalCoCo::trees-fcc-1"
+
+[[landmark_sources]]
+label = "Fingal County Council - Record of Protected Structures, Development Plan 2023-2029 (CC BY 4.0)"
+url = "https://data.fingal.ie/datasets/601387c1d5ed4f6aa172fcf231a61fd3"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city IEFIN`.
+"""
+
+[jobs.osm]
+schedule = "0 30 7 * * TUE"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 38 2 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

@@ -1,0 +1,69 @@
+# Boston's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "USBOS"
+name = "Boston"
+slug = "boston"
+center = [-71.0589, 42.3601]
+ecoregion = 339
+ecoregion_name = "Northeast US Coastal forests"
+usda_zone = 7
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "nearctic"
+bounds = [42.15, 42.55, -71.25, -70.74]
+territory_note = """
+Boston's own line (boundaries/usbos.json), not the metro box it had
+while its model published the towns around it.
+"""
+territory = [[42.2279, 42.4009, -71.1913, -70.7488]]
+municipal_sources = ["CITY_OF_BOSTON", "ARNOLD_ARBORETUM", "NORTHEASTERN"]
+dedup_note = """
+Grounded with the validation script at the 5 m break, while four
+municipal partitions (now cities of their own, above) shared the cell.
+"""
+dedup_cell_metres = 10
+data_freshness_note = """
+defined in boston dataset as it's a erivation
+"""
+data_freshness = "model"
+data_freshness_comment = "when Boston data is through"
+osm_freshness_comment = ""
+
+[labels]
+CITY_OF_BOSTON = "City of Boston"
+ARNOLD_ARBORETUM = "Arnold Arboretum"
+NORTHEASTERN = "Northeastern University Arboretum"
+
+[[tree_sources]]
+label = "City of Boston Open Data"
+url = "https://data.boston.gov/dataset/bprd-trees"
+
+[[tree_sources]]
+label = "Tree Boston - Big Old Trees of Boston (volunteer registry)"
+url = "https://treeboston.org/bot/"
+
+[[landmark_sources]]
+label = "City of Boston Open Data (Landmarks)"
+url = "https://data.boston.gov/dataset/92137315-e846-4c75-8c3d-2b7e93e38d03"
+
+[jobs.city]
+schedule = "0 40 10 * * *"
+timeout_seconds = 2400
+memory_mb = 6144
+note = """
+Three municipal inventories in one model (Boston, the Arnold Arboretum and
+Northeastern University's campus).  Cambridge, Somerville, Brookline,
+Belmont and Watertown, once partitions here, are cities of their own
+(city-uscam and its siblings).  Memory is for PREDICTED_USBOS: a
+331k-row staged file peaked at 1.46 GiB locally (2026-10-19), and the full
+metro circle stages ~1.9M rows.
+"""
+
+[jobs.osm]
+schedule = "0 30 2 * * TUE"
+timeout_seconds = 1800
+memory_mb = 1024
+
+[jobs.landmarks]
+schedule = "0 6 4 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048

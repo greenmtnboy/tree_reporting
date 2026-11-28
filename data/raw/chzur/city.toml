@@ -1,0 +1,63 @@
+# Zürich's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "CHZUR"
+name = "Zürich"
+slug = "zurich"
+center = [8.5417, 47.3769]
+ecoregion = 686
+ecoregion_name = "Western European broadleaf forests"
+usda_zone = 7
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "palearctic"
+bounds = [47.31, 47.44, 8.44, 8.63]
+territory = [[47.31, 47.44, 8.44, 8.63]]
+municipal_sources = ["ZURICH_OPENDATA"]
+dedup_note = """
+Calibrated 2026-11-16 before the first build (tools/osm_dedup_validation.py
+--inventory-parquet on a local ingest run).
+35,616 staged OSM nodes against 81,142 anchors.  Mutual-NN 88.4% in
+2-5 m, 37.6% in 5-10 m (n=972): a 5 m guarantee caps it at 10.
+Marginal table: 4->6 removes 531 duplicates for 162 hidden trees (3.28),
+6->8 removes 200 for 219 (0.91), so 6 m.
+"""
+dedup_cell_metres = 6
+data_freshness = "probe"
+
+[labels]
+ZURICH_OPENDATA = "Zürich Open Data"
+
+[[tree_sources]]
+label = "Stadt Zürich Open Data - Baumkataster (Grün Stadt Zürich, CC0)"
+url = "https://data.stadt-zuerich.ch/dataset/geo_baumkataster"
+
+[[landmark_sources]]
+label = "Stadt Zürich Open Data - Denkmalpflege-Inventar, regional and cantonal objects (CC0)"
+url = "https://data.stadt-zuerich.ch/dataset/geo_denkmalpflege_inventar"
+
+[jobs.city]
+schedule = "0 10 19 * * FRI,MON"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city CHZUR`.
+"""
+
+[jobs.osm]
+schedule = "0 0 6 * * THU"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 4 2 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

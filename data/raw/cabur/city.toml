@@ -1,0 +1,114 @@
+# Burlington, ON's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "CABUR"
+name = "Burlington, ON"
+slug = "burlington_on"
+center = [-79.799, 43.3255]
+ecoregion = 342
+ecoregion_name = "Southern Great Lakes forests"
+usda_zone = 6
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "nearctic"
+bounds = [43.25, 43.48, -80.0, -79.68]
+territory = [
+    [43.275, 43.28, -79.69, -79.68],
+    [43.28, 43.285, -79.745, -79.68],
+    [43.285, 43.29, -79.875, -79.835],
+    [43.285, 43.29, -79.825, -79.815],
+    [43.285, 43.29, -79.755, -79.68],
+    [43.29, 43.295, -79.89, -79.805],
+    [43.29, 43.295, -79.76, -79.68],
+    [43.295, 43.3, -79.9, -79.8],
+    [43.295, 43.305, -79.765, -79.68],
+    [43.3, 43.305, -79.9, -79.795],
+    [43.305, 43.31, -79.905, -79.785],
+    [43.305, 43.31, -79.77, -79.68],
+    [43.31, 43.315, -79.905, -79.68],
+    [43.315, 43.325, -79.895, -79.68],
+    [43.325, 43.33, -79.88, -79.68],
+    [43.33, 43.335, -79.875, -79.87],
+    [43.33, 43.335, -79.865, -79.68],
+    [43.335, 43.345, -79.86, -79.68],
+    [43.345, 43.35, -79.855, -79.68],
+    [43.35, 43.36, -79.87, -79.68],
+    [43.36, 43.365, -79.89, -79.88],
+    [43.36, 43.365, -79.87, -79.715],
+    [43.36, 43.365, -79.713, -79.68],
+    [43.365, 43.37, -79.89, -79.722],
+    [43.365, 43.37, -79.709, -79.68],
+    [43.37, 43.375, -79.91, -79.9],
+    [43.37, 43.375, -79.895, -79.729],
+    [43.37, 43.375, -79.705, -79.68],
+    [43.375, 43.38, -79.91, -79.736],
+    [43.375, 43.38, -79.701, -79.68],
+    [43.38, 43.385, -79.915, -79.743],
+    [43.38, 43.385, -79.697, -79.68],
+    [43.385, 43.39, -79.915, -79.749],
+    [43.385, 43.39, -79.693, -79.68],
+    [43.39, 43.395, -79.91, -79.757],
+    [43.39, 43.395, -79.689, -79.68],
+    [43.395, 43.4, -79.935, -79.925],
+    [43.395, 43.4, -79.915, -79.764],
+    [43.395, 43.4, -79.684, -79.68],
+    [43.4, 43.405, -79.935, -79.77],
+    [43.405, 43.41, -79.935, -79.777],
+    [43.41, 43.415, -79.955, -79.784],
+    [43.415, 43.42, -79.96, -79.791],
+    [43.42, 43.425, -79.955, -79.798],
+    [43.425, 43.43, -79.955, -79.805],
+    [43.43, 43.435, -79.955, -79.811],
+    [43.435, 43.44, -79.955, -79.811],
+    [43.44, 43.445, -79.955, -79.806],
+    [43.445, 43.45, -79.96, -79.8],
+    [43.45, 43.455, -79.965, -79.803],
+    [43.455, 43.46, -79.965, -79.805],
+    [43.46, 43.465, -79.97, -79.808],
+    [43.465, 43.47, -79.97, -79.809],
+    [43.47, 43.475, -79.975, -79.805],
+]
+municipal_sources = ["BURLINGTON_ON_OPENDATA"]
+dedup_note = """
+5-10 m band 23.0% mutual-NN over n=87: neighbour-dominated.  The turn is
+earlier here than anywhere else in this batch -- 2->4 removes 114
+duplicates for 12 hidden trees (9.50) and 4->6 removes 22 for 22, exactly
+break-even, which is the step Kingston also declined.  A tie goes to the
+smaller cell: a missed duplicate double-renders one toggleable dot, a
+false flag hides a real tree.
+"""
+dedup_cell_metres = 4
+data_freshness = "probe"
+
+[labels]
+BURLINGTON_ON_OPENDATA = "Burlington, ON Open Data"
+
+[[tree_sources]]
+label = "City of Burlington Open Data - City Owned Trees"
+url = "https://navburl-burlington.opendata.arcgis.com/datasets/city-owned-trees"
+
+[[landmark_sources]]
+label = "City of Burlington Open Data - Heritage Properties"
+url = "https://navburl-burlington.opendata.arcgis.com/datasets/heritage-properties"
+
+[jobs.city]
+schedule = "0 0 21 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city CABUR`.
+"""
+
+[jobs.osm]
+schedule = "0 0 4 * * SAT"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 6 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048

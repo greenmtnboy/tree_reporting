@@ -1,0 +1,67 @@
+# Maple Ridge's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "CAMPR"
+name = "Maple Ridge"
+slug = "mapleridge"
+center = [-122.5984, 49.2193]
+ecoregion = 364
+ecoregion_name = "Puget lowland forests"
+usda_zone = 8
+biome = "Temperate Conifer Forests"
+realm = "nearctic"
+bounds = [49.17, 49.33, -122.67, -122.4]
+territory_note = """
+South edge steps along the Fraser above Langley Township (CALNG).
+"""
+territory = [
+    [49.195, 49.33, -122.67, -122.64],
+    [49.208, 49.33, -122.64, -122.62],
+    [49.179, 49.33, -122.62, -122.53],
+    [49.17, 49.33, -122.53, -122.4],
+]
+municipal_sources = ["MAPLERIDGE_OPENDATA"]
+dedup_note = """
+osm_dedup_validation (2026-11-22): 6 m flags 486, 3.3% false, 82.0% recall;
+8 m adds 21 for 14 more false.
+"""
+dedup_cell_metres = 6
+data_freshness = "probe"
+
+[labels]
+MAPLERIDGE_OPENDATA = "Maple Ridge Open Data"
+
+[[tree_sources]]
+label = "City of Maple Ridge - Street Tree (Open Government Licence - Maple Ridge; contains information licensed under the Open Government Licence - Maple Ridge)"
+url = "https://www.arcgis.com/home/item.html?id=290505c676d64cf09989eca1320aedd3"
+
+[[landmark_sources]]
+label = "City of Maple Ridge - Heritage Register and Heritage Designation (Open Government Licence - Maple Ridge)"
+url = "https://www.arcgis.com/home/item.html?id=85e758ffcd7a4aaeb8dd476143b70fd7"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city CAMPR`.
+"""
+
+[jobs.osm]
+schedule = "0 45 11 * * SAT"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 34 0 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

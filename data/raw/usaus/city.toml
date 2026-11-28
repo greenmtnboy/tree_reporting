@@ -1,0 +1,62 @@
+# Austin's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "USAUS"
+name = "Austin"
+slug = "austin"
+center = [-97.7431, 30.2672]
+ecoregion = 401
+ecoregion_name = "Texas blackland prairies"
+usda_zone = 9
+biome = "Temperate Grasslands, Savannas & Shrublands"
+realm = "nearctic"
+bounds = [30.05, 30.55, -98.05, -97.45]
+territory = [[30.0755, 30.5167, -97.9384, -97.5275]]
+municipal_sources = ["AUSTIN_OPENDATA"]
+dedup_note = """
+Calibrated 2026-11-12 on the first build (tools/osm_dedup_validation.py).
+9,048 staged OSM nodes against 59,157 anchors.  Mutual-NN 60.4% in
+5-10 m, 34.3% in 10-20 m (n=312): a 10 m guarantee caps it at 20.
+Marginal table: 8->10 removes 36 duplicates for 31 hidden trees (1.16),
+10->20 removes 111 for 177 (0.63), so 10 m.
+"""
+dedup_cell_metres = 10
+data_freshness = "probe"
+
+[labels]
+AUSTIN_OPENDATA = "Austin Open Data"
+
+[[tree_sources]]
+label = "City of Austin - Tree Inventory (Socrata, public domain)"
+url = "https://data.austintexas.gov/d/wrik-xasw"
+
+[[landmark_sources]]
+label = "City of Austin - Historical Landmarks (Socrata)"
+url = "https://data.austintexas.gov/d/8k49-bptr"
+
+[jobs.city]
+schedule = "0 0 7 * * WED,SAT"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city USAUS`.
+"""
+
+[jobs.osm]
+schedule = "0 0 5 * * TUE"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 28 4 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

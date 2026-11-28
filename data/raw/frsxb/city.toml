@@ -1,0 +1,59 @@
+# Strasbourg's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "FRSXB"
+name = "Strasbourg"
+slug = "strasbourg"
+center = [7.7521, 48.5734]
+ecoregion = 686
+ecoregion_name = "Western European broadleaf forests"
+usda_zone = 7
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "palearctic"
+bounds = [48.43, 48.71, 7.53, 7.9]
+territory = [[48.43, 48.71, 7.53, 7.9]]
+municipal_sources = ["STRASBOURG_OPENDATA"]
+dedup_note = """
+Calibrated 2026-11-18: OSM carries much of the city's own layer (114k OSM vs 83k inventory).
+4m cell: recall 98.7%, 1.4% false; 6m adds +479 true / +915 false.
+"""
+dedup_cell_metres = 4
+data_freshness = "probe"
+
+[labels]
+STRASBOURG_OPENDATA = "Strasbourg Open Data"
+
+[[tree_sources]]
+label = "Ville et Eurométropole de Strasbourg - Patrimoine arboré (Licence Ouverte v2.0)"
+url = "https://data.strasbourg.eu/explore/dataset/patrimoine_arbore/"
+
+[[landmark_sources]]
+label = "Ministère de la Culture - Immeubles protégés au titre des Monuments Historiques (Licence Ouverte)"
+url = "https://www.data.gouv.fr/datasets/immeubles-proteges-au-titre-des-monuments-historiques-2"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city FRSXB`.
+"""
+
+[jobs.osm]
+schedule = "0 45 8 * * TUE"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 2 1 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

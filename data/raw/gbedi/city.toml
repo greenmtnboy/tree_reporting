@@ -1,0 +1,58 @@
+# Edinburgh's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "GBEDI"
+name = "Edinburgh"
+slug = "edinburgh"
+center = [-3.1883, 55.9533]
+ecoregion = 651
+ecoregion_name = "Celtic broadleaf forests"
+usda_zone = 8
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "palearctic"
+bounds = [55.82, 56.0, -3.45, -3.07]
+territory = [[55.82, 56.0, -3.45, -3.07]]
+municipal_sources = ["EDINBURGH_OPENDATA"]
+dedup_note = """
+osm_dedup_validation 2026-11-21: 6m 9371/1029 (11.0%), marginal 2.7; 8m 1.1.
+"""
+dedup_cell_metres = 6
+data_freshness = "probe"
+
+[labels]
+EDINBURGH_OPENDATA = "Edinburgh Open Data"
+
+[[tree_sources]]
+label = "City of Edinburgh Council - Trees (Open Government Licence v3.0; Copyright City of Edinburgh Council, contains Ordnance Survey data © Crown copyright and database right; survey predates 2017)"
+url = "https://www.arcgis.com/home/item.html?id=6c224ada230b4d349cfd739015c7846d"
+
+[[landmark_sources]]
+label = "Historic Environment Scotland - listed buildings, scheduled monuments, gardens and designed landscapes (Open Government Licence v3.0)"
+url = "https://portal.historicenvironment.scot/"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city GBEDI`.
+"""
+
+[jobs.osm]
+schedule = "0 45 10 * * WED"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 52 1 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

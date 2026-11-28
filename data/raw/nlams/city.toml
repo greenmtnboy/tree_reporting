@@ -1,0 +1,45 @@
+# Amsterdam's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "NLAMS"
+name = "Amsterdam"
+slug = "amsterdam"
+center = [4.9041, 52.3676]
+ecoregion = 664
+ecoregion_name = "European Atlantic mixed forests"
+usda_zone = 8
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "palearctic"
+bounds = [52.25, 52.45, 4.7, 5.1]
+territory = [[52.25, 52.45, 4.7, 5.1]]
+municipal_sources = ["AMSTERDAM_OPENDATA"]
+dedup_note = """
+29.9% over n=2,508.
+"""
+dedup_cell_metres = 10
+data_freshness = "probe"
+
+[labels]
+AMSTERDAM_OPENDATA = "City of Amsterdam"
+
+[[tree_sources]]
+label = "City of Amsterdam REST API (bomen/stamgegevens)"
+url = "https://api.data.amsterdam.nl/v1/bomen/stamgegevens/"
+
+[[landmark_sources]]
+label = "City of Amsterdam REST API (monumenten)"
+url = "https://api.data.amsterdam.nl/v1/monumenten/monumenten/"
+
+[jobs.city]
+schedule = "0 20 11 * * *"
+timeout_seconds = 1800
+memory_mb = 2048
+
+[jobs.osm]
+schedule = "0 0 3 * * WED"
+timeout_seconds = 2400
+memory_mb = 2048
+
+[jobs.landmarks]
+schedule = "0 2 4 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048

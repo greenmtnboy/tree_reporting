@@ -1,0 +1,63 @@
+# Lansing's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "USLAN"
+name = "Lansing"
+slug = "lansing"
+center = [-84.5555, 42.7325]
+ecoregion = 342
+ecoregion_name = "Southern Great Lakes forests"
+usda_zone = 6
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "nearctic"
+bounds = [42.63, 42.8, -84.7013, -84.4176]
+territory = [[42.6474, 42.7949, -84.7013, -84.4176]]
+municipal_sources = ["LANSING_OPENDATA"]
+dedup_note = """
+osm_dedup_validation (2026-11-23): 4 m flags 18, 0 false; OSM barely overlaps
+the inventory (3,816 OSM trees, 104 near one); 6 m is 13% false.
+"""
+dedup_cell_metres = 4
+data_freshness = "probe"
+
+[labels]
+LANSING_OPENDATA = "Lansing Open Data"
+
+[[tree_sources]]
+label = "City of Lansing - Trees (no licence stated; displayed with attribution only, not licensed for reuse)"
+url = "https://www.arcgis.com/home/item.html?id=156f8898d26a471dae7c858e46851b29"
+
+[[landmark_sources]]
+label = "City of Lansing - Historic Properties, local designations (no licence stated; displayed with attribution only, not licensed for reuse)"
+url = "https://www.arcgis.com/home/item.html?id=a0f8c6e4d0a44291a7711103367329f4"
+
+[[landmark_sources]]
+label = "National Park Service - National Register of Historic Places"
+url = "https://www.nps.gov/subjects/nationalregister/data-downloads.htm"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city USLAN`.
+"""
+
+[jobs.osm]
+schedule = "0 30 12 * * TUE"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 54 0 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

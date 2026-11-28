@@ -1,0 +1,62 @@
+# Leipzig's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "DELEJ"
+name = "Leipzig"
+slug = "leipzig"
+center = [12.3731, 51.3397]
+ecoregion = 654
+ecoregion_name = "Central European mixed forests"
+usda_zone = 8
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "palearctic"
+bounds = [51.23, 51.45, 12.23, 12.55]
+territory = [[51.23, 51.45, 12.23, 12.55]]
+municipal_sources = ["LEIPZIG_OPENDATA"]
+dedup_note = """
+Calibrated 2026-11-17 (osm_dedup_validation.py, local inventory parquet)
+against the staged extract. Mutual-NN 84.0% in 2-5 m, 24.5% in 5-10 m
+(n=2,637): a 5 m guarantee caps it at 10. Marginal table: 4->6 removes
+1,329 duplicates for 579 hidden trees (2.30), 6->8 removes 461 for 658
+(0.70), so 6 m.
+"""
+dedup_cell_metres = 6
+data_freshness = "probe"
+
+[labels]
+LEIPZIG_OPENDATA = "Leipzig Open Data"
+
+[[tree_sources]]
+label = "Stadt Leipzig - Baumkataster (dl-de/by-2.0)"
+url = "https://opendata.leipzig.de/dataset/baumkataster-stadt-leipzig1"
+
+[[landmark_sources]]
+label = "Stadt Leipzig - Grünflächen, Amt für Stadtgrün und Gewässer (no licence stated; displayed with attribution only, not licensed for reuse)"
+url = "https://geodienste.leipzig.de/l3/OpenData/wfs"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city DELEJ`.
+"""
+
+[jobs.osm]
+schedule = "0 15 8 * * FRI"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 56 2 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

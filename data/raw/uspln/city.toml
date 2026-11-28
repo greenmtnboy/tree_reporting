@@ -1,0 +1,59 @@
+# Plano's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "USPLN"
+name = "Plano"
+slug = "plano"
+center = [-96.6989, 33.0198]
+ecoregion = 401
+ecoregion_name = "Texas blackland prairies"
+usda_zone = 8
+biome = "Temperate Grasslands, Savannas & Shrublands"
+realm = "nearctic"
+bounds = [32.99, 33.14, -96.87, -96.61]
+territory = [[32.9972, 33.1255, -96.8601, -96.613]]
+municipal_sources = ["PLANO_OPENDATA"]
+dedup_note = """
+Calibrated 2026-11-23 (osm_dedup_validation): 8m flags 232, 3.4% false;
+marginal 4.0 true per false at 8m, 0.25 at 10m.
+"""
+dedup_cell_metres = 8
+data_freshness = "probe"
+
+[labels]
+PLANO_OPENDATA = "Plano Open Data"
+
+[[tree_sources]]
+label = "City of Plano - Shade Map Trees, PlanIT Geo inventory 2023 (no licence stated; displayed with attribution only, not licensed for reuse)"
+url = "https://www.arcgis.com/home/item.html?id=a7e06ad57e2747738fb2b2117e23d68e"
+
+[[landmark_sources]]
+label = "National Park Service - National Register of Historic Places"
+url = "https://www.nps.gov/subjects/nationalregister/data-downloads.htm"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city USPLN`.
+"""
+
+[jobs.osm]
+schedule = "0 0 12 * * WED"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 23 0 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

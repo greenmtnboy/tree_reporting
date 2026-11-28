@@ -1,0 +1,65 @@
+# Macedon Ranges's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "AUMRS"
+name = "Macedon Ranges"
+slug = "macedon"
+center = [144.58, -37.4]
+ecoregion = 176
+ecoregion_name = "Southeast Australia temperate forests"
+usda_zone = 9
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "australasia"
+bounds = [-37.57, -37.1, 144.3, 144.93]
+territory_note = """
+The shire's own LGA boundary reaches -37.568 at Gisborne South, so
+Melbourne's territory stops at -37.57 (none of its five councils reach
+that far north).  North edge -37.10 is where Bendigo's (AUBXG) box ends;
+the shire's northernmost tree is at -37.108.
+"""
+territory = [[-37.57, -37.1, 144.3, 144.93]]
+municipal_sources = ["MACEDON_OPENDATA"]
+dedup_note = """
+osm_dedup_validation (2026-11-21): 8 m flags 86, 2.3% false, 57.1% recall;
+mutual-NN stays above 60% through 20 m (rural roadside trees), so stop at 8.
+"""
+dedup_cell_metres = 8
+data_freshness = "probe"
+
+[labels]
+MACEDON_OPENDATA = "Macedon Ranges Open Data"
+
+[[tree_sources]]
+label = "Macedon Ranges Shire Council - Macedon Ranges Shire Trees on data.gov.au (CC BY 2.5 AU)"
+url = "https://data.gov.au/data/dataset/macedon-ranges-shire-trees"
+
+[[landmark_sources]]
+label = "Department of Transport and Planning - Victorian Heritage Register via Vicmap (CC BY 4.0)"
+url = "https://discover.data.vic.gov.au/dataset/victorian-heritage-register"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city AUMRS`.
+"""
+
+[jobs.osm]
+schedule = "0 30 11 * * WED"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 20 0 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

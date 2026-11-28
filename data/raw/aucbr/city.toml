@@ -1,0 +1,66 @@
+# Canberra's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "AUCBR"
+name = "Canberra"
+slug = "canberra"
+center = [149.13, -35.28]
+ecoregion = 168
+ecoregion_name = "Eastern Australian temperate forests"
+usda_zone = 8
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "australasia"
+bounds = [-35.95, -35.12, 148.75, 149.4]
+territory = [[-35.95, -35.12, 148.75, 149.4]]
+municipal_sources = ["CANBERRA_OPENDATA"]
+dedup_note = """
+Canberra: calibrated 2026-11-17 with --inventory-parquet (786,310 anchors)
+against the staged extract. Mutual-NN 90.7% in 2-5 m, 36.1% in 5-10 m
+(n=2,055): a 5 m guarantee caps it at 10. Marginal table: 6->8 removes
+569 duplicates for 492 hidden trees (1.16), 8->10 removes 215 for 448
+(0.48), so 8 m.
+"""
+dedup_cell_metres = 8
+data_freshness = "probe"
+
+[labels]
+CANBERRA_OPENDATA = "Canberra Open Data"
+
+[[tree_sources]]
+label = "ACT Government - ACTGOV Tree Assets (CC BY 4.0)"
+url = "https://www.arcgis.com/home/item.html?id=d401a7266ba74dc18c1902ae6e71fe90"
+
+[[landmark_sources]]
+label = "ACT Heritage Register (ACT Government, CC BY 4.0)"
+url = "https://www.arcgis.com/home/item.html?id=d03d3fa41dcc49c4a4ea9058f3f44060"
+
+[[landmark_sources]]
+label = "Commonwealth Heritage List (DCCEEW, CC BY 3.0 AU)"
+url = "https://www.arcgis.com/home/item.html?id=bf02ea66970c40d18b15e782b20a2fa9"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city AUCBR`.
+"""
+
+[jobs.osm]
+schedule = "0 30 7 * * WED"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 40 2 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

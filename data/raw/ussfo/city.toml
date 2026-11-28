@@ -1,0 +1,51 @@
+# San Francisco's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "USSFO"
+name = "San Francisco"
+slug = "sf"
+center = [-122.4194, 37.7749]
+ecoregion = 423
+ecoregion_name = "California interior chaparral and woodlands"
+usda_zone = 10
+biome = "Mediterranean Forests, Woodlands & Scrub"
+realm = "nearctic"
+bounds = [37.6, 37.9, -122.6, -122.345]
+territory = [[37.6, 37.9, -122.6, -122.345]]
+municipal_sources = ["SF_OPENDATA"]
+dedup_note = """
+5-10 m band 43.0% mutual-NN over n=300: neighbour-dominated.
+"""
+dedup_cell_metres = 10
+data_freshness = "probe"
+data_freshness_comment = "when SF data is through"
+osm_freshness_comment = "GCS publication time of San Francisco's staged OSM parquet # mtime of Boston's committed OSM staging parquet"
+
+[labels]
+SF_OPENDATA = "SF Open Data"
+
+[[tree_sources]]
+label = "SF Open Data Portal"
+url = "https://data.sf.gov/City-Infrastructure/San-Francisco-Street-Tree-Inventory/tkzw-k3nq"
+
+[[landmark_sources]]
+label = "SF Open Data Portal (Landmarks)"
+url = "https://data.sfgov.org/Geographic-Locations-and-Boundaries/Landmarks/rzic-39gi/about_data"
+
+[jobs.city]
+note = """
+Memory is for PREDICTED_USSFO, the bulk imagery predictions over the 10 km
+poster circle; sized like Boston's until a forced build measures it.
+"""
+schedule = "0 0 10 * * *"
+timeout_seconds = 1800
+memory_mb = 6144
+
+[jobs.osm]
+schedule = "0 30 3 * * MON"
+timeout_seconds = 1800
+memory_mb = 1024
+
+[jobs.landmarks]
+schedule = "0 16 4 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048

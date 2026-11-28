@@ -1,0 +1,57 @@
+# Milos's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "GRMLO"
+name = "Milos"
+slug = "milos"
+center = [24.4472, 36.7263]
+ecoregion = 785
+ecoregion_name = "Aegean and Western Turkey sclerophyllous and mixed forests"
+usda_zone = 10
+biome = "Mediterranean Forests, Woodlands & Scrub"
+realm = "palearctic"
+bounds_note = """
+The whole island (community submissions can come from anywhere on it),
+including Antimilos to the northwest.
+"""
+bounds = [36.55, 36.9, 24.15, 24.65]
+territory = [[36.55, 36.9, 24.15, 24.65]]
+municipal_sources_note = """
+Milos has no municipal tree inventory — no Greek portal publishes one
+(checked opendata.thessaloniki.gr, data.gov.gr, geodata.gov.gr, and the
+Athens portal, whose only tree dataset is the National Garden).  The city
+exists so residents can record trees: its Parquet is built entirely from
+approved community submissions, and its enum has just the community value.
+"""
+municipal_sources = []
+dedup_note = """
+Community submissions are the only anchors; a match means someone
+recorded a tree OSM already maps, and the submission wins.  Default.
+"""
+dedup_cell_metres = 10
+data_freshness = "none"
+
+[[tree_sources]]
+label = "Community submissions (no municipal inventory)"
+note = """
+Milos and Santorini have no published tree inventory anywhere in Greece's
+open data portals; their trees are approved community submissions plus
+supplemental OpenStreetMap nodes.
+"""
+
+[[landmark_sources]]
+label = "Curated landmark list geocoded via Nominatim"
+
+[jobs.city]
+schedule = "0 20 12 * * TUE,FRI"
+timeout_seconds = 900
+memory_mb = 1024
+
+[jobs.osm]
+schedule = "0 30 2 * * MON"
+timeout_seconds = 1800
+memory_mb = 1024
+
+[jobs.landmarks]
+schedule = "0 56 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048

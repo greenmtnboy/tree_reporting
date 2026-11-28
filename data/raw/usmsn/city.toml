@@ -1,0 +1,59 @@
+# Madison's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "USMSN"
+name = "Madison"
+slug = "madison"
+center = [-89.4012, 43.0731]
+ecoregion = 387
+ecoregion_name = "Central US forest-grasslands transition"
+usda_zone = 5
+biome = "Temperate Grasslands, Savannas & Shrublands"
+realm = "nearctic"
+bounds = [42.98, 43.2, -89.58, -89.2318]
+territory = [[42.9982, 43.1721, -89.5717, -89.2318]]
+municipal_sources = ["MADISON_OPENDATA"]
+dedup_note = """
+Calibrated 2026-11-20 (osm_dedup_validation): 6 m keeps 4.1 true per false
+at the margin; 8 m drops below 1 (0.93).
+"""
+dedup_cell_metres = 6
+data_freshness = "probe"
+
+[labels]
+MADISON_OPENDATA = "Madison Open Data"
+
+[[tree_sources]]
+label = "City of Madison Parks Department, Urban Forestry - Street Trees (open data under Madison General Ordinances 3.72; source attributed)"
+url = "https://www.arcgis.com/home/item.html?id=b700541a20e446839b18d62426c266a3"
+
+[[landmark_sources]]
+label = "City of Madison - Local Landmarks (open data under Madison General Ordinances 3.72); National Park Service - National Register of Historic Places"
+url = "https://www.arcgis.com/home/item.html?id=279a5ad5f2f94d0bb20f898c523d5b5a"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city USMSN`.
+"""
+
+[jobs.osm]
+schedule = "0 45 9 * * MON"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 24 1 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

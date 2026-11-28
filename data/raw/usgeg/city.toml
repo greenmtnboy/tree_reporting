@@ -1,0 +1,59 @@
+# Spokane's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "USGEG"
+name = "Spokane"
+slug = "spokane"
+center = [-117.426, 47.6588]
+ecoregion = 361
+ecoregion_name = "Northern Rockies conifer forests"
+usda_zone = 6
+biome = "Temperate Conifer Forests"
+realm = "nearctic"
+bounds = [47.58, 47.76, -117.6041, -117.3]
+territory = [[47.5867, 47.7588, -117.6041, -117.3038]]
+municipal_sources = ["SPOKANE_OPENDATA"]
+dedup_note = """
+Calibrated 2026-11-20: 6 m keeps 4.5 true per false at the margin; 8 m
+adds 26 duplicates for 23 false matches (1.13).
+"""
+dedup_cell_metres = 6
+data_freshness = "probe"
+
+[labels]
+SPOKANE_OPENDATA = "Spokane Open Data"
+
+[[tree_sources]]
+label = "City of Spokane Parks Department - Tree Inventory (no licence stated; displayed with attribution only, not licensed for reuse)"
+url = "https://www.arcgis.com/home/item.html?id=d84eda620819425185d114a06a94d047"
+
+[[landmark_sources]]
+label = "National Park Service - National Register of Historic Places"
+url = "https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city USGEG`.
+"""
+
+[jobs.osm]
+schedule = "0 45 9 * * WED"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 28 1 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

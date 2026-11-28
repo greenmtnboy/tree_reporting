@@ -1,0 +1,44 @@
+# Athens's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "GRATH"
+name = "Athens"
+slug = "athens"
+center = [23.7375, 37.9725]
+ecoregion = 785
+ecoregion_name = "Aegean and Western Turkey sclerophyllous and mixed forests"
+usda_zone = 10
+biome = "Mediterranean Forests, Woodlands & Scrub"
+realm = "palearctic"
+bounds = [37.85, 38.1, 23.6, 23.9]
+territory = [[37.85, 38.1, 23.6, 23.9]]
+municipal_sources = ["ATHENS_OPENDATA"]
+dedup_note = """
+National Garden inventory is small and dense; not yet measured, default.
+"""
+dedup_cell_metres = 10
+data_freshness = "probe"
+
+[labels]
+ATHENS_OPENDATA = "City of Athens GIS (National Garden)"
+
+[[tree_sources]]
+label = "City of Athens Open Data (Trees of the National Garden)"
+url = "https://opendata.cityofathens.gr/dataset/gis-athens-8303d4c8-371b-11ec-b388-0242ac120009"
+
+[[landmark_sources]]
+label = "Curated landmark list geocoded via Nominatim"
+
+[jobs.city]
+schedule = "0 0 12 * * TUE,FRI"
+timeout_seconds = 1200
+memory_mb = 1024
+
+[jobs.osm]
+schedule = "0 0 2 * * MON"
+timeout_seconds = 1800
+memory_mb = 1024
+
+[jobs.landmarks]
+schedule = "0 54 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048

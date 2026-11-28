@@ -1,0 +1,58 @@
+# Oakland's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "USOAK"
+name = "Oakland"
+slug = "oakland"
+center = [-122.2712, 37.8044]
+ecoregion = 423
+ecoregion_name = "California interior chaparral and woodlands"
+usda_zone = 10
+biome = "Mediterranean Forests, Woodlands & Scrub"
+realm = "nearctic"
+bounds = [37.6317, 37.89, -122.3559, -122.11]
+territory = [[37.6317, 37.8854, -122.3559, -122.1147]]
+municipal_sources = ["OAKLAND_OPENDATA"]
+dedup_note = """
+osm_dedup_validation 2026-11-21: 6m 839/27 (3.2%), marginal 8.2; 8m 1.4.
+"""
+dedup_cell_metres = 6
+data_freshness = "probe"
+
+[labels]
+OAKLAND_OPENDATA = "Oakland Open Data"
+
+[[tree_sources]]
+label = "City of Oakland Public Works, Park & Tree Services - Oakland Public Tree Inventory, August 2023 (no licence stated; displayed with attribution only, not licensed for reuse)"
+url = "https://www.arcgis.com/home/item.html?id=1aeca241016e483cbfac4f2d1974692e"
+
+[[landmark_sources]]
+label = "City of Oakland Bureau of Planning - Landmarks Board Designated properties (no licence stated; displayed with attribution only, not licensed for reuse); National Park Service - National Register of Historic Places"
+url = "https://gismaps.oaklandca.gov/server/rest/services/Planning_and_Zoning_Controls/MapServer/35"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city USOAK`.
+"""
+
+[jobs.osm]
+schedule = "0 45 10 * * TUE"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 50 1 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

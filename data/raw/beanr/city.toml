@@ -1,0 +1,58 @@
+# Antwerp's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "BEANR"
+name = "Antwerp"
+slug = "antwerp"
+center = [4.4025, 51.2194]
+ecoregion = 664
+ecoregion_name = "European Atlantic mixed forests"
+usda_zone = 8
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "palearctic"
+bounds = [51.13, 51.38, 4.21, 4.52]
+territory = [[51.13, 51.38, 4.21, 4.52]]
+municipal_sources = ["ANTWERPEN_OPENDATA"]
+dedup_note = """
+Calibrated 2026-11-18: 8m cell: recall 93.7%, 3.2% false; 10m adds +27 true / +58 false.
+"""
+dedup_cell_metres = 8
+data_freshness = "probe"
+
+[labels]
+ANTWERPEN_OPENDATA = "Antwerp Open Data"
+
+[[tree_sources]]
+label = "Stad Antwerpen - boom (Gratis Open Data Licentie; bron stad Antwerpen)"
+url = "https://portaal-stadantwerpen.opendata.arcgis.com/datasets/stadAntwerpen::boom"
+
+[[landmark_sources]]
+label = "Agentschap Onroerend Erfgoed - protected monuments, landscapes and town views (Gratis open data licentie Vlaanderen)"
+url = "https://inventaris.onroerenderfgoed.be/erfgoedobjecten?gemeente=11002"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city BEANR`.
+"""
+
+[jobs.osm]
+schedule = "0 45 8 * * SAT"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 10 1 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

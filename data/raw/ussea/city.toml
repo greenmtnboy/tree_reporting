@@ -1,0 +1,63 @@
+# Seattle's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "USSEA"
+name = "Seattle"
+slug = "seattle"
+center = [-122.3321, 47.6062]
+ecoregion = 364
+ecoregion_name = "Puget lowland forests"
+usda_zone = 8
+biome = "Temperate Conifer Forests"
+realm = "nearctic"
+bounds = [47.48, 47.74, -122.46, -122.2198]
+territory = [[47.4821, 47.7353, -122.4598, -122.2198]]
+municipal_sources = ["SEATTLE_OPENDATA"]
+dedup_note = """
+Calibrated 2026-11-16 before the first build (tools/osm_dedup_validation.py
+--inventory-parquet on a local ingest run).
+23,081 staged OSM nodes against 239,240 anchors.  Mutual-NN 88.7% in
+2-5 m, 34.2% in 5-10 m (n=1,810): a 5 m guarantee caps it at 10.
+Marginal table: 4->6 removes 1,082 duplicates for 318 hidden trees (3.40),
+6->8 removes 406 for 419 (0.97), so 6 m.
+"""
+dedup_cell_metres = 6
+data_freshness = "probe"
+
+[labels]
+SEATTLE_OPENDATA = "Seattle Open Data"
+
+[[tree_sources]]
+label = "City of Seattle - SDOT Trees (in service) and Seattle Parks and Recreation Tree View (ArcGIS, Seattle Open Data Terms of Use)"
+url = "https://cos-data.seattle.gov/d/gapw-b2rf"
+
+[[landmark_sources]]
+label = "City of Seattle - Landmarks (SDCI); National Park Service - National Register of Historic Places"
+url = "https://www.arcgis.com/home/item.html?id=462a18bf1f9f459eb7fd8ea08c843880"
+
+[jobs.city]
+schedule = "0 50 20 * * MON,THU"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city USSEA`.
+"""
+
+[jobs.osm]
+schedule = "0 30 6 * * SUN"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 10 2 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

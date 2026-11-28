@@ -1,0 +1,63 @@
+# Sydney's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "AUSYD"
+name = "Sydney"
+slug = "sydney"
+center = [151.2093, -33.8688]
+ecoregion = 168
+ecoregion_name = "Eastern Australian temperate forests"
+usda_zone = 10
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "australasia"
+bounds = [-33.93, -33.85, 151.17, 151.24]
+territory = [[-33.93, -33.85, 151.17, 151.24]]
+municipal_sources = ["SYDNEY_OPENDATA"]
+dedup_note = """
+Calibrated 2026-11-18: 8 m keeps 2.1 true per false at the margin (88.8% recall);
+10 m drops below 1.
+"""
+dedup_cell_metres = 8
+data_freshness = "probe"
+
+[labels]
+SYDNEY_OPENDATA = "Sydney Open Data"
+
+[[tree_sources]]
+label = "City of Sydney - Trees (CC BY 4.0)"
+url = "https://data.cityofsydney.nsw.gov.au/datasets/cityofsydney::trees"
+
+[[landmark_sources]]
+label = "NSW State Heritage Register curtilages (DCCEEW, CC BY)"
+url = "https://data.nsw.gov.au/data/dataset/state-heritage-register-curtilages1c5ee"
+
+[[landmark_sources]]
+label = "Sydney LEP 2012 heritage items (NSW DPHI, CC BY)"
+url = "https://data.nsw.gov.au/data/dataset/environmental-planning-instrument-heritage-her"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city AUSYD`.
+"""
+
+[jobs.osm]
+schedule = "0 15 9 * * WED"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 22 1 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

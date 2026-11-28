@@ -1,0 +1,62 @@
+# Durham's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "USDUR"
+name = "Durham"
+slug = "durham"
+center = [-78.8986, 35.994]
+ecoregion = 330
+ecoregion_name = "Appalachian Piedmont forests"
+usda_zone = 8
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "nearctic"
+bounds = [35.85, 36.15, -79.05, -78.7]
+territory = [[35.8663, 36.1371, -79.0076, -78.7488]]
+municipal_sources = ["DURHAM_OPENDATA"]
+dedup_note = """
+Calibrated 2026-11-12 on the first build (tools/osm_dedup_validation.py).
+11,366 staged OSM nodes against 23,842 anchors.  Mutual-NN 72.3% in
+5-10 m, 44.4% in 10-20 m (n=90): a 10 m guarantee caps it at 20.
+Marginal table over the calibrated sizes: 10->20 removes 45 duplicates
+for 39 hidden trees (1.15), so 20 m.
+"""
+dedup_cell_metres = 20
+data_freshness = "probe"
+
+[labels]
+DURHAM_OPENDATA = "Durham Open Data"
+
+[[tree_sources]]
+label = "City of Durham - Trees & Planting Sites (ArcGIS)"
+url = "https://webgis2.durhamnc.gov/server/rest/services/PublicServices/Environmental/FeatureServer/11"
+
+[[landmark_sources]]
+label = "Durham City-County Planning - Local Historic Landmarks and National Register listings"
+url = "https://webgis2.durhamnc.gov/server/rest/services/PublicServices/Planning/MapServer/1"
+
+[jobs.city]
+schedule = "0 40 7 * * SAT,TUE"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city USDUR`.
+"""
+
+[jobs.osm]
+schedule = "0 0 5 * * FRI"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 32 4 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

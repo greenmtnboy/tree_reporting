@@ -1,0 +1,59 @@
+# San Diego's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "USSAN"
+name = "San Diego"
+slug = "sandiego"
+center = [-117.1611, 32.7157]
+ecoregion = 422
+ecoregion_name = "California coastal sage and chaparral"
+usda_zone = 10
+biome = "Mediterranean Forests, Woodlands & Scrub"
+realm = "nearctic"
+bounds = [32.53, 33.12, -117.31, -116.5456]
+territory = [[32.5347, 33.1142, -117.2823, -116.5456]]
+municipal_sources = ["SANDIEGO_OPENDATA"]
+dedup_note = """
+Calibrated 2026-11-18 (osm_dedup_validation): 6 m keeps 3.3 true per false
+at the margin; 8 m drops below 1 (0.81).
+"""
+dedup_cell_metres = 6
+data_freshness = "probe"
+
+[labels]
+SANDIEGO_OPENDATA = "San Diego Open Data"
+
+[[tree_sources]]
+label = "City of San Diego Transportation Department, Urban Forestry - Trees (Street Trees) (no licence stated; displayed with attribution only, not licensed for reuse)"
+url = "https://webmaps.sandiego.gov/arcgis/rest/services/DSD/Environment/MapServer/20"
+
+[[landmark_sources]]
+label = "City of San Diego Historical Resources Board - designated resources (no licence stated; displayed with attribution only, not licensed for reuse); National Park Service - National Register of Historic Places"
+url = "https://webmaps.sandiego.gov/arcgis/rest/services/Planning/Historic_Preservation_Resources/MapServer/0"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city USSAN`.
+"""
+
+[jobs.osm]
+schedule = "0 15 9 * * MON"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 12 1 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

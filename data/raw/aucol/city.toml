@@ -1,0 +1,59 @@
+# Colac Otway's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "AUCOL"
+name = "Colac Otway"
+slug = "colacotway"
+center = [143.5848, -38.3404]
+ecoregion = 176
+ecoregion_name = "Southeast Australia temperate forests"
+usda_zone = 9
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "australasia"
+bounds = [-38.87, -38.01, 143.24, 143.95]
+territory = [[-38.87, -38.01, 143.24, 143.95]]
+municipal_sources = ["COLAC_OTWAY_OPENDATA"]
+dedup_note = """
+osm_dedup_validation (2026-11-22): 916 OSM trees; 6 m flags 6, none false;
+8 m adds 2 for 1 false.
+"""
+dedup_cell_metres = 6
+data_freshness = "probe"
+
+[labels]
+COLAC_OTWAY_OPENDATA = "Colac Otway Open Data"
+
+[[tree_sources]]
+label = "Colac Otway Shire - Colac Otway Shire Trees (data.gov.au, CC BY 3.0 AU)"
+url = "https://data.gov.au/data/dataset/colac-otway-shire-trees"
+
+[[landmark_sources]]
+label = "Department of Transport and Planning - Victorian Heritage Register via Vicmap (CC BY 4.0)"
+url = "https://discover.data.vic.gov.au/dataset/victorian-heritage-register"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city AUCOL`.
+"""
+
+[jobs.osm]
+schedule = "0 15 12 * * SAT"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 46 0 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

@@ -1,0 +1,65 @@
+# New Westminster's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "CANWE"
+name = "New Westminster"
+slug = "new_westminster"
+center = [-122.911, 49.2057]
+ecoregion = 364
+ecoregion_name = "Puget lowland forests"
+usda_zone = 8
+biome = "Temperate Conifer Forests"
+realm = "nearctic"
+bounds = [49.16, 49.26, -122.99, -122.85]
+territory_note = """
+Cut along the Fraser where Surrey (CASRY) takes the south bank.
+"""
+territory = [
+    [49.16, 49.26, -122.99, -122.915],
+    [49.19, 49.26, -122.915, -122.905],
+    [49.203, 49.26, -122.905, -122.895],
+    [49.213, 49.26, -122.895, -122.85],
+]
+municipal_sources = ["NEWWESTMINSTER_OPENDATA"]
+dedup_note = """
+5-10 m band 48.9% over n=270 -- a coin flip, so the bands leave it at a
+5 m guarantee and the marginal table decides how far past that to go:
+6->8 removes 81 duplicates for 56 hidden trees (1.45), 8->10 removes 35
+for 39 (0.90).
+"""
+dedup_cell_metres = 8
+data_freshness = "probe"
+
+[labels]
+NEWWESTMINSTER_OPENDATA = "New Westminster Open Data"
+
+[[tree_sources]]
+label = "City of New Westminster Open Data - Tree Inventory (Active Trees)"
+url = "https://opendata.newwestcity.ca/datasets/tree-inventory-active-trees"
+
+[[landmark_sources]]
+label = "City of New Westminster Open Data - Heritage Register"
+url = "https://opendata.newwestcity.ca/datasets/heritage-register"
+
+[jobs.city]
+schedule = "0 0 20 * * THU,SUN"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city CANWE`.
+"""
+
+[jobs.osm]
+schedule = "0 0 4 * * WED"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 28 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048

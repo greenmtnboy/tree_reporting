@@ -1,0 +1,55 @@
+# Dedham's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "USDED"
+name = "Dedham"
+slug = "dedham"
+center = [-71.1662, 42.2418]
+ecoregion = 339
+ecoregion_name = "Northeast US Coastal forests"
+usda_zone = 7
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "nearctic"
+bounds = [42.2092, 42.2805, -71.2318, -71.1307]
+territory = [[42.2092, 42.2805, -71.2318, -71.1307]]
+municipal_sources = ["DEDHAM"]
+dedup_cell_metres = 10
+data_freshness = "probe"
+
+[labels]
+DEDHAM = "Town of Dedham"
+
+[[tree_sources]]
+label = "Town of Dedham GIS - Tree Inventory (no licence stated; displayed with attribution only, not licensed for reuse)"
+url = "https://www.arcgis.com/home/item.html?id=9d23e28c88984fa0903da95792883d4a"
+
+[[landmark_sources]]
+label = "National Park Service - National Register of Historic Places"
+url = "https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer"
+
+[jobs.city]
+schedule = "0 35 13 * * MON,THU"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city USDED`.
+"""
+
+[jobs.osm]
+schedule = "0 0 10 * * SUN"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 55 0 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

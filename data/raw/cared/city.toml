@@ -1,0 +1,59 @@
+# Red Deer's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "CARED"
+name = "Red Deer"
+slug = "red_deer"
+center = [-113.81, 52.268]
+ecoregion = 386
+ecoregion_name = "Canadian Aspen forests and parklands"
+usda_zone = 3
+biome = "Temperate Grasslands, Savannas & Shrublands"
+realm = "nearctic"
+bounds = [52.2, 52.34, -113.89, -113.7]
+territory = [[52.2, 52.34, -113.89, -113.7]]
+municipal_sources = ["RED_DEER_OPENDATA"]
+dedup_note = """
+Calibrated 2026-11-21 (osm_dedup_validation): only 76 OSM trees;
+6 m catches 28 of 32 duplicates with no false flags, 8 m starts flagging neighbours.
+"""
+dedup_cell_metres = 6
+data_freshness = "probe"
+
+[labels]
+RED_DEER_OPENDATA = "Red Deer Open Data"
+
+[[tree_sources]]
+label = "City of Red Deer - PARK_Trees_inservice (no licence stated; displayed with attribution only, not licensed for reuse)"
+url = "https://www.arcgis.com/home/item.html?id=4ede9512512a4d5187045a35e063a92d"
+
+[[landmark_sources]]
+label = "City of Red Deer - Zoning Bylaw historical sites (no licence stated; displayed with attribution only, not licensed for reuse)"
+url = "https://arcgis.reddeer.ca/arcgis/rest/services/CoRD_View_Layers/LUB_HistoricalSite_approved/FeatureServer/0"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city CARED`.
+"""
+
+[jobs.osm]
+schedule = "0 15 11 * * SAT"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 10 0 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

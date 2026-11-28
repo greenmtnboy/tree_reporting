@@ -1,0 +1,54 @@
+# Chapel Hill's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "USCHH"
+name = "Chapel Hill"
+slug = "chapel_hill"
+center = [-79.0558, 35.9132]
+ecoregion = 330
+ecoregion_name = "Appalachian Piedmont forests"
+usda_zone = 8
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "nearctic"
+bounds = [35.8695, 35.9752, -79.0832, -78.9954]
+territory = [[35.8695, 35.9752, -79.0832, -78.9954]]
+municipal_sources = []
+dedup_note = """
+Chapel Hill: no inventory, so nothing to calibrate against.  Default.
+"""
+dedup_cell_metres = 10
+data_freshness = "none"
+
+[[tree_sources]]
+label = "Community submissions and OpenStreetMap (no municipal inventory)"
+
+[[landmark_sources]]
+label = "National Park Service - National Register of Historic Places"
+url = "https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city USCHH`.
+"""
+
+[jobs.osm]
+schedule = "0 15 20 * * SUN"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 55 1 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

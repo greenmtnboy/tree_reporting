@@ -1,0 +1,92 @@
+# Mississauga's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "CAMIS"
+name = "Mississauga"
+slug = "mississauga"
+center = [-79.6441, 43.589]
+ecoregion = 342
+ecoregion_name = "Southern Great Lakes forests"
+usda_zone = 6
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "nearctic"
+bounds = [43.42, 43.78, -79.88, -79.5]
+territory = [
+    [43.475, 43.48, -79.88, -79.798],
+    [43.475, 43.48, -79.619, -79.5],
+    [43.48, 43.485, -79.88, -79.794],
+    [43.48, 43.485, -79.622, -79.5],
+    [43.485, 43.49, -79.88, -79.789],
+    [43.485, 43.49, -79.629, -79.5],
+    [43.49, 43.495, -79.88, -79.769],
+    [43.49, 43.495, -79.636, -79.5],
+    [43.495, 43.5, -79.88, -79.763],
+    [43.495, 43.5, -79.643, -79.5],
+    [43.5, 43.505, -79.88, -79.758],
+    [43.5, 43.505, -79.65, -79.5],
+    [43.505, 43.51, -79.88, -79.753],
+    [43.505, 43.51, -79.657, -79.5],
+    [43.51, 43.515, -79.88, -79.747],
+    [43.51, 43.515, -79.664, -79.5],
+    [43.515, 43.52, -79.88, -79.741],
+    [43.515, 43.52, -79.671, -79.5],
+    [43.52, 43.525, -79.88, -79.735],
+    [43.52, 43.525, -79.677, -79.5],
+    [43.525, 43.53, -79.88, -79.729],
+    [43.525, 43.53, -79.719, -79.5],
+    [43.53, 43.55, -79.88, -79.5],
+    [43.55, 43.62, -79.88, -79.55],
+    [43.62, 43.64, -79.88, -79.575],
+    [43.64, 43.68, -79.88, -79.6],
+    [43.68, 43.7, -79.88, -79.607],
+    [43.7, 43.72, -79.88, -79.617],
+    [43.72, 43.74, -79.88, -79.625],
+    [43.74, 43.78, -79.88, -79.64],
+]
+municipal_sources = ["MISSISSAUGA_OPENDATA"]
+dedup_note = """
+5-10 m band 30.5% mutual-NN over n=666: neighbour-dominated, and the
+marginal table turns where its neighbours' do -- 4->6 removes 309
+duplicates for 174 hidden trees (1.78), 6->8 removes 149 for 158 (0.94).
+"""
+dedup_cell_metres = 6
+data_freshness = "probe"
+
+[labels]
+MISSISSAUGA_OPENDATA = "Mississauga Open Data"
+
+[[tree_sources]]
+label = "City of Mississauga Open Data - City Owned Tree Inventory"
+url = "https://data.mississauga.ca/datasets/city-owned-tree-inventory"
+
+[[landmark_sources]]
+label = "City of Mississauga Open Data - City Landmarks"
+url = "https://data.mississauga.ca/datasets/city-landmarks"
+
+[jobs.city]
+schedule = "0 20 20 * * FRI,MON"
+timeout_seconds = 2400
+memory_mb = 3072
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city CAMIS`.
+"""
+timeout_seconds_note = """
+271k published rows out of a 499k layer, plus a 17k OSM partition. The
+read is fast (a hosted FeatureServer paging 2,000 at a time); the merge
+is what wants the memory.
+"""
+
+[jobs.osm]
+schedule = "0 0 4 * * THU"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 22 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048

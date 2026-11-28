@@ -1,0 +1,63 @@
+# Naperville's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "USNPV"
+name = "Naperville"
+slug = "naperville"
+center = [-88.1535, 41.7508]
+ecoregion = 387
+ecoregion_name = "Central US forest-grasslands transition"
+usda_zone = 6
+biome = "Temperate Grasslands, Savannas & Shrublands"
+realm = "nearctic"
+bounds = [41.66, 41.83, -88.3, -88.05]
+territory = [[41.6662, 41.8219, -88.2354, -88.0885]]
+municipal_sources = ["NAPERVILLE_OPENDATA"]
+dedup_note = """
+Calibrated 2026-11-16 before the first build (tools/osm_dedup_validation.py
+--inventory-parquet on a local ingest run).
+42,245 staged OSM nodes against 72,349 anchors.  Mutual-NN 96.5% in
+2-5 m, 23.1% in 5-10 m (n=854): a 5 m guarantee caps it at 10.
+Marginal table: 4->6 removes 464 duplicates for 38 hidden trees (12.2),
+6->8 removes 136 for 153 (0.89), so 6 m.
+"""
+dedup_cell_metres = 6
+data_freshness = "probe"
+
+[labels]
+NAPERVILLE_OPENDATA = "City of Naperville"
+
+[[tree_sources]]
+label = "City of Naperville - Right of Way Tree Inventory (ArcGIS, CC0)"
+url = "https://services1.arcgis.com/rXJ6QApc2sOtl1Pd/arcgis/rest/services/ROW_Tree_Inventory/FeatureServer/0"
+
+[[landmark_sources]]
+label = "Naperville Heritage Society plaque program (City of Naperville GIS); National Park Service - National Register of Historic Places"
+url = "https://services1.arcgis.com/rXJ6QApc2sOtl1Pd/arcgis/rest/services/NapervilleHeritagePlaqueMap/FeatureServer/0"
+
+[jobs.city]
+schedule = "0 50 13 * * TUE,FRI"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city USNPV`.
+"""
+
+[jobs.osm]
+schedule = "0 30 5 * * MON"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 46 4 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

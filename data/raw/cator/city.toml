@@ -1,0 +1,89 @@
+# Toronto's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "CATOR"
+name = "Toronto"
+slug = "toronto"
+center = [-79.3832, 43.6532]
+ecoregion = 342
+ecoregion_name = "Southern Great Lakes forests"
+usda_zone = 6
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "nearctic"
+bounds = [43.55, 43.9, -79.7, -79.1]
+territory = [
+    [43.55, 43.62, -79.55, -79.1],
+    [43.62, 43.64, -79.575, -79.1],
+    [43.64, 43.68, -79.6, -79.1],
+    [43.68, 43.7, -79.607, -79.1],
+    [43.7, 43.72, -79.617, -79.1],
+    [43.72, 43.74, -79.625, -79.1],
+    "North of 43.74 Toronto stops at Steeles Ave, York Region's edge (CAYRK).",
+    [43.74, 43.75, -79.64, -79.63],
+    [43.74, 43.752, -79.63, -79.61],
+    [43.74, 43.756, -79.61, -79.59],
+    [43.74, 43.761, -79.59, -79.57],
+    [43.74, 43.765, -79.57, -79.55],
+    [43.74, 43.77, -79.55, -79.53],
+    [43.74, 43.774, -79.53, -79.51],
+    [43.74, 43.778, -79.51, -79.49],
+    [43.74, 43.783, -79.49, -79.47],
+    [43.74, 43.787, -79.47, -79.45],
+    [43.74, 43.792, -79.45, -79.43],
+    [43.74, 43.796, -79.43, -79.41],
+    [43.74, 43.8, -79.41, -79.39],
+    [43.74, 43.805, -79.39, -79.37],
+    [43.74, 43.809, -79.37, -79.35],
+    [43.74, 43.814, -79.35, -79.33],
+    [43.74, 43.818, -79.33, -79.31],
+    [43.74, 43.823, -79.31, -79.29],
+    [43.74, 43.828, -79.29, -79.27],
+    [43.74, 43.832, -79.27, -79.25],
+    [43.74, 43.837, -79.25, -79.23],
+    [43.74, 43.842, -79.23, -79.21],
+    [43.74, 43.846, -79.21, -79.19],
+    [43.74, 43.851, -79.19, -79.17],
+    [43.74, 43.9, -79.17, -79.15],
+    [43.74, 43.9, -79.15, -79.1],
+]
+municipal_sources = ["TORONTO_OPENDATA"]
+dedup_note = """
+5-10 m band 38.3% mutual-NN over n=2,898; 4->6 removes 634 duplicates
+for 289 hidden trees (2.19), 6->8 removes 461 for 515 (0.90).
+"""
+dedup_cell_metres = 6
+data_freshness = "probe"
+
+[labels]
+TORONTO_OPENDATA = "Toronto Open Data"
+
+[[tree_sources]]
+label = "City of Toronto Open Data - Street Tree Data"
+url = "https://open.toronto.ca/dataset/street-tree-data/"
+
+[[landmark_sources]]
+label = "City of Toronto Open Data - Places of Interest and Toronto Attractions"
+url = "https://open.toronto.ca/dataset/places-of-interest-and-toronto-attractions/"
+
+[jobs.city]
+schedule = "0 0 17 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city CATOR`.
+"""
+
+[jobs.osm]
+schedule = "0 0 3 * * SAT"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 34 3 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048

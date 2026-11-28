@@ -1,0 +1,63 @@
+# Boise's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "USBOI"
+name = "Boise"
+slug = "boise"
+center = [-116.2023, 43.615]
+ecoregion = 434
+ecoregion_name = "Snake-Columbia shrub steppe"
+usda_zone = 7
+biome = "Deserts & Xeric Shrublands"
+realm = "nearctic"
+bounds = [43.5021, 43.7, -116.37, -116.08]
+territory = [[43.5021, 43.6923, -116.3657, -116.0941]]
+municipal_sources = ["BOISE_OPENDATA"]
+dedup_note = """
+osm_dedup_validation (2026-11-23): 8 m flags 1,269, 29 false (2.3%), recall 94%;
+10 m adds 12 true for 16 false.
+"""
+dedup_cell_metres = 8
+data_freshness = "probe"
+
+[labels]
+BOISE_OPENDATA = "Boise Open Data"
+
+[[tree_sources]]
+label = "City of Boise Parks and Recreation - Managed Park and Street Trees (CC BY 4.0)"
+url = "https://opendata.cityofboise.org/datasets/61e4dc96bc0745ecb42c3f3892728bd6"
+
+[[landmark_sources]]
+label = "City of Boise - Historic Landmarks (CC BY 4.0)"
+url = "https://opendata.cityofboise.org/datasets/b44aba318fd746988f1a48887bb0f990"
+
+[[landmark_sources]]
+label = "National Park Service - National Register of Historic Places"
+url = "https://www.nps.gov/subjects/nationalregister/data-downloads.htm"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city USBOI`.
+"""
+
+[jobs.osm]
+schedule = "0 30 12 * * SAT"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 3 0 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

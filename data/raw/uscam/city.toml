@@ -1,0 +1,64 @@
+# Cambridge's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "USCAM"
+name = "Cambridge"
+slug = "cambridge"
+center = [-71.1097, 42.3736]
+ecoregion = 339
+ecoregion_name = "Northeast US Coastal forests"
+usda_zone = 7
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "nearctic"
+bounds = [42.34, 42.42, -71.17, -71.05]
+territory = [[42.3524, 42.4043, -71.1604, -71.0639]]
+municipal_sources = ["CAMBRIDGE", "MIT"]
+dedup_cell_metres = 10
+data_freshness_note = """
+defined in uscam/cambridge_tree_info.preql as the greatest of the city's and MIT's probes
+"""
+data_freshness = "model"
+data_freshness_comment = "when Cambridge data is through"
+
+[labels]
+CAMBRIDGE = "City of Cambridge"
+MIT = "MIT campus tree inventory"
+
+[[tree_sources]]
+label = "Cambridge Open Data - Street Trees"
+url = "https://data.cambridgema.gov/"
+
+[[tree_sources]]
+label = "MIT Facility Information Systems - Campus Trees (no licence stated; displayed with attribution only, not licensed for reuse)"
+url = "https://services5.arcgis.com/FXrk7QY7CN707pF1/arcgis/rest/services/NEW_Administrative_Basemap_Layers/FeatureServer/56"
+
+[[landmark_sources]]
+label = "National Park Service - National Register of Historic Places"
+url = "https://mapservices.nps.gov/arcgis/rest/services/cultural_resources/nrhp_locations/MapServer"
+
+[jobs.city]
+schedule = "0 10 11 * * WED,SAT"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city USCAM`.
+"""
+
+[jobs.osm]
+schedule = "0 15 3 * * TUE"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 33 0 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

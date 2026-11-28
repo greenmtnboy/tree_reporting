@@ -1,0 +1,61 @@
+# Ghent's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "BEGNT"
+name = "Ghent"
+slug = "ghent"
+center = [3.7174, 51.0543]
+ecoregion = 664
+ecoregion_name = "European Atlantic mixed forests"
+usda_zone = 8
+biome = "Temperate Broadleaf & Mixed Forests"
+realm = "palearctic"
+bounds = [50.97, 51.19, 3.57, 3.85]
+territory = [[50.97, 51.19, 3.57, 3.85]]
+municipal_sources = ["GHENT_OPENDATA"]
+dedup_note = """
+Ghent: calibrated 2026-11-17 with --inventory-parquet (68,232 anchors)
+against the staged extract. Mutual-NN 32.1% in 5-10 m (n=470): a 5 m
+guarantee caps it at 10. Marginal table: 4->6 removes 379 duplicates for
+97 hidden trees (3.91), 6->8 removes 108 for 111 (0.97), so 6 m.
+"""
+dedup_cell_metres = 6
+data_freshness = "probe"
+
+[labels]
+GHENT_OPENDATA = "Ghent Open Data"
+
+[[tree_sources]]
+label = "Stad Gent Groendienst - Locaties bomen Gent (Modellicentie Gratis Hergebruik)"
+url = "https://data.stad.gent/explore/dataset/locaties-bomen-gent/"
+
+[[landmark_sources]]
+label = "Agentschap Onroerend Erfgoed - protected monuments, landscapes and town views (Gratis open data licentie Vlaanderen)"
+url = "https://inventaris.onroerenderfgoed.be/erfgoedobjecten?gemeente=44021"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city BEGNT`.
+"""
+
+[jobs.osm]
+schedule = "0 30 7 * * FRI"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 44 2 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""

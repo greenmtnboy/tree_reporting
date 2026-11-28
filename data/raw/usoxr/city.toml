@@ -1,0 +1,63 @@
+# Oxnard's registry facts.  The shared registries are generated from this
+# file: edit it, then run `cd data/raw && uv run tools/sync_cities.py`.
+code = "USOXR"
+name = "Oxnard"
+slug = "oxnard"
+center = [-119.1771, 34.1975]
+ecoregion = 422
+ecoregion_name = "California coastal sage and chaparral"
+usda_zone = 10
+biome = "Mediterranean Forests, Woodlands & Scrub"
+realm = "nearctic"
+bounds = [34.1179, 34.27, -119.336, -119.11]
+territory = [[34.1179, 34.261, -119.336, -119.1195]]
+municipal_sources = ["OXNARD_OPENDATA"]
+dedup_note = """
+Calibrated 2026-11-23 (osm_dedup_validation): 8m flags 336, 2.7% false;
+marginal 5.2 true per false at 8m, 0.8 at 10m.
+"""
+dedup_cell_metres = 8
+data_freshness = "probe"
+
+[labels]
+OXNARD_OPENDATA = "Oxnard Open Data"
+
+[[tree_sources]]
+label = "City of Oxnard GIS Division - Trees (no licence stated; displayed with attribution only, not licensed for reuse)"
+url = "https://www.arcgis.com/home/item.html?id=a5aa2d1dfd344ef79d61507d33cdbc02"
+
+[[landmark_sources]]
+label = "City of Oxnard GIS Division - Ventura County Designated Historic Landmarks and Points of Interest (no licence stated; displayed with attribution only, not licensed for reuse)"
+url = "https://maps.oxnard.org/arcgis/rest/services/HistoricData/MapServer/0"
+
+[[landmark_sources]]
+label = "National Park Service - National Register of Historic Places"
+url = "https://www.nps.gov/subjects/nationalregister/data-downloads.htm"
+
+[jobs.city]
+schedule = "0 0 12 * * SUN,WED"
+timeout_seconds = 1800
+memory_mb = 2048
+schedule_note = """
+Starts in the twice-weekly tier, placed the day after this city's OSM
+extract. Measure before moving it: `portal_cadence.py --record --city USOXR`.
+"""
+
+[jobs.osm]
+schedule = "0 0 12 * * SUN"
+timeout_seconds = 1800
+memory_mb = 1024
+schedule_note = """
+Overpass allows two slots per client IP and answers an over-budget request
+with HTTP 200 carrying an error remark, so a collision looks like a city with
+no trees in OSM. This minute must be used by no other extract job.
+"""
+
+[jobs.landmarks]
+schedule = "0 17 0 * * SUN"
+timeout_seconds = 900
+memory_mb = 2048
+schedule_note = """
+The next free two-minute Sunday slot; every one must land before the 05:00
+union (tests/test_cloud_jobs.py).
+"""
