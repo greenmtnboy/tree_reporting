@@ -47,7 +47,7 @@ from pathlib import Path
 BOUNDARY_DIR = Path(__file__).resolve().parents[1] / "boundaries"
 
 # Written by tools/publish_boundaries.py --publish; do not edit by hand.
-BOUNDARY_PARQUET = "boundaries_b68907eb6aa3.parquet"
+BOUNDARY_PARQUET = "boundaries_8ab94e686241.parquet"
 BOUNDARY_PUBLIC_PREFIX = "https://storage.googleapis.com/trilogy_public_models/duckdb/trees/reference"
 
 Ring = list[tuple[float, float]]  # (longitude, latitude), closed

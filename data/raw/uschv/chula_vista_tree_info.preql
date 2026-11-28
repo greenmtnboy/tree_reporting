@@ -1,0 +1,89 @@
+import ..tree_common;
+import ..community_tree_info;
+import ..tree_dedup;
+
+# Chula Vista has no municipal tree inventory on an open portal: Chula Vista's ArborPro inventory has started; nothing is published.
+# Its OSM trees were published by San Diego's model (USSAN) under the rectangle
+# San Diego had until #285 drew it to its Census line (issue #287).  It is its
+# own city now, its territory the place's real boundary
+# (boundaries/uschv.json): a community-only city (EXTENDING.md) with
+# community and OSM partitions and no municipal term in its watermark.
+
+auto uschv_published_data_updated_through <- greatest(uschv_community_data_updated_through, uschv_osm_data_updated_through);
+
+key uschv_source enum<string>['COMMUNITY_USCHV', 'OSM_USCHV']; # originating dataset for the row
+
+# Feed the shared cross-source merge (../tree_dedup.preql): it classifies rows
+# by the label's prefix and records provenance from it.
+auto uschv_source_label <- concat(uschv_source, '');
+merge uschv_source_label into source_label;
+
+# Only this city's column, so an approval elsewhere does not mark USCHV's
+# Parquet stale. Trilogy probes this as MAX over the one column.
+root datasource uschv_community_update_time (
+    uschv_community_data_updated_through: uschv_community_data_updated_through
+)
+file `../community_update_time.py`;
+
+# GCS publication time of the staged OSM parquet; it only moves when an
+# extraction is re-run and uploaded. Not a local mtime -- git does not preserve
+# it, so a committed staging file makes every fresh clone look like new data.
+root datasource uschv_osm_update_time (
+    data_updated_through: uschv_osm_data_updated_through
+)
+file `./chula_vista_osm_probe.py`;
+
+# Every partition extends ../tree_dedup.preql's `tree_partition`, which maps
+# the shared raw_* columns.
+
+# Approved community submissions for this city. The shared ingest script emits
+# every city's rows; the `complete where` clause narrows it to USCHV and makes
+# it a disjoint partition, and the `where` clause is what actually filters --
+# `complete where` asserts, it does not promise a predicate.  A submission
+# recorded under San Diego that stands in Chula Vista arrives here as USCHV
+# (`territory_city` in shared/ingest.py).
+root partial datasource uschv_community_tree_info extends tree_partition (
+    data_source: uschv_source,
+    species: ?raw_species,
+)
+complete where city = 'USCHV' and uschv_source = 'COMMUNITY_USCHV'
+file `../community_tree_info.py`
+where city = 'USCHV';
+
+
+# OpenStreetMap trees, read from the staged parquet in GCS rather than Overpass
+# -- extraction is decoupled from refresh. The `where` is the city's territory
+# (tools/sync_osm_territory.py keeps it so): a staged extract keeps the
+# territory it was cut with until its next firing.
+root partial datasource uschv_osm_tree_info extends tree_partition (
+    data_source: uschv_source,
+    species: ?raw_species,
+)
+complete where city = 'USCHV' and uschv_source = 'OSM_USCHV'
+file `https://storage.googleapis.com/trilogy_public_models/duckdb/staging/uschv_osm_staging.parquet`
+where (raw_latitude >= 32.578 and raw_latitude < 32.6857 and raw_longitude >= -117.1239 and raw_longitude < -116.9277);
+
+
+# --- Cross-source dedup and attribute merge --------------------------------
+#
+# Shared: ../tree_dedup.preql groups the partitions into one cluster per
+# tree and picks each canonical attribute across the cluster; this city's grid
+# cell size lives in DEDUP_CELL_METRES in shared/ingest.py.
+merge merged_dbh into diameter_at_breast_height;
+merge merged_latitude into latitude;
+merge merged_longitude into longitude;
+
+
+# The published target extends ../tree_dedup.preql's `published_tree_info`:
+# the canonical columns, the prune, and the guard that refuses a build which
+# lost a quarter of the city.  The `@source_kept` line is the same guard for
+# OSM (`test_every_city_refuses_a_collapsed_build`).
+partial datasource chula_vista_tree_info extends published_tree_info (
+    data_source: uschv_source,
+    ?species,
+    uschv_published_data_updated_through,
+)
+complete where city = 'USCHV'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uschv_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/uschv_tree_info_v{data_version}.parquet`
+freshness by uschv_published_data_updated_through
+assert @source_kept(tree_id, uschv_source, 'OSM_USCHV', 0.75);

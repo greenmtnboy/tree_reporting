@@ -489,6 +489,12 @@ root partial datasource atlanta_tree_info extends app_city_trees ()
 complete where city = 'USATL'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usatl_tree_info_v{data_version}.parquet`;
 
+root partial datasource aurora_il_tree_info extends app_city_trees (
+    species: ?species,
+)
+complete where city = 'USAUR'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usaur_tree_info_v{data_version}.parquet`;
+
 root partial datasource austin_tree_info extends app_city_trees ()
 complete where city = 'USAUS'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usaus_tree_info_v{data_version}.parquet`;
@@ -547,6 +553,12 @@ root partial datasource burlington_tree_info extends app_city_trees ()
 complete where city = 'USBTV'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usbtv_tree_info_v{data_version}.parquet`;
 
+root partial datasource beaverton_tree_info extends app_city_trees (
+    species: ?species,
+)
+complete where city = 'USBVN'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usbvn_tree_info_v{data_version}.parquet`;
+
 root partial datasource bozeman_tree_info extends app_city_trees ()
 complete where city = 'USBZN'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usbzn_tree_info_v{data_version}.parquet`;
@@ -570,6 +582,18 @@ root partial datasource chelsea_tree_info extends app_city_trees (
 )
 complete where city = 'USCHE'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usche_tree_info_v{data_version}.parquet`;
+
+root partial datasource chapel_hill_tree_info extends app_city_trees (
+    species: ?species,
+)
+complete where city = 'USCHH'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uschh_tree_info_v{data_version}.parquet`;
+
+root partial datasource chula_vista_tree_info extends app_city_trees (
+    species: ?species,
+)
+complete where city = 'USCHV'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uschv_tree_info_v{data_version}.parquet`;
 
 root partial datasource charlotte_tree_info extends app_city_trees ()
 complete where city = 'USCLT'
@@ -606,6 +630,12 @@ file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usdur_t
 root partial datasource davenport_tree_info extends app_city_trees ()
 complete where city = 'USDVN'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usdvn_tree_info_v{data_version}.parquet`;
+
+root partial datasource east_lansing_tree_info extends app_city_trees (
+    species: ?species,
+)
+complete where city = 'USELN'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/useln_tree_info_v{data_version}.parquet`;
 
 root partial datasource eugene_tree_info extends app_city_trees ()
 complete where city = 'USEUG'
@@ -652,6 +682,12 @@ file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uslax_t
 root partial datasource louisville_tree_info extends app_city_trees ()
 complete where city = 'USLOU'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uslou_tree_info_v{data_version}.parquet`;
+
+root partial datasource louisville_co_tree_info extends app_city_trees (
+    species: ?species,
+)
+complete where city = 'USLSV'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uslsv_tree_info_v{data_version}.parquet`;
 
 root partial datasource loveland_tree_info extends app_city_trees ()
 complete where city = 'USLVL'
@@ -757,6 +793,12 @@ root partial datasource orlandpark_tree_info extends app_city_trees ()
 complete where city = 'USOPK'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usopk_tree_info_v{data_version}.parquet`;
 
+root partial datasource oswego_tree_info extends app_city_trees (
+    species: ?species,
+)
+complete where city = 'USOSW'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usosw_tree_info_v{data_version}.parquet`;
+
 root partial datasource oxnard_tree_info extends app_city_trees ()
 complete where city = 'USOXR'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usoxr_tree_info_v{data_version}.parquet`;
@@ -778,6 +820,12 @@ file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uspie_t
 root partial datasource pittsburgh_tree_info extends app_city_trees ()
 complete where city = 'USPIT'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uspit_tree_info_v{data_version}.parquet`;
+
+root partial datasource plainfield_tree_info extends app_city_trees (
+    species: ?species,
+)
+complete where city = 'USPLF'
+file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/usplf_tree_info_v{data_version}.parquet`;
 
 root partial datasource plano_tree_info extends app_city_trees ()
 complete where city = 'USPLN'

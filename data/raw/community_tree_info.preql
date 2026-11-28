@@ -206,6 +206,14 @@ property <*>.usnah_community_data_updated_through datetime; # when approved comm
 property <*>.usdan_community_data_updated_through datetime; # when approved community submissions for USDAN are through
 property <*>.uswnc_community_data_updated_through datetime; # when approved community submissions for USWNC are through
 property <*>.uscan_community_data_updated_through datetime; # when approved community submissions for USCAN are through
+property <*>.usbvn_community_data_updated_through datetime; # when approved community submissions for USBVN are through
+property <*>.uschh_community_data_updated_through datetime; # when approved community submissions for USCHH are through
+property <*>.usaur_community_data_updated_through datetime; # when approved community submissions for USAUR are through
+property <*>.useln_community_data_updated_through datetime; # when approved community submissions for USELN are through
+property <*>.usplf_community_data_updated_through datetime; # when approved community submissions for USPLF are through
+property <*>.uslsv_community_data_updated_through datetime; # when approved community submissions for USLSV are through
+property <*>.usosw_community_data_updated_through datetime; # when approved community submissions for USOSW are through
+property <*>.uschv_community_data_updated_through datetime; # when approved community submissions for USCHV are through
 property <*>.ussrq_community_data_updated_through datetime; # when approved community submissions for USSRQ are through
 property <*>.uspie_community_data_updated_through datetime; # when approved community submissions for USPIE are through
 property <*>.usbzn_community_data_updated_through datetime; # when approved community submissions for USBZN are through

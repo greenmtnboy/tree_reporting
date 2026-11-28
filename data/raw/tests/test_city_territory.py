@@ -159,12 +159,36 @@ def test_a_city_alone_on_the_map_is_its_own_line():
     """A polygon needs no neighbour: a rectangle drawn around a city takes in
     its suburbs, and every OSM node and submission there was published as the
     city's (Portland's box held 15,034 OSM trees outside the city limits)."""
-    assert territory_family("USPOR") == ("USPOR",) and carved_out_of("USPOR") == ()
+    assert territory_family("USSEA") == ("USSEA",) and carved_out_of("USSEA") == ()
     assert in_city_territory("USPOR", 45.5152, -122.6784)  # Pioneer Courthouse Square
     assert not in_city_territory("USPOR", 45.4871, -122.8037)  # Beaverton
     assert in_city_territory("USNYC", 40.7580, -73.9855)  # Times Square
     assert not in_city_territory("USNYC", 40.7178, -74.0431)  # Jersey City, across the Hudson
     assert not in_city_territory("USDUR", 35.9132, -79.0558)  # Chapel Hill
+
+
+def test_a_place_cut_from_a_city_is_a_city_beside_it():
+    """Issue #287: places #285 cut from a neighbour's old rectangle are
+    polygon cities of their own, in the neighbour's family."""
+    assert territory_family("USPOR") == ("USBVN", "USPOR") and carved_out_of("USPOR") == ()
+    assert territory_city("USPOR", 45.4871, -122.8037) == "USBVN"  # Beaverton
+    assert territory_city("USDUR", 35.9132, -79.0558) == "USCHH"  # Chapel Hill
+    assert territory_city("USNPV", 41.7606, -88.3201) == "USAUR"  # Aurora
+    assert territory_city("USLAN", 42.7370, -84.4839) == "USELN"  # East Lansing
+    assert territory_city("USSAN", 32.6401, -117.0842) == "USCHV"  # Chula Vista
+    assert in_city_territory("USLSV", 39.9778, -105.1319)
+    assert not in_city_territory("USDEN", 39.9778, -105.1319)
+
+
+def test_denver_is_its_own_line():
+    """Denver's old metro box published Lakewood's and Aurora's OSM trees as
+    its own; its polygon keeps the city, airport included, and nothing else."""
+    assert carved_out_of("USDEN") == ()
+    assert in_city_territory("USDEN", 39.7392, -104.9903)  # Civic Center
+    assert in_city_territory("USDEN", 39.8561, -104.6737)  # the airport
+    assert not in_city_territory("USDEN", 39.7047, -105.0814)  # Lakewood
+    assert not in_city_territory("USDEN", 39.7294, -104.8319)  # Aurora, CO
+    assert not in_city_territory("USDEN", 39.6330, -105.3300)  # Mountain Parks
 
 
 def test_a_polygon_inside_a_rectangle_city_is_carved_out_of_it():

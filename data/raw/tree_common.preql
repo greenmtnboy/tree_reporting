@@ -75,6 +75,17 @@ property <*>.usnah_osm_data_updated_through datetime; # GCS publication time of 
 property <*>.usdan_osm_data_updated_through datetime; # GCS publication time of Danvers's staged OSM parquet
 property <*>.uswnc_osm_data_updated_through datetime; # GCS publication time of Winchester's staged OSM parquet
 property <*>.uscan_osm_data_updated_through datetime; # GCS publication time of Canton's staged OSM parquet
+property <*>.uschv_osm_data_updated_through datetime; # GCS publication time of Chula Vista's staged OSM parquet
+property <*>.usosw_osm_data_updated_through datetime; # GCS publication time of Oswego, IL's staged OSM parquet
+property <*>.uslsv_osm_data_updated_through datetime; # GCS publication time of Louisville, CO's staged OSM parquet
+property <*>.usplf_data_updated_through datetime; # when Plainfield, IL data is through
+property <*>.usplf_osm_data_updated_through datetime; # GCS publication time of Plainfield, IL's staged OSM parquet
+property <*>.useln_data_updated_through datetime; # when East Lansing data is through
+property <*>.useln_osm_data_updated_through datetime; # GCS publication time of East Lansing's staged OSM parquet
+property <*>.usaur_osm_data_updated_through datetime; # GCS publication time of Aurora, IL's staged OSM parquet
+property <*>.uschh_osm_data_updated_through datetime; # GCS publication time of Chapel Hill's staged OSM parquet
+property <*>.usbvn_data_updated_through datetime; # when Beaverton data is through
+property <*>.usbvn_osm_data_updated_through datetime; # GCS publication time of Beaverton's staged OSM parquet
 property <*>.uspwm_data_updated_through datetime; # when Portland, ME data is through
 property <*>.uspwm_osm_data_updated_through datetime; # GCS publication time of Portland, ME's staged OSM parquet
 property <*>.uscrs_data_updated_through datetime; # when Coral Springs data is through

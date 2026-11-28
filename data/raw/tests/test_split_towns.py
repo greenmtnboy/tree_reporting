@@ -127,8 +127,8 @@ def test_boston_keeps_only_the_rows_inside_its_own_line():
 
 def test_a_city_of_rectangles_keeps_what_its_portal_attributes_to_it():
     """A staircase is too coarse to overrule the publisher: no clip."""
-    table = points((39.74, -104.99), (39.70, -104.80))  # Denver, Aurora
-    assert clip_to_polygon_territory(table, city_code="USDEN") is table
+    table = points((37.9838, 23.7275), (37.9420, 23.6460))  # Athens, Piraeus
+    assert clip_to_polygon_territory(table, city_code="GRATH") is table
 
 
 def test_the_clip_runs_inside_the_coordinate_check_every_ingest_calls():
