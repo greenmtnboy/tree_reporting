@@ -520,18 +520,30 @@ def patch_onto(base, new_rows: list[dict[str, Any]], covered: set[tuple[int, int
 # ---------------------------------------------------------------------------
 
 
+def run_config_path(artifacts: Path, run: str, city: str) -> Path:
+    """The run's config for *city*: `config-{city}.json`, or, for a run that
+    trained the city on named NAIP flights only (DC's `config-uswas-naip-2023`
+    and `-2025`), the newest flight's.  The fields read from it (chip size,
+    resolution, the run's threshold) are the run's, not the flight's."""
+    run_dir = artifacts / "runs" / run
+    plain = run_dir / f"config-{city.lower()}.json"
+    if plain.exists():
+        return plain
+    flights = sorted(run_dir.glob(f"config-{city.lower()}-naip-[0-9][0-9][0-9][0-9].json"))
+    if flights:
+        return flights[-1]
+    raise SystemExit(f"{plain} not found; is {run} a run with a {city} config?")
+
+
 def run_geometry(artifacts: Path, run: str, city: str) -> tuple[float, float]:
     """(tile_m, run threshold) from the run's own config, without loading the model."""
-    config_path = artifacts / "runs" / run / f"config-{city.lower()}.json"
-    if not config_path.exists():
-        raise SystemExit(f"{config_path} not found; is {run} a run with a {city} config?")
-    config = json.loads(config_path.read_text(encoding="utf-8"))
+    config = json.loads(run_config_path(artifacts, run, city).read_text(encoding="utf-8"))
     imagery = config["imagery"]
     return int(imagery["chip_pixels"]) * float(imagery["resolution_m"]), float(config["evaluation"]["confidence_threshold"])
 
 
 def run_chip_pixels(artifacts: Path, run: str, city: str) -> int:
-    config = json.loads((artifacts / "runs" / run / f"config-{city.lower()}.json").read_text(encoding="utf-8"))
+    config = json.loads(run_config_path(artifacts, run, city).read_text(encoding="utf-8"))
     return int(config["imagery"]["chip_pixels"])
 
 

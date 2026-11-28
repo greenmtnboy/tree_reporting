@@ -43,6 +43,7 @@ import io
 import json
 import math
 import os
+import re
 from dataclasses import dataclass
 from functools import lru_cache
 import sys
@@ -610,6 +611,27 @@ def own_cohorts(run_dir: Path) -> list[Path]:
     ]
 
 
+def city_cohort(cohorts: list[Path], city: str | None) -> Path | None:
+    """The cohort whose config a prediction for *city* takes: its validation
+    cohort (`validation-usbos`), else its newest flight's
+    (`validation-uswas-naip-2025`), else any other cohort of the city; None
+    when the run evaluated nothing there.  A suffix match alone missed every
+    flight-named cohort and fell back to the run's first cohort, another
+    city's."""
+    if not city:
+        return None
+    lc = city.lower()
+    pattern = re.compile(rf"^(?P<kind>[a-z]+(?:-[a-z]+)*?)-{lc}(?:-naip-(?P<year>\d{{4}}))?(?P<review>-review-[0-9a-f]+)?$")
+    ranked = []
+    for path in cohorts:
+        match = pattern.match(path.parent.name)
+        if match is None:
+            continue
+        ranked.append((match["kind"] != "validation", match["review"] is not None,
+                       -int(match["year"] or 9999), path.parent.name, path))
+    return min(ranked)[-1] if ranked else None
+
+
 def resolve_device(name: str = "auto"):
     """(torch device, DirectML adapter or None) for a --device value: ``auto``
     (CUDA when present, else the CPU), any torch device string, or
@@ -708,8 +730,7 @@ class Predictor:
         cohorts = own_cohorts(self.run_dir)
         if not cohorts:
             raise SystemExit(f"{self.run_dir} has no evaluation to take the config and taxonomy from")
-        preferred = [c for c in cohorts if city_hint and c.parent.name.endswith(city_hint.lower())]
-        metadata_path = (preferred or cohorts)[0]
+        metadata_path = city_cohort(cohorts, city_hint) or cohorts[0]
         self.metadata = read_json(metadata_path)
         self.taxonomy = read_json(metadata_path.parent / "taxonomy.json")
         self.config = self.metadata["config"]
