@@ -3,13 +3,9 @@ import ..community_tree_info;
 import ..satellite_tree_info;
 import ..tree_dedup;
 
-property <*>.losangeles_city_data_updated_through datetime; # when the City of Los Angeles's StreetsLA inventory is through
-property <*>.west_hollywood_data_updated_through datetime; # when West Hollywood's City Tree Inventory is through
-
 auto uslax_published_data_updated_through <- greatest(uslax_data_updated_through, uslax_community_data_updated_through, uslax_osm_data_updated_through, uslax_satellite_data_updated_through, uslax_predicted_data_updated_through);
-auto uslax_data_updated_through <- greatest(losangeles_city_data_updated_through, west_hollywood_data_updated_through);
 
-key uslax_source enum<string>['LOSANGELES_OPENDATA', 'WEST_HOLLYWOOD', 'COMMUNITY_USLAX', 'OSM_USLAX', 'SATELLITE_USLAX', 'PREDICTED_USLAX']; # originating dataset for the row
+key uslax_source enum<string>['LOSANGELES_OPENDATA', 'COMMUNITY_USLAX', 'OSM_USLAX', 'SATELLITE_USLAX', 'PREDICTED_USLAX']; # originating dataset for the row
 
 # Feed the shared cross-source merge (../tree_dedup.preql): it classifies rows
 # by the label's prefix and records provenance from it.
@@ -17,14 +13,9 @@ auto uslax_source_label <- concat(uslax_source, '');
 merge uslax_source_label into source_label;
 
 root datasource losangeles_update_time (
-    data_updated_through: losangeles_city_data_updated_through
+    data_updated_through: uslax_data_updated_through
 )
 file `./losangeles_update_time.py`;
-
-root datasource west_hollywood_update_time (
-    data_updated_through: west_hollywood_data_updated_through
-)
-file `./west_hollywood_update_time.py`;
 
 # Only this city's column, so an approval elsewhere does not mark USLAX's
 # Parquet stale. Trilogy probes this as MAX over the one column.
@@ -72,13 +63,6 @@ root partial datasource losangeles_raw_tree_info extends tree_partition (
 complete where city = 'USLAX' and uslax_source = 'LOSANGELES_OPENDATA'
 file `./losangeles_tree_info.py`;
 
-# The City of West Hollywood, an enclave inside Los Angeles whose trees LA's
-# inventory does not carry (see west_hollywood_tree_info.py).
-root partial datasource west_hollywood_raw_tree_info extends tree_partition (
-    data_source: uslax_source,
-)
-complete where city = 'USLAX' and uslax_source = 'WEST_HOLLYWOOD'
-file `./west_hollywood_tree_info.py`;
 
 
 # Approved community submissions for this city. The shared ingest script
@@ -145,5 +129,4 @@ complete where city = 'USLAX'
 file f`https://storage.googleapis.com/trilogy_public_models/duckdb/trees/uslax_tree_info_v{data_version}.parquet`:f`gcs://trilogy_public_models/duckdb/trees/uslax_tree_info_v{data_version}.parquet`
 freshness by uslax_published_data_updated_through
 assert @source_kept(tree_id, uslax_source, 'LOSANGELES_OPENDATA', 0.75)
-assert @source_kept(tree_id, uslax_source, 'WEST_HOLLYWOOD', 0.75)
 assert @source_kept(tree_id, uslax_source, 'OSM_USLAX', 0.75);

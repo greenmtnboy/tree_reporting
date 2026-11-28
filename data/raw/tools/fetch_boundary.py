@@ -7,7 +7,6 @@
 
     cd data/raw && uv run tools/fetch_boundary.py --code USCAM --state 25 --name Cambridge
     cd data/raw && uv run tools/fetch_boundary.py --code USSEA --at -122.3321,47.6062
-    cd data/raw && uv run tools/fetch_boundary.py --code USLAX --at=-118.2437,34.0522 --also-at=-118.3617,34.0900
 
 The source is the Census Bureau's TIGERweb: public domain, and each layer is
 one tessellation for the whole country (so two neighbours' polygons share
@@ -20,13 +19,6 @@ their edge exactly).
   the consolidated city, else the incorporated place, that contains the
   point.  Places never overlap one another, but a place and a county
   subdivision can: neighbours must come from the same layer.
-
-- `--also-at LON,LAT` (repeatable) adds the place containing each further
-  point, for a city whose model publishes a neighbour's inventory too (Los
-  Angeles carries West Hollywood's).  The file stays one feature, a
-  MultiPolygon of every place's polygons; containment is even-odd over all
-  the rings, so an enclave that is a hole in the first place and a polygon
-  of its own counts as inside.  The places must come from the same layer.
 
 A city outside the US needs its own source; write the same one-feature file
 by hand and record where it came from in the properties.
@@ -122,30 +114,12 @@ def envelope(boundary: Boundary, places: int = 4) -> tuple[float, float, float, 
     )
 
 
-def polygons(geometry: dict) -> list:
-    return [geometry["coordinates"]] if geometry["type"] == "Polygon" else list(geometry["coordinates"])
-
-
-def union(first: dict, others: list[dict]) -> dict:
-    """One feature holding every place's polygons, named and keyed by all."""
-    places = [first, *others]
-    return {
-        "properties": {
-            "NAME": " + ".join(p["properties"]["NAME"] for p in places),
-            "GEOID": ",".join(p["properties"]["GEOID"] for p in places),
-        },
-        "geometry": {"type": "MultiPolygon", "coordinates": [poly for p in places for poly in polygons(p["geometry"])]},
-    }
-
-
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--code", required=True, help="Five-letter city code, e.g. USCAM")
     ap.add_argument("--state", help="Two-digit state FIPS code, e.g. 25 (with --name)")
     ap.add_argument("--name", help="The town's county-subdivision BASENAME in TIGER, e.g. Cambridge")
     ap.add_argument("--at", help="LON,LAT inside the city: its consolidated city or incorporated place")
-    ap.add_argument("--also-at", action="append", default=[], metavar="LON,LAT",
-                    help="a further place the city's territory takes in (repeatable; with --at)")
     args = ap.parse_args()
 
     if args.at:
@@ -155,19 +129,6 @@ def main() -> None:
         feature, layer_name, url = fetch(args.state, args.name)
     else:
         raise SystemExit("pass --at LON,LAT, or --state and --name")
-    if args.also_at and not args.at:
-        raise SystemExit("--also-at goes with --at")
-    extra = []
-    for point in args.also_at:
-        longitude, latitude = (float(v) for v in point.split(","))
-        other, other_layer, _ = fetch_at(longitude, latitude)
-        if other_layer != layer_name:
-            raise SystemExit(f"{other['properties']['NAME']} is in {other_layer}, not {layer_name}")
-        if other["properties"]["GEOID"] == feature["properties"]["GEOID"]:
-            raise SystemExit(f"{point} is inside {feature['properties']['NAME']} already")
-        extra.append(other)
-    if extra:
-        feature = union(feature, extra)
     boundary = Boundary(rings_of(feature["geometry"]))
     document = {
         "type": "FeatureCollection",

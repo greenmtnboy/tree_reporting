@@ -161,7 +161,7 @@ MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
     "USHOU": ("HOUSTON_OPENDATA",),
     "USLAN": ("LANSING_OPENDATA",),
     "USLAS": ("LAS_VEGAS_OPENDATA",),
-    "USLAX": ("LOSANGELES_OPENDATA", "WEST_HOLLYWOOD"),
+    "USLAX": ("LOSANGELES_OPENDATA",),
     "USLOU": ("LOUISVILLE_OPENDATA",),
     "USLSV": (),
     "USLVL": ("LOVELAND_OPENDATA",),
@@ -224,6 +224,7 @@ MUNICIPAL_DATA_SOURCES: dict[str, tuple[str, ...]] = {
     "USWAS": ("WASHINGTONDC_OPENDATA",),
     "USWAT": ("WATERTOWN",),
     "USWEL": (),
+    "USWHO": ("WEST_HOLLYWOOD",),
     "USWLT": (),
     "USWNC": (),
     "USWNT": (),
@@ -440,6 +441,7 @@ OSM_DATA_SOURCES: dict[str, str] = {
     "USWAS": "OSM_USWAS",
     "USWAT": "OSM_USWAT",
     "USWEL": "OSM_USWEL",
+    "USWHO": "OSM_USWHO",
     "USWLT": "OSM_USWLT",
     "USWNC": "OSM_USWNC",
     "USWNT": "OSM_USWNT",
@@ -667,6 +669,7 @@ CITY_BOUNDS: dict[str, tuple[float, float, float, float]] = {
     "USWAS": (38.78, 39.01, -77.15, -76.88),
     "USWAT": (42.35, 42.4, -71.23, -71.13),
     "USWEL": (42.2696, 42.3281, -71.3298, -71.2275),
+    "USWHO": (34.07, 34.11, -118.4, -118.34),
     "USWLT": (42.3536, 42.4245, -71.2861, -71.1941),
     "USWNC": (42.4355, 42.4739, -71.1897, -71.1095),
     "USWNT": (42.3535, 42.4075, -71.0104, -70.9178),
@@ -1252,11 +1255,11 @@ CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
     "USHOU": ((29.5162, 30.156, -95.9098, -95.0126),),
     "USLAN": ((42.6474, 42.7949, -84.7013, -84.4176),),
     "USLAS": ((36.1295, 36.4015, -115.4066, -115.0621),),
-    # Los Angeles's own line plus West Hollywood's, whose inventory this model
-    # also publishes (boundaries/uslax.json, one MultiPolygon: fetch_boundary.py
-    # --at LA --also-at WeHo).  Was the whole basin box until 2026-11; the
-    # line drops 0.1% of the LA inventory (553/588k, at its edges) and ~59% of
-    # OSM (Inglewood, Pasadena, Palos Verdes and the other cities in the box).
+    # Los Angeles's own line (boundaries/uslax.json), not the basin box it had
+    # until 2026-11; West Hollywood, a partition here until then, is a city of
+    # its own (USWHO).  The line drops 0.1% of the LA inventory (553/588k, at
+    # its edges) and ~59% of OSM (Inglewood, Pasadena, Palos Verdes and the
+    # other cities in the box).
     "USLAX": ((33.7036, 34.3374, -118.6682, -118.1552),),
     "USLOU": ((37.9972, 38.3803, -85.9472, -85.4048),),
     "USLSV": ((39.9396, 39.9982, -105.1893, -105.1073),),
@@ -1341,6 +1344,10 @@ CITY_TERRITORY: dict[str, tuple[Box, ...]] = {
     "USWAS": ((38.7916, 38.9959, -77.1198, -76.9093),),
     "USWAT": ((42.3584, 42.3861, -71.2171, -71.1399),),
     "USWEL": ((42.2696, 42.3281, -71.3298, -71.2275),),
+    # West Hollywood's own line (boundaries/uswho.json), an enclave between
+    # Los Angeles and Beverly Hills.  Its inventory was a partition of Los
+    # Angeles's model until 2026-11.
+    "USWHO": ((34.0763, 34.098, -118.3959, -118.3433),),
     "USWLT": ((42.3536, 42.4245, -71.2861, -71.1941),),
     "USWNC": ((42.4355, 42.4739, -71.1897, -71.1095),),
     "USWNT": ((42.3535, 42.4075, -71.0104, -70.9178),),
@@ -2136,6 +2143,9 @@ DEDUP_CELL_METRES: dict[str, int] = {
     "USWAS": 10,
     "USWAT": 10,
     "USWEL": 10,
+    # Not calibratable: OSM has 2 trees inside the line (2026-11).  10 m is the
+    # cell these rows were deduplicated at as a partition of Los Angeles.
+    "USWHO": 10,
     "USWLT": 10,
     "USWNC": 10,
     "USWNT": 10,
@@ -2352,6 +2362,7 @@ OSM_CITY_NAMES: dict[str, str] = {
     "USWAS": "Washington DC",
     "USWAT": "Watertown",
     "USWEL": "Wellesley",
+    "USWHO": "West Hollywood",
     "USWLT": "Waltham",
     "USWNC": "Winchester",
     "USWNT": "Winthrop",
@@ -2393,6 +2404,7 @@ SATELLITE_DATA_SOURCES: dict[str, str] = {
     "USWAS": "SATELLITE_USWAS",
     "USWAT": "SATELLITE_USWAT",
     "USWEL": "SATELLITE_USWEL",
+    "USWHO": "SATELLITE_USWHO",
     "USWLT": "SATELLITE_USWLT",
     "USWNC": "SATELLITE_USWNC",
     "USWNT": "SATELLITE_USWNT",
@@ -2433,6 +2445,7 @@ PREDICTED_DATA_SOURCES: dict[str, str] = {
     "USWAS": "PREDICTED_USWAS",
     "USWAT": "PREDICTED_USWAT",
     "USWEL": "PREDICTED_USWEL",
+    "USWHO": "PREDICTED_USWHO",
     "USWLT": "PREDICTED_USWLT",
     "USWNC": "PREDICTED_USWNC",
     "USWNT": "PREDICTED_USWNT",
@@ -2469,6 +2482,7 @@ PREDICTED_STAGED_WITH: dict[str, str] = {
     "USSWA": "USBOS",
     "USWAT": "USBOS",
     "USWEL": "USBOS",
+    "USWHO": "USLAX",
     "USWLT": "USBOS",
     "USWNC": "USBOS",
     "USWNT": "USBOS",

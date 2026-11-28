@@ -165,7 +165,6 @@ export const DATA_SOURCE_LABELS: Record<string, string> = {
   LANSING_OPENDATA: 'Lansing Open Data',
   LAS_VEGAS_OPENDATA: 'Las Vegas Open Data',
   LOSANGELES_OPENDATA: 'LA Bureau of Street Services',
-  WEST_HOLLYWOOD: 'West Hollywood Open Data',
   LOUISVILLE_OPENDATA: 'Louisville Open Data',
   LOVELAND_OPENDATA: 'Loveland Open Data',
   MOORHEAD_OPENDATA: 'Moorhead Open Data',
@@ -211,6 +210,7 @@ export const DATA_SOURCE_LABELS: Record<string, string> = {
   TEMPE_OPENDATA: 'City of Tempe',
   WASHINGTONDC_OPENDATA: 'Open Data DC',
   WATERTOWN: 'City of Watertown',
+  WEST_HOLLYWOOD: 'West Hollywood Open Data',
   // <<< sync_cities: data source labels
   NOTABLE_ITMIL: 'Monumental Trees of Italy (Milan)',
   NOTABLE_AUBAL: 'City of Ballarat - Exceptional Tree Register',

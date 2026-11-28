@@ -220,6 +220,7 @@ property <*>.ustem_community_data_updated_through datetime; # when approved comm
 property <*>.uswas_community_data_updated_through datetime; # when approved community submissions for USWAS are through
 property <*>.uswat_community_data_updated_through datetime; # when approved community submissions for USWAT are through
 property <*>.uswel_community_data_updated_through datetime; # when approved community submissions for USWEL are through
+property <*>.uswho_community_data_updated_through datetime; # when approved community submissions for USWHO are through
 property <*>.uswlt_community_data_updated_through datetime; # when approved community submissions for USWLT are through
 property <*>.uswnc_community_data_updated_through datetime; # when approved community submissions for USWNC are through
 property <*>.uswnt_community_data_updated_through datetime; # when approved community submissions for USWNT are through

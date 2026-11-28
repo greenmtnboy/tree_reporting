@@ -1275,6 +1275,12 @@ const CITY_DASHBOARD_CONTEXT: Record<
     biome: 'Temperate Broadleaf & Mixed Forests',
     realm: 'nearctic',
   },
+  USWHO: {
+    ecoregionId: 422, // California coastal sage and chaparral
+    usdaZone: 10,
+    biome: 'Mediterranean Forests, Woodlands & Scrub',
+    realm: 'nearctic',
+  },
   USWLT: {
     ecoregionId: 339, // Northeast US Coastal forests
     usdaZone: 7,

@@ -208,6 +208,7 @@
   "USWAS": { "name": "Washington, DC", "center": [-77.0369, 38.9072] },
   "USWAT": { "name": "Watertown", "center": [-71.1828, 42.3709] },
   "USWEL": { "name": "Wellesley", "center": [-71.2924, 42.2968] },
+  "USWHO": { "name": "West Hollywood", "center": [-118.3617, 34.09] },
   "USWLT": { "name": "Waltham", "center": [-71.2356, 42.3765] },
   "USWNC": { "name": "Winchester", "center": [-71.137, 42.4523] },
   "USWNT": { "name": "Winthrop", "center": [-70.9828, 42.3757] }

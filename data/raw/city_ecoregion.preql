@@ -234,6 +234,7 @@ select * from (values
     ('USWAS', 399),
     ('USWAT', 339),
     ('USWEL', 339),
+    ('USWHO', 422),
     ('USWLT', 339),
     ('USWNC', 339),
     ('USWNT', 339)
